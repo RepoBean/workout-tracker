@@ -1,40 +1,218 @@
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 
 interface TimerContextType {
   isRunning: boolean;
   timeRemaining: number;
-  startTimer: (duration: number) => void;
+  targetDuration: number;
+  progress: number;
+  startTimer: (seconds: number) => void;
   stopTimer: () => void;
-  resetTimer: () => void;
+  extendTimer: (seconds: number) => void;
+  skipTimer: () => void;
+  notificationPermission: NotificationPermission | 'unsupported';
+  requestNotificationPermission: () => Promise<void>;
+}
+
+interface TimerState {
+  isRunning: boolean;
+  timeRemaining: number;
+  targetDuration: number;
+  endTime: number | null;
+}
+
+const STORAGE_KEY = 'workout-tracker-timer';
+
+const initialState: TimerState = {
+  isRunning: false,
+  timeRemaining: 0,
+  targetDuration: 0,
+  endTime: null,
+};
+
+function loadPersistedTimer(): TimerState {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return initialState;
+
+    const { endTime, targetDuration } = JSON.parse(stored);
+    const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+
+    if (remaining > 0) {
+      return {
+        isRunning: true,
+        timeRemaining: remaining,
+        targetDuration,
+        endTime,
+      };
+    }
+  } catch {
+    // Corrupted data, ignore
+  }
+  localStorage.removeItem(STORAGE_KEY);
+  return initialState;
 }
 
 const TimerContext = createContext<TimerContextType | undefined>(undefined);
 
-/**
- * TimerProvider - Stub implementation for Phase 1
- * Full implementation will be added in Phase 3 with:
- * - Web Notifications API for vibration/sound
- * - Background tab drift correction
- * - Visual indicator in header
- */
 export function TimerProvider({ children }: { children: ReactNode }) {
-  // Placeholder implementation - to be completed in Phase 3
-  const value: TimerContextType = {
-    isRunning: false,
-    timeRemaining: 0,
-    startTimer: (_duration: number) => {
-      console.log('Timer will be implemented in Phase 3');
-    },
-    stopTimer: () => {
-      console.log('Timer will be implemented in Phase 3');
-    },
-    resetTimer: () => {
-      console.log('Timer will be implemented in Phase 3');
-    },
-  };
+  const [state, setState] = useState<TimerState>(loadPersistedTimer);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  // Notification permission
+  const [notificationPermission, setNotificationPermission] = useState<
+    NotificationPermission | 'unsupported'
+  >(() => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return 'unsupported';
+    return Notification.permission;
+  });
+
+  const requestNotificationPermission = useCallback(async () => {
+    if (!('Notification' in window)) return;
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+  }, []);
+
+  // Completion handler — sound, vibration, notification
+  const triggerCompletion = useCallback(() => {
+    // Vibration
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    }
+
+    // Audio beep via Web Audio API
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      const ctx = new AudioCtx();
+      audioContextRef.current = ctx;
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      gain.gain.value = 0.3;
+
+      oscillator.start();
+      setTimeout(() => {
+        oscillator.stop();
+        ctx.close();
+        audioContextRef.current = null;
+      }, 200);
+    } catch {
+      // Audio not available, ignore
+    }
+
+    // System notification
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Rest Complete', {
+        body: 'Time for your next set!',
+        tag: 'rest-timer',
+      });
+    }
+  }, []);
+
+  // Drift-corrected tick — runs when timer is active
+  useEffect(() => {
+    if (!state.isRunning || !state.endTime) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((state.endTime! - Date.now()) / 1000));
+
+      if (remaining <= 0) {
+        triggerCompletion();
+        setState(initialState);
+        localStorage.removeItem(STORAGE_KEY);
+      } else {
+        setState(prev => ({ ...prev, timeRemaining: remaining }));
+      }
+    };
+
+    // Immediate tick to sync, then every 100ms
+    tick();
+    intervalRef.current = setInterval(tick, 100);
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [state.isRunning, state.endTime, triggerCompletion]);
+
+  // Actions
+  const startTimer = useCallback((seconds: number) => {
+    const endTime = Date.now() + seconds * 1000;
+
+    setState({
+      isRunning: true,
+      timeRemaining: seconds,
+      targetDuration: seconds,
+      endTime,
+    });
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime, targetDuration: seconds }));
+
+    // Request notification permission on first use
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(setNotificationPermission);
+    }
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    setState(initialState);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
+  const extendTimer = useCallback((seconds: number) => {
+    setState(prev => {
+      if (!prev.isRunning || !prev.endTime) return prev;
+
+      const newEndTime = prev.endTime + seconds * 1000;
+      const newRemaining = Math.max(0, Math.ceil((newEndTime - Date.now()) / 1000));
+      const newTarget = prev.targetDuration + seconds;
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime: newEndTime, targetDuration: newTarget }));
+
+      return {
+        ...prev,
+        endTime: newEndTime,
+        timeRemaining: newRemaining,
+        targetDuration: newTarget,
+      };
+    });
+  }, []);
+
+  const skipTimer = useCallback(() => {
+    setState(initialState);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
+
+  const progress = state.targetDuration > 0
+    ? Math.round(((state.targetDuration - state.timeRemaining) / state.targetDuration) * 100)
+    : 0;
 
   return (
-    <TimerContext.Provider value={value}>
+    <TimerContext.Provider value={{
+      isRunning: state.isRunning,
+      timeRemaining: state.timeRemaining,
+      targetDuration: state.targetDuration,
+      progress,
+      startTimer,
+      stopTimer,
+      extendTimer,
+      skipTimer,
+      notificationPermission,
+      requestNotificationPermission,
+    }}>
       {children}
     </TimerContext.Provider>
   );

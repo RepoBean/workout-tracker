@@ -3,6 +3,7 @@ import Dashboard from './features/dashboard';
 import ProgramBuilder from './features/program-builder';
 import ActiveSession from './features/active-session';
 import History from './features/history';
+import { TimerIndicator } from './shared/ui/TimerIndicator';
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
@@ -30,6 +31,7 @@ function Navigation() {
           <Link to="/" className="font-bold text-lg text-primary-600">
             Workout V2
           </Link>
+          <TimerIndicator />
           <div className="flex gap-1">
             <NavLink to="/">Home</NavLink>
             <NavLink to="/programs">Programs</NavLink>

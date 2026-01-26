@@ -3,10 +3,12 @@ import { api } from '../../../shared/api/client';
 import { queryKeys, useSession } from '../../../shared/api/queries';
 import type { Set, ActiveSession, LogSetRequest } from '../../../shared/api/types';
 import { useToast } from '../../../shared/ui/Toast';
+import { useTimer } from '../../../shared/context/TimerContext';
 
 export function useActiveSession(sessionId: number) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { startTimer } = useTimer();
 
   // Fetch session data
   const { data: session, isLoading, error } = useSession(sessionId);
@@ -67,6 +69,9 @@ export function useActiveSession(sessionId: number) {
           sets: updatedSets,
         });
       }
+
+      // Auto-start rest timer (90s default)
+      startTimer(90);
     },
     onSettled: () => {
       // Refetch to ensure consistency

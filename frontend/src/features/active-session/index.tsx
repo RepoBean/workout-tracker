@@ -4,6 +4,7 @@ import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
+import { RestTimer } from './components/RestTimer';
 import type { Set, Exercise } from '../../shared/api/types';
 
 export default function ActiveSession() {
@@ -114,6 +115,8 @@ export default function ActiveSession() {
         onComplete={handleComplete}
         isCompleting={isCompletingSession}
       />
+
+      <RestTimer />
 
       <div className="space-y-4">
         {exercises.map((exercise) => (
