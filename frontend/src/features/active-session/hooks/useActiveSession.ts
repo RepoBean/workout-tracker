@@ -1,0 +1,104 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { api } from '../../../shared/api/client';
+import { queryKeys, useSession } from '../../../shared/api/queries';
+import type { Set, ActiveSession, LogSetRequest } from '../../../shared/api/types';
+import { useToast } from '../../../shared/ui/Toast';
+
+export function useActiveSession(sessionId: number) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  // Fetch session data
+  const { data: session, isLoading, error } = useSession(sessionId);
+
+  // Log Set Mutation with Optimistic Update
+  const logSetMutation = useMutation({
+    mutationFn: async (setData: LogSetRequest) => {
+      const { data } = await api.post<Set>(`/sessions/${sessionId}/sets`, setData);
+      return data;
+    },
+    onMutate: async (newSet) => {
+      // Cancel outgoing refetches
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+
+      // Snapshot previous value
+      const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      // Optimistically add the new set
+      if (previousSession) {
+        const optimisticSet: Set = {
+          id: -Date.now(), // Temporary negative ID to identify optimistic updates
+          sessionId,
+          exerciseId: newSet.exerciseId || null,
+          exerciseName: newSet.exerciseName,
+          weight: newSet.weight,
+          reps: newSet.reps,
+          setNumber: newSet.setNumber,
+          perceivedEffort: newSet.perceivedEffort || null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previousSession,
+          sets: [...(previousSession.sets || []), optimisticSet],
+        });
+      }
+
+      return { previousSession };
+    },
+    onError: (_err, _newSet, context) => {
+      // Revert on error
+      if (context?.previousSession) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession);
+      }
+      toast.error('Failed to log set. Please try again.');
+    },
+    onSuccess: (savedSet) => {
+      // Replace optimistic set with real one
+      const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+      if (currentSession) {
+        // Remove the optimistic set (negative ID) and add the real one
+        const updatedSets = currentSession.sets?.filter(s => s.id > 0) || [];
+        updatedSets.push(savedSet);
+
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...currentSession,
+          sets: updatedSets,
+        });
+      }
+    },
+    onSettled: () => {
+      // Refetch to ensure consistency
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+    },
+  });
+
+  // Complete Session Mutation
+  const completeSessionMutation = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(`/sessions/${sessionId}/complete`);
+      return data;
+    },
+    onSuccess: () => {
+      toast.success('Workout completed!');
+      // Invalidate related queries
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.nextWorkout });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
+    },
+    onError: () => {
+      toast.error('Failed to complete workout. Please try again.');
+    },
+  });
+
+  return {
+    session: session as ActiveSession | undefined,
+    isLoading,
+    error,
+    logSet: logSetMutation.mutate,
+    isLoggingSet: logSetMutation.isPending,
+    completeSession: completeSessionMutation.mutate,
+    isCompletingSession: completeSessionMutation.isPending,
+  };
+}

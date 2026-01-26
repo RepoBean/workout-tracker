@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, NextWorkoutResponse, HealthCheckResponse } from './types';
+import type { Program, Session, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse } from './types';
 
 // ============================================
 // Query Keys
@@ -14,6 +14,7 @@ export const queryKeys = {
   workout: (id: number) => ['workouts', id] as const,
   sessions: ['sessions'] as const,
   session: (id: number) => ['sessions', id] as const,
+  previousSession: (sessionId: number) => ['previousSession', sessionId] as const,
   nextWorkout: ['nextWorkout'] as const,
   history: (params?: { limit?: number; offset?: number }) => ['history', params] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
@@ -118,5 +119,19 @@ export function useExerciseSuggestions(query: string) {
       return data;
     },
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * Fetch previous session data for hints (weight/reps from last time)
+ */
+export function usePreviousSession(sessionId: number) {
+  return useQuery({
+    queryKey: queryKeys.previousSession(sessionId),
+    queryFn: async () => {
+      const { data } = await api.get<PreviousSessionResponse>(`/sessions/${sessionId}/previous`);
+      return data;
+    },
+    enabled: !!sessionId,
   });
 }

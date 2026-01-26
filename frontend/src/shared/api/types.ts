@@ -86,3 +86,39 @@ export interface ApiError {
     message: string;
   }>;
 }
+
+// ============================================
+// Active Session Types
+// ============================================
+
+export interface ActiveSession extends Session {
+  exercises: Exercise[];
+}
+
+export interface PreviousExerciseData {
+  lastWeight: number;
+  lastReps: number;
+}
+
+export interface PreviousSessionResponse {
+  exerciseData: Record<number, PreviousExerciseData>;
+  previousSessionId?: number;
+}
+
+// ============================================
+// API Request Types
+// ============================================
+
+export interface StartSessionRequest {
+  workoutId: number;
+  isAdHoc?: boolean;
+}
+
+export interface LogSetRequest {
+  exerciseId?: number | null;
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  setNumber: number;
+  perceivedEffort?: number | null;
+}
