@@ -57,6 +57,7 @@ export interface Set {
   reps: number;
   setNumber: number;
   perceivedEffort: number | null;
+  dropIndex: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -121,4 +122,5 @@ export interface LogSetRequest {
   reps: number;
   setNumber: number;
   perceivedEffort?: number | null;
+  dropIndex?: number;
 }

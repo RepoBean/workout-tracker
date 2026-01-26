@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { Button } from '../../../shared/ui/Button';
+import { PlateCalculator } from './PlateCalculator';
 
 interface SetInputProps {
   exerciseId: number | null;
@@ -14,8 +15,11 @@ interface SetInputProps {
     reps: number;
     setNumber: number;
     perceivedEffort?: number;
+    dropIndex?: number;
   }) => void;
   isLogging?: boolean;
+  dropIndex?: number;
+  isDropSet?: boolean;
 }
 
 export function SetInput({
@@ -26,6 +30,8 @@ export function SetInput({
   previousReps = 10,
   onLogSet,
   isLogging = false,
+  dropIndex,
+  isDropSet = false,
 }: SetInputProps) {
   const [weight, setWeight] = useState(previousWeight);
   const [reps, setReps] = useState(previousReps);
@@ -48,16 +54,28 @@ export function SetInput({
       reps,
       setNumber,
       perceivedEffort: rpe || undefined,
+      dropIndex: isDropSet ? dropIndex : undefined,
     });
     // Reset RPE for next set
     setRpe(null);
     setShowRpe(false);
   };
 
+  const label = isDropSet ? `Drop ${dropIndex}` : `Set ${setNumber}`;
+  const buttonLabel = isDropSet ? `Log Drop ${dropIndex}` : `Log Set ${setNumber}`;
+
   return (
-    <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 space-y-4">
-      <div className="text-sm font-medium text-gray-500 dark:text-gray-400">
-        Set {setNumber}
+    <div className={`rounded-lg p-4 space-y-4 ${
+      isDropSet
+        ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
+        : 'bg-gray-50 dark:bg-gray-800/50'
+    }`}>
+      <div className={`text-sm font-medium ${
+        isDropSet
+          ? 'text-orange-600 dark:text-orange-400'
+          : 'text-gray-500 dark:text-gray-400'
+      }`}>
+        {label}
       </div>
 
       {/* Weight Input */}
@@ -107,6 +125,9 @@ export function SetInput({
         </div>
         <span className="text-sm text-gray-500 dark:text-gray-400 w-8 shrink-0">lbs</span>
       </div>
+
+      {/* Plate Calculator */}
+      {weight > 45 && <PlateCalculator weight={weight} />}
 
       {/* Reps Input */}
       <div className="flex items-center justify-between gap-2">
@@ -184,7 +205,7 @@ export function SetInput({
         disabled={isLogging}
         className="w-full"
       >
-        {isLogging ? 'Logging...' : `Log Set ${setNumber}`}
+        {isLogging ? 'Logging...' : buttonLabel}
       </Button>
     </div>
   );

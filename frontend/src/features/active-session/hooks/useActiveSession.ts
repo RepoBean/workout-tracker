@@ -37,6 +37,7 @@ export function useActiveSession(sessionId: number) {
           reps: newSet.reps,
           setNumber: newSet.setNumber,
           perceivedEffort: newSet.perceivedEffort || null,
+          dropIndex: newSet.dropIndex || 0,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -79,6 +80,36 @@ export function useActiveSession(sessionId: number) {
     },
   });
 
+  // Delete Set Mutation with Optimistic Update
+  const deleteSetMutation = useMutation({
+    mutationFn: async (setId: number) => {
+      await api.delete(`/sessions/${sessionId}/sets/${setId}`);
+    },
+    onMutate: async (setId) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+
+      const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      if (previousSession) {
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previousSession,
+          sets: previousSession.sets?.filter(s => s.id !== setId) || [],
+        });
+      }
+
+      return { previousSession };
+    },
+    onError: (_err, _setId, context) => {
+      if (context?.previousSession) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession);
+      }
+      toast.error('Failed to delete set. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+    },
+  });
+
   // Complete Session Mutation
   const completeSessionMutation = useMutation({
     mutationFn: async () => {
@@ -103,6 +134,8 @@ export function useActiveSession(sessionId: number) {
     error,
     logSet: logSetMutation.mutate,
     isLoggingSet: logSetMutation.isPending,
+    deleteSet: deleteSetMutation.mutate,
+    isDeletingSet: deleteSetMutation.isPending,
     completeSession: completeSessionMutation.mutate,
     isCompletingSession: completeSessionMutation.isPending,
   };

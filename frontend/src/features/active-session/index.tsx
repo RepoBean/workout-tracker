@@ -18,27 +18,30 @@ export default function ActiveSession() {
     error,
     logSet,
     isLoggingSet,
+    deleteSet,
     completeSession,
     isCompletingSession,
   } = useActiveSession(sessionId);
 
   const { exerciseHints } = usePreviousData(sessionId);
 
-  // Group sets by exercise
+  // Group sets by exercise, sorted by setNumber then dropIndex
   const setsByExercise = useMemo(() => {
     const map = new Map<number, Set[]>();
     for (const set of session?.sets || []) {
       if (set.exerciseId) {
         const existing = map.get(set.exerciseId) || [];
-        map.set(set.exerciseId, [...existing, set].sort((a, b) => a.setNumber - b.setNumber));
+        map.set(set.exerciseId, [...existing, set].sort(
+          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
+        ));
       }
     }
     return map;
   }, [session?.sets]);
 
-  // Calculate totals
+  // Calculate totals (only count standard sets for progress)
   const { totalSetsLogged, totalSetsTarget } = useMemo(() => {
-    const logged = session?.sets?.length || 0;
+    const logged = session?.sets?.filter(s => (s.dropIndex || 0) === 0).length || 0;
     const target = session?.exercises?.reduce(
       (sum: number, ex: Exercise) => sum + ex.targetSets,
       0
@@ -126,6 +129,7 @@ export default function ActiveSession() {
             loggedSets={setsByExercise.get(exercise.id) || []}
             previousHint={exerciseHints.get(exercise.id)}
             onLogSet={logSet}
+            onDeleteSet={deleteSet}
             isLogging={isLoggingSet}
           />
         ))}

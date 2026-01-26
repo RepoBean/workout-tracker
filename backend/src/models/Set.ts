@@ -9,11 +9,12 @@ export interface SetAttributes {
   reps: number;
   setNumber: number;
   perceivedEffort: number | null;
+  dropIndex: number;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface SetCreationAttributes extends Optional<SetAttributes, 'id' | 'exerciseId' | 'perceivedEffort'> {}
+export interface SetCreationAttributes extends Optional<SetAttributes, 'id' | 'exerciseId' | 'perceivedEffort' | 'dropIndex'> {}
 
 export class Set extends Model<SetAttributes, SetCreationAttributes> implements SetAttributes {
   declare id: number;
@@ -24,6 +25,7 @@ export class Set extends Model<SetAttributes, SetCreationAttributes> implements 
   declare reps: number;
   declare setNumber: number;
   declare perceivedEffort: number | null;
+  declare dropIndex: number;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -81,6 +83,14 @@ export class Set extends Model<SetAttributes, SetCreationAttributes> implements 
         validate: {
           min: 1,
           max: 10
+        }
+      },
+      dropIndex: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+        validate: {
+          min: 0
         }
       }
     }, {

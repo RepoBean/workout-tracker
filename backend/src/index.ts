@@ -40,6 +40,14 @@ async function start() {
     await sequelize.sync();
     console.log('Database synced successfully');
 
+    // Safe migration: add dropIndex column if it doesn't exist
+    try {
+      await sequelize.query('ALTER TABLE Sets ADD COLUMN dropIndex INTEGER NOT NULL DEFAULT 0');
+      console.log('Added dropIndex column to Sets table');
+    } catch {
+      // Column already exists, ignore
+    }
+
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/api/health`);

@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { SetInput } from './SetInput';
+import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import type { Exercise, Set } from '../../../shared/api/types';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
@@ -14,8 +15,16 @@ interface ExerciseCardProps {
     reps: number;
     setNumber: number;
     perceivedEffort?: number;
+    dropIndex?: number;
   }) => void;
+  onDeleteSet: (setId: number) => void;
   isLogging: boolean;
+}
+
+interface DropSetMode {
+  setNumber: number;
+  nextDropIndex: number;
+  lastWeight: number;
 }
 
 export function ExerciseCard({
@@ -23,24 +32,62 @@ export function ExerciseCard({
   loggedSets,
   previousHint,
   onLogSet,
+  onDeleteSet,
   isLogging,
 }: ExerciseCardProps) {
-  const nextSetNumber = loggedSets.length + 1;
-  const isComplete = loggedSets.length >= exercise.targetSets;
+  const [dropSetMode, setDropSetMode] = useState<DropSetMode | null>(null);
 
-  // Get hint for next set (use previous session or last logged set)
+  // Only count standard sets (dropIndex=0) for completion
+  const standardSets = useMemo(
+    () => loggedSets.filter(s => (s.dropIndex || 0) === 0),
+    [loggedSets]
+  );
+  const nextSetNumber = standardSets.length + 1;
+  const isComplete = standardSets.length >= exercise.targetSets;
+
+  // Group sets by setNumber for display
+  const setGroups = useMemo(() => {
+    const groups = new Map<number, Set[]>();
+    for (const set of loggedSets) {
+      const existing = groups.get(set.setNumber) || [];
+      groups.set(set.setNumber, [...existing, set].sort((a, b) => (a.dropIndex || 0) - (b.dropIndex || 0)));
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => a - b);
+  }, [loggedSets]);
+
+  // Get hint for next set (use last standard set weight or previous session)
   const hintWeight = useMemo(() => {
-    if (loggedSets.length > 0) {
-      return loggedSets[loggedSets.length - 1].weight;
+    if (standardSets.length > 0) {
+      return standardSets[standardSets.length - 1].weight;
     }
     return previousHint?.lastWeight || 0;
-  }, [loggedSets, previousHint]);
+  }, [standardSets, previousHint]);
 
   // Parse target reps (handle "8-10" format)
   const hintReps = useMemo(() => {
     const match = exercise.targetReps.match(/(\d+)/);
     return match ? parseInt(match[1], 10) : 10;
   }, [exercise.targetReps]);
+
+  const handleLogDropSet = (data: Parameters<typeof onLogSet>[0]) => {
+    onLogSet(data);
+    // After logging a drop, stay in drop mode for more drops
+    if (dropSetMode) {
+      setDropSetMode({
+        setNumber: dropSetMode.setNumber,
+        nextDropIndex: dropSetMode.nextDropIndex + 1,
+        lastWeight: data.weight,
+      });
+    }
+  };
+
+  const handleStartDropSet = (setNumber: number, lastWeight: number, existingDrops: number) => {
+    setDropSetMode({
+      setNumber,
+      nextDropIndex: existingDrops + 1,
+      lastWeight,
+    });
+  };
 
   return (
     <div className={`card transition-all ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''}`}>
@@ -80,28 +127,103 @@ export function ExerciseCard({
         </div>
       )}
 
-      {/* Logged Sets */}
-      {loggedSets.length > 0 && (
-        <div className="mb-4 space-y-2">
-          {loggedSets.map((set) => (
-            <div
-              key={set.id}
-              className="flex items-center justify-between py-2 px-3 bg-green-50
-                         dark:bg-green-900/20 rounded-lg"
-            >
-              <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                Set {set.setNumber}
-              </span>
-              <span className="font-semibold text-green-900 dark:text-green-200">
-                {set.weight} lbs x {set.reps}
-                {set.perceivedEffort && (
-                  <span className="ml-2 text-sm text-green-600 dark:text-green-400">
-                    RPE {set.perceivedEffort}
-                  </span>
+      {/* Logged Sets (grouped by setNumber) */}
+      {setGroups.length > 0 && (
+        <div className="mb-4 space-y-1">
+          {setGroups.map(([setNumber, sets]) => {
+            const standardSet = sets.find(s => (s.dropIndex || 0) === 0);
+            const dropSets = sets.filter(s => (s.dropIndex || 0) > 0);
+            const lastSet = sets[sets.length - 1];
+            const isInDropMode = dropSetMode?.setNumber === setNumber;
+
+            return (
+              <div key={setNumber}>
+                {/* Standard set row */}
+                {standardSet && (
+                  <SwipeableRow
+                    onSwipeLeft={() => onDeleteSet(standardSet.id)}
+                    disabled={standardSet.id < 0}
+                  >
+                    <div className="flex items-center justify-between py-2 px-3 bg-green-50
+                                    dark:bg-green-900/20 rounded-lg">
+                      <span className="text-sm font-medium text-green-800 dark:text-green-300">
+                        Set {standardSet.setNumber}
+                      </span>
+                      <span className="font-semibold text-green-900 dark:text-green-200">
+                        {standardSet.weight} lbs x {standardSet.reps}
+                        {standardSet.perceivedEffort && (
+                          <span className="ml-2 text-sm text-green-600 dark:text-green-400">
+                            RPE {standardSet.perceivedEffort}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </SwipeableRow>
                 )}
-              </span>
-            </div>
-          ))}
+
+                {/* Drop sets (indented) */}
+                {dropSets.map((dropSet) => (
+                  <SwipeableRow
+                    key={dropSet.id}
+                    onSwipeLeft={() => onDeleteSet(dropSet.id)}
+                    disabled={dropSet.id < 0}
+                  >
+                    <div className="flex items-center justify-between py-1.5 px-3 ml-4
+                                    bg-orange-50 dark:bg-orange-900/20 rounded-lg mt-1">
+                      <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                        ↳ Drop {dropSet.dropIndex}
+                      </span>
+                      <span className="font-semibold text-orange-800 dark:text-orange-200 text-sm">
+                        {dropSet.weight} lbs x {dropSet.reps}
+                        {dropSet.perceivedEffort && (
+                          <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">
+                            RPE {dropSet.perceivedEffort}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                  </SwipeableRow>
+                ))}
+
+                {/* Drop Set input (if in drop mode for this set) */}
+                {isInDropMode && dropSetMode && (
+                  <div className="ml-4 mt-2">
+                    <SetInput
+                      exerciseId={exercise.id}
+                      exerciseName={exercise.name}
+                      setNumber={dropSetMode.setNumber}
+                      previousWeight={Math.max(0, dropSetMode.lastWeight - 20)}
+                      previousReps={hintReps}
+                      onLogSet={handleLogDropSet}
+                      isLogging={isLogging}
+                      dropIndex={dropSetMode.nextDropIndex}
+                      isDropSet
+                    />
+                    <button
+                      onClick={() => setDropSetMode(null)}
+                      className="mt-2 text-sm text-gray-500 dark:text-gray-400 hover:underline"
+                    >
+                      Cancel drop set
+                    </button>
+                  </div>
+                )}
+
+                {/* Add Drop Set button (if not already in drop mode) */}
+                {!isInDropMode && lastSet && (
+                  <button
+                    onClick={() => handleStartDropSet(
+                      setNumber,
+                      lastSet.weight,
+                      dropSets.length
+                    )}
+                    className="ml-4 mt-1 text-xs text-orange-600 dark:text-orange-400 hover:underline"
+                  >
+                    + Add Drop Set
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -113,7 +235,11 @@ export function ExerciseCard({
           setNumber={nextSetNumber}
           previousWeight={hintWeight}
           previousReps={hintReps}
-          onLogSet={onLogSet}
+          onLogSet={(data) => {
+            onLogSet(data);
+            // Exit drop set mode when logging a new standard set
+            setDropSetMode(null);
+          }}
           isLogging={isLogging}
         />
       )}

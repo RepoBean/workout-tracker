@@ -22,6 +22,7 @@ const logSetSchema = z.object({
   reps: z.number().int().min(1),
   setNumber: z.number().int().min(1),
   perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
+  dropIndex: z.number().int().min(0).optional().default(0),
 });
 
 // ============================================
@@ -245,6 +246,7 @@ router.post('/:id/sets', validate(logSetSchema), async (req: Request, res: Respo
       reps: req.body.reps,
       setNumber: req.body.setNumber,
       perceivedEffort: req.body.perceivedEffort || null,
+      dropIndex: req.body.dropIndex || 0,
     });
 
     res.status(201).json(set);
@@ -326,6 +328,42 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error completing session:', error);
     res.status(500).json({ error: 'Failed to complete session' });
+  }
+});
+
+// DELETE /api/sessions/:id/sets/:setId - Delete a single set
+router.delete('/:id/sets/:setId', async (req: Request, res: Response) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const setId = Number(req.params.setId);
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    if (session.completedAt) {
+      res.status(400).json({ error: 'Cannot delete sets from completed session' });
+      return;
+    }
+
+    const set = await SetModel.findByPk(setId);
+    if (!set) {
+      res.status(404).json({ error: 'Set not found' });
+      return;
+    }
+
+    if (set.sessionId !== sessionId) {
+      res.status(400).json({ error: 'Set does not belong to this session' });
+      return;
+    }
+
+    await set.destroy();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting set:', error);
+    res.status(500).json({ error: 'Failed to delete set' });
   }
 });
 
