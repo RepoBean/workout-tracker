@@ -4,6 +4,7 @@ import ProgramBuilder from './features/program-builder';
 import ActiveSession from './features/active-session';
 import History from './features/history';
 import { TimerIndicator } from './shared/ui/TimerIndicator';
+import { useOffline } from './shared/context/OfflineContext';
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
@@ -43,11 +44,22 @@ function Navigation() {
   );
 }
 
+function OfflineBanner() {
+  const { isOnline } = useOffline();
+  if (isOnline) return null;
+  return (
+    <div className="bg-amber-500 text-amber-900 text-center text-sm py-1.5 px-4 font-medium">
+      You're offline — showing cached data
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
         <Navigation />
+        <OfflineBanner />
         <main className="container mx-auto px-4 py-6">
           <Routes>
             <Route path="/" element={<Dashboard />} />

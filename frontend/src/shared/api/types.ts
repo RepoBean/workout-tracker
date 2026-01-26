@@ -124,3 +124,46 @@ export interface LogSetRequest {
   perceivedEffort?: number | null;
   dropIndex?: number;
 }
+
+// ============================================
+// CRUD Request Types
+// ============================================
+
+export interface CreateProgramRequest {
+  name: string;
+}
+
+export interface UpdateProgramRequest {
+  name?: string;
+  isActive?: boolean;
+  isArchived?: boolean;
+  currentWorkoutIndex?: number;
+}
+
+export interface CreateWorkoutRequest {
+  programId: number;
+  name: string;
+  orderIndex: number;
+}
+
+export interface UpdateWorkoutRequest {
+  name?: string;
+  orderIndex?: number;
+}
+
+export interface CreateExerciseRequest {
+  workoutId: number;
+  name: string;
+  targetSets: number;
+  targetReps: string;
+  orderIndex: number;
+  supersetGroup?: string | null;
+}
+
+export interface UpdateExerciseRequest {
+  name?: string;
+  targetSets?: number;
+  targetReps?: string;
+  orderIndex?: number;
+  supersetGroup?: string | null;
+}

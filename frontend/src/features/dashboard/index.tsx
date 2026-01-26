@@ -1,6 +1,7 @@
 import { useTheme } from '../../shared/context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { NextWorkout } from './components/NextWorkout';
+import { Calendar } from './components/Calendar';
 
 export default function Dashboard() {
   const { theme, setTheme, resolvedTheme } = useTheme();
@@ -11,6 +12,9 @@ export default function Dashboard() {
 
       {/* Next Workout Card */}
       <NextWorkout />
+
+      {/* Calendar */}
+      <Calendar />
 
       {/* Quick Links */}
       <div className="card">

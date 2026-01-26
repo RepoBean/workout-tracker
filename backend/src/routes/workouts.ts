@@ -1,7 +1,38 @@
 import { Router, Request, Response } from 'express';
-import { Workout, Exercise } from '../models/index.js';
+import { z } from 'zod';
+import { Workout, Exercise, Program, sequelize } from '../models/index.js';
+import { validate } from '../middleware/validate.js';
 
 const router = Router();
+
+// ============================================
+// Zod Schemas
+// ============================================
+
+const createWorkoutSchema = z.object({
+  programId: z.number().int().positive(),
+  name: z.string().min(1).max(255),
+  orderIndex: z.number().int().min(0),
+});
+
+const updateWorkoutSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  orderIndex: z.number().int().min(0).optional(),
+}).refine(data => Object.keys(data).length > 0, {
+  message: 'At least one field must be provided',
+});
+
+const reorderExercisesSchema = z.object({
+  exerciseIds: z.array(z.number().int().positive()),
+});
+
+const reorderWorkoutsSchema = z.object({
+  workoutIds: z.array(z.number().int().positive()),
+});
+
+// ============================================
+// Routes
+// ============================================
 
 // GET /api/workouts/:id - Get single workout with exercises
 router.get('/:id', async (req: Request, res: Response) => {
@@ -29,27 +60,109 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/workouts - Create new workout
-router.post('/', async (req: Request, res: Response) => {
-  // TODO: Add Zod validation
-  res.status(501).json({ error: 'Not implemented' });
+router.post('/', validate(createWorkoutSchema), async (req: Request, res: Response) => {
+  try {
+    const { programId, name, orderIndex } = req.body;
+
+    const program = await Program.findByPk(programId);
+    if (!program) {
+      res.status(404).json({ error: 'Program not found' });
+      return;
+    }
+
+    const workout = await Workout.create({ programId, name, orderIndex });
+    res.status(201).json(workout);
+  } catch (error) {
+    console.error('Error creating workout:', error);
+    res.status(500).json({ error: 'Failed to create workout' });
+  }
 });
 
 // PUT /api/workouts/:id - Update workout
-router.put('/:id', async (req: Request, res: Response) => {
-  // TODO: Implement
-  res.status(501).json({ error: 'Not implemented' });
+router.put('/:id', validate(updateWorkoutSchema), async (req: Request, res: Response) => {
+  try {
+    const workout = await Workout.findByPk(Number(req.params.id));
+    if (!workout) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    const { name, orderIndex } = req.body;
+    if (name !== undefined) workout.name = name;
+    if (orderIndex !== undefined) workout.orderIndex = orderIndex;
+
+    await workout.save();
+    res.json(workout);
+  } catch (error) {
+    console.error('Error updating workout:', error);
+    res.status(500).json({ error: 'Failed to update workout' });
+  }
 });
 
 // DELETE /api/workouts/:id - Delete workout
 router.delete('/:id', async (req: Request, res: Response) => {
-  // TODO: Implement
-  res.status(501).json({ error: 'Not implemented' });
+  try {
+    const workout = await Workout.findByPk(Number(req.params.id));
+    if (!workout) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    await workout.destroy();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting workout:', error);
+    res.status(500).json({ error: 'Failed to delete workout' });
+  }
 });
 
-// POST /api/workouts/:id/reorder-exercises - Reorder exercises
-router.post('/:id/reorder-exercises', async (req: Request, res: Response) => {
-  // TODO: Implement with transaction
-  res.status(501).json({ error: 'Not implemented' });
+// POST /api/workouts/reorder - Reorder workouts within a program
+router.post('/reorder', validate(reorderWorkoutsSchema), async (req: Request, res: Response) => {
+  try {
+    const { workoutIds } = req.body;
+
+    await sequelize.transaction(async (t) => {
+      for (let i = 0; i < workoutIds.length; i++) {
+        await Workout.update(
+          { orderIndex: i },
+          { where: { id: workoutIds[i] }, transaction: t }
+        );
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering workouts:', error);
+    res.status(500).json({ error: 'Failed to reorder workouts' });
+  }
+});
+
+// POST /api/workouts/:id/reorder-exercises - Reorder exercises within a workout
+router.post('/:id/reorder-exercises', validate(reorderExercisesSchema), async (req: Request, res: Response) => {
+  try {
+    const workoutId = Number(req.params.id);
+    const { exerciseIds } = req.body;
+
+    const workout = await Workout.findByPk(workoutId);
+    if (!workout) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    await sequelize.transaction(async (t) => {
+      for (let i = 0; i < exerciseIds.length; i++) {
+        await Exercise.update(
+          { orderIndex: i },
+          { where: { id: exerciseIds[i], workoutId }, transaction: t }
+        );
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error reordering exercises:', error);
+    res.status(500).json({ error: 'Failed to reorder exercises' });
+  }
 });
 
 export default router;

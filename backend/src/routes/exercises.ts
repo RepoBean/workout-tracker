@@ -1,8 +1,37 @@
 import { Router, Request, Response } from 'express';
-import { Exercise, Set as SetModel } from '../models/index.js';
+import { z } from 'zod';
+import { Exercise, Workout, Set as SetModel } from '../models/index.js';
+import { validate } from '../middleware/validate.js';
 import { Op } from 'sequelize';
 
 const router = Router();
+
+// ============================================
+// Zod Schemas
+// ============================================
+
+const createExerciseSchema = z.object({
+  workoutId: z.number().int().positive(),
+  name: z.string().min(1).max(255),
+  targetSets: z.number().int().min(1),
+  targetReps: z.string().min(1).max(50),
+  orderIndex: z.number().int().min(0),
+  supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional(),
+});
+
+const updateExerciseSchema = z.object({
+  name: z.string().min(1).max(255).optional(),
+  targetSets: z.number().int().min(1).optional(),
+  targetReps: z.string().min(1).max(50).optional(),
+  orderIndex: z.number().int().min(0).optional(),
+  supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional(),
+}).refine(data => Object.keys(data).length > 0, {
+  message: 'At least one field must be provided',
+});
+
+// ============================================
+// Routes
+// ============================================
 
 // GET /api/exercises/suggestions - Autocomplete suggestions
 router.get('/suggestions', async (req: Request, res: Response) => {
@@ -13,7 +42,6 @@ router.get('/suggestions', async (req: Request, res: Response) => {
       return;
     }
 
-    // Get distinct exercise names from both Exercise and Set tables
     const exerciseNames = await Exercise.findAll({
       attributes: ['name'],
       where: {
@@ -36,7 +64,6 @@ router.get('/suggestions', async (req: Request, res: Response) => {
       limit: 10
     });
 
-    // Combine and dedupe
     const allNames = new globalThis.Set([
       ...exerciseNames.map(e => e.name),
       ...setExerciseNames.map(s => s.exerciseName)
@@ -67,21 +94,71 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/exercises - Create new exercise
-router.post('/', async (req: Request, res: Response) => {
-  // TODO: Add Zod validation
-  res.status(501).json({ error: 'Not implemented' });
+router.post('/', validate(createExerciseSchema), async (req: Request, res: Response) => {
+  try {
+    const { workoutId, name, targetSets, targetReps, orderIndex, supersetGroup } = req.body;
+
+    const workout = await Workout.findByPk(workoutId);
+    if (!workout) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    const exercise = await Exercise.create({
+      workoutId,
+      name,
+      targetSets,
+      targetReps,
+      orderIndex,
+      supersetGroup: supersetGroup || null,
+    });
+
+    res.status(201).json(exercise);
+  } catch (error) {
+    console.error('Error creating exercise:', error);
+    res.status(500).json({ error: 'Failed to create exercise' });
+  }
 });
 
 // PUT /api/exercises/:id - Update exercise
-router.put('/:id', async (req: Request, res: Response) => {
-  // TODO: Implement
-  res.status(501).json({ error: 'Not implemented' });
+router.put('/:id', validate(updateExerciseSchema), async (req: Request, res: Response) => {
+  try {
+    const exercise = await Exercise.findByPk(Number(req.params.id));
+    if (!exercise) {
+      res.status(404).json({ error: 'Exercise not found' });
+      return;
+    }
+
+    const { name, targetSets, targetReps, orderIndex, supersetGroup } = req.body;
+    if (name !== undefined) exercise.name = name;
+    if (targetSets !== undefined) exercise.targetSets = targetSets;
+    if (targetReps !== undefined) exercise.targetReps = targetReps;
+    if (orderIndex !== undefined) exercise.orderIndex = orderIndex;
+    if (supersetGroup !== undefined) exercise.supersetGroup = supersetGroup;
+
+    await exercise.save();
+    res.json(exercise);
+  } catch (error) {
+    console.error('Error updating exercise:', error);
+    res.status(500).json({ error: 'Failed to update exercise' });
+  }
 });
 
 // DELETE /api/exercises/:id - Delete exercise
 router.delete('/:id', async (req: Request, res: Response) => {
-  // TODO: Implement
-  res.status(501).json({ error: 'Not implemented' });
+  try {
+    const exercise = await Exercise.findByPk(Number(req.params.id));
+    if (!exercise) {
+      res.status(404).json({ error: 'Exercise not found' });
+      return;
+    }
+
+    await exercise.destroy();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting exercise:', error);
+    res.status(500).json({ error: 'Failed to delete exercise' });
+  }
 });
 
 export default router;

@@ -18,6 +18,7 @@ export const queryKeys = {
   nextWorkout: ['nextWorkout'] as const,
   history: (params?: { limit?: number; offset?: number }) => ['history', params] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
+  calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
 };
 
 // ============================================
@@ -119,6 +120,24 @@ export function useExerciseSuggestions(query: string) {
       return data;
     },
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * Fetch sessions for a calendar month (for rendering workout dots)
+ */
+export function useCalendarSessions(year: number, month: number) {
+  return useQuery({
+    queryKey: queryKeys.calendarSessions(year, month),
+    queryFn: async () => {
+      const from = `${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00.000Z`;
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+      const { data } = await api.get<Session[]>('/sessions/history', {
+        params: { from, to, limit: 100 },
+      });
+      return data;
+    },
   });
 }
 

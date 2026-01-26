@@ -29,14 +29,20 @@ const logSetSchema = z.object({
 // Routes
 // ============================================
 
-// GET /api/sessions/history - Get session history with pagination
+// GET /api/sessions/history - Get session history with pagination and optional date range
 router.get('/history', async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
     const offset = parseInt(req.query.offset as string) || 0;
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+
+    const completedAtFilter: any = { [Op.ne]: null };
+    if (from) completedAtFilter[Op.gte] = from;
+    if (to) completedAtFilter[Op.lte] = to;
 
     const sessions = await Session.findAll({
-      where: { completedAt: { [Op.ne]: null } },
+      where: { completedAt: completedAtFilter },
       include: [{
         model: SetModel,
         as: 'sets'
