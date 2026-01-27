@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse } from './types';
+import type { Program, Session, ActiveSession, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse, StatsResponse } from './types';
 
 // ============================================
 // Query Keys
@@ -14,11 +14,13 @@ export const queryKeys = {
   workout: (id: number) => ['workouts', id] as const,
   sessions: ['sessions'] as const,
   session: (id: number) => ['sessions', id] as const,
+  activeSession: ['activeSession'] as const,
   previousSession: (sessionId: number) => ['previousSession', sessionId] as const,
   nextWorkout: ['nextWorkout'] as const,
   history: (params?: { limit?: number; offset?: number }) => ['history', params] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
+  stats: ['stats'] as const,
 };
 
 // ============================================
@@ -48,6 +50,7 @@ export function usePrograms() {
       const { data } = await api.get<Program[]>('/programs');
       return data;
     },
+    staleTime: 2 * 60 * 1000, // Programs rarely change mid-session
   });
 }
 
@@ -75,6 +78,7 @@ export function useNextWorkout() {
       const { data } = await api.get<NextWorkoutResponse>('/sessions/next-workout');
       return data;
     },
+    staleTime: 2 * 60 * 1000, // Only changes when session is completed
   });
 }
 
@@ -138,6 +142,7 @@ export function useCalendarSessions(year: number, month: number) {
       });
       return data;
     },
+    staleTime: 5 * 60 * 1000, // Calendar data for past months doesn't change
   });
 }
 
@@ -152,5 +157,33 @@ export function usePreviousSession(sessionId: number) {
       return data;
     },
     enabled: !!sessionId,
+    staleTime: 10 * 60 * 1000, // Previous session data doesn't change during a workout
+  });
+}
+
+/**
+ * Check for an active (incomplete) session to resume
+ */
+export function useActiveSessionCheck() {
+  return useQuery({
+    queryKey: queryKeys.activeSession,
+    queryFn: async () => {
+      const { data } = await api.get<ActiveSession | null>('/sessions/active');
+      return data;
+    },
+  });
+}
+
+/**
+ * Fetch workout statistics
+ */
+export function useStats() {
+  return useQuery({
+    queryKey: queryKeys.stats,
+    queryFn: async () => {
+      const { data } = await api.get<StatsResponse>('/sessions/stats');
+      return data;
+    },
+    staleTime: 5 * 60 * 1000, // Stats don't change frequently
   });
 }

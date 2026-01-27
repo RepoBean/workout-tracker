@@ -1,16 +1,21 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { RestTimer } from './components/RestTimer';
+import { SetInput } from './components/SetInput';
+import { AddExercise } from './components/AddExercise';
+import { SwipeableRow } from '../../shared/ui/SwipeableRow';
 import type { Set, Exercise } from '../../shared/api/types';
+import type { AdHocExercise } from './components/AddExercise';
 
 export default function ActiveSession() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const sessionId = Number(id);
+  const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>([]);
 
   const {
     session,
@@ -25,7 +30,9 @@ export default function ActiveSession() {
 
   const { exerciseHints } = usePreviousData(sessionId);
 
-  // Group sets by exercise, sorted by setNumber then dropIndex
+  const isAdHoc = session?.isAdHoc || false;
+
+  // Group sets by exercise ID, sorted by setNumber then dropIndex
   const setsByExercise = useMemo(() => {
     const map = new Map<number, Set[]>();
     for (const set of session?.sets || []) {
@@ -38,6 +45,41 @@ export default function ActiveSession() {
     }
     return map;
   }, [session?.sets]);
+
+  // Group ad-hoc sets by exerciseName (for ad-hoc sessions with exerciseId=null)
+  const adHocSetsByName = useMemo(() => {
+    const map = new Map<string, Set[]>();
+    for (const set of session?.sets || []) {
+      if (!set.exerciseId) {
+        const existing = map.get(set.exerciseName) || [];
+        map.set(set.exerciseName, [...existing, set].sort(
+          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
+        ));
+      }
+    }
+    return map;
+  }, [session?.sets]);
+
+  // Merge ad-hoc exercises from state with those derived from logged sets
+  const allAdHocExercises = useMemo(() => {
+    const names = new Set<string>();
+    const result: AdHocExercise[] = [];
+    // First add exercises from logged sets (preserves order of logging)
+    for (const name of adHocSetsByName.keys()) {
+      if (!names.has(name)) {
+        names.add(name);
+        result.push({ tempId: `logged-${name}`, name });
+      }
+    }
+    // Then add exercises from local state that haven't been logged yet
+    for (const ex of adHocExercises) {
+      if (!names.has(ex.name)) {
+        names.add(ex.name);
+        result.push(ex);
+      }
+    }
+    return result;
+  }, [adHocSetsByName, adHocExercises]);
 
   // Calculate totals (only count standard sets for progress)
   const { totalSetsLogged, totalSetsTarget } = useMemo(() => {
@@ -122,6 +164,7 @@ export default function ActiveSession() {
       <RestTimer />
 
       <div className="space-y-4">
+        {/* Programmed exercises (non-ad-hoc sessions) */}
         {exercises.map((exercise) => (
           <ExerciseCard
             key={exercise.id}
@@ -134,7 +177,83 @@ export default function ActiveSession() {
           />
         ))}
 
-        {exercises.length === 0 && (
+        {/* Ad-hoc exercises (shown for ad-hoc sessions) */}
+        {isAdHoc && allAdHocExercises.map((adHocEx) => {
+          const sets = adHocSetsByName.get(adHocEx.name) || [];
+          const standardSets = sets.filter(s => (s.dropIndex || 0) === 0);
+          const nextSetNumber = standardSets.length + 1;
+          const lastSet = standardSets.length > 0
+            ? standardSets[standardSets.length - 1]
+            : undefined;
+
+          return (
+            <div key={adHocEx.tempId} className="card">
+              <h3 className="font-semibold text-lg mb-3">{adHocEx.name}</h3>
+
+              {/* Logged sets */}
+              {sets.length > 0 && (
+                <div className="mb-4 space-y-1">
+                  {sets.map((set) => (
+                    <SwipeableRow
+                      key={set.id}
+                      onSwipeLeft={() => deleteSet(set.id)}
+                      disabled={set.id < 0}
+                    >
+                      <div className={`flex items-center justify-between py-2 px-3 rounded-lg ${
+                        (set.dropIndex || 0) > 0
+                          ? 'bg-orange-50 dark:bg-orange-900/20 ml-4 mt-1'
+                          : 'bg-green-50 dark:bg-green-900/20'
+                      }`}>
+                        <span className={`text-sm font-medium ${
+                          (set.dropIndex || 0) > 0
+                            ? 'text-orange-700 dark:text-orange-300'
+                            : 'text-green-800 dark:text-green-300'
+                        }`}>
+                          {(set.dropIndex || 0) > 0
+                            ? `↳ Drop ${set.dropIndex}`
+                            : `Set ${set.setNumber}`}
+                        </span>
+                        <span className={`font-semibold ${
+                          (set.dropIndex || 0) > 0
+                            ? 'text-orange-800 dark:text-orange-200 text-sm'
+                            : 'text-green-900 dark:text-green-200'
+                        }`}>
+                          {set.weight} lbs x {set.reps}
+                          {set.perceivedEffort && (
+                            <span className="ml-2 text-sm text-gray-500">
+                              RPE {set.perceivedEffort}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </SwipeableRow>
+                  ))}
+                </div>
+              )}
+
+              {/* Set input for next set */}
+              <SetInput
+                exerciseId={null}
+                exerciseName={adHocEx.name}
+                setNumber={nextSetNumber}
+                previousWeight={lastSet?.weight || 0}
+                previousReps={lastSet?.reps || 10}
+                onLogSet={logSet}
+                isLogging={isLoggingSet}
+              />
+            </div>
+          );
+        })}
+
+        {/* Add Exercise button for ad-hoc sessions */}
+        {isAdHoc && (
+          <AddExercise
+            onAdd={(exercise) => setAdHocExercises(prev => [...prev, exercise])}
+          />
+        )}
+
+        {/* Empty state for non-ad-hoc sessions with no exercises */}
+        {!isAdHoc && exercises.length === 0 && (
           <div className="card text-center text-gray-500 dark:text-gray-400 py-8">
             <p>No exercises in this workout</p>
             <Link to="/" className="text-primary-600 hover:underline mt-2 inline-block">

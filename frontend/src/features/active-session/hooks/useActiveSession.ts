@@ -122,6 +122,8 @@ export function useActiveSession(sessionId: number) {
       queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.nextWorkout });
       queryClient.invalidateQueries({ queryKey: queryKeys.history() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats });
     },
     onError: () => {
       toast.error('Failed to complete workout. Please try again.');

@@ -5,6 +5,10 @@ import { SessionCard } from './components/SessionCard';
 export default function History() {
   const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory();
 
+  const handleExport = () => {
+    window.open('/api/sessions/export-csv', '_blank');
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -32,7 +36,14 @@ export default function History() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Workout History</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Workout History</h1>
+        {sessions.length > 0 && (
+          <Button variant="secondary" size="sm" onClick={handleExport}>
+            Export CSV
+          </Button>
+        )}
+      </div>
 
       {sessions.length === 0 && (
         <div className="card text-center py-8">

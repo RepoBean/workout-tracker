@@ -2,19 +2,45 @@ import { useTheme } from '../../shared/context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { NextWorkout } from './components/NextWorkout';
 import { Calendar } from './components/Calendar';
+import { ResumeWorkout } from './components/ResumeWorkout';
+import { StatsCard } from './components/StatsCard';
+import { useStartSession } from '../active-session/hooks/useStartSession';
+import { Button } from '../../shared/ui/Button';
 
 export default function Dashboard() {
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const startSession = useStartSession();
+
+  const handleQuickWorkout = () => {
+    startSession.mutate({ isAdHoc: true });
+  };
 
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Workout Tracker V2</h1>
 
+      {/* Resume In-Progress Workout */}
+      <ResumeWorkout />
+
       {/* Next Workout Card */}
       <NextWorkout />
 
+      {/* Quick Workout */}
+      <Button
+        variant="secondary"
+        size="lg"
+        className="w-full"
+        onClick={handleQuickWorkout}
+        disabled={startSession.isPending}
+      >
+        {startSession.isPending ? 'Starting...' : 'Quick Workout (Ad-hoc)'}
+      </Button>
+
       {/* Calendar */}
       <Calendar />
+
+      {/* Stats */}
+      <StatsCard />
 
       {/* Quick Links */}
       <div className="card">

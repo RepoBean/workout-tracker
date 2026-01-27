@@ -111,7 +111,7 @@ export interface PreviousSessionResponse {
 // ============================================
 
 export interface StartSessionRequest {
-  workoutId: number;
+  workoutId?: number;
   isAdHoc?: boolean;
 }
 
@@ -166,4 +166,18 @@ export interface UpdateExerciseRequest {
   targetReps?: string;
   orderIndex?: number;
   supersetGroup?: string | null;
+}
+
+// ============================================
+// Stats Types
+// ============================================
+
+export interface StatsResponse {
+  totalSessions: number;
+  totalSets: number;
+  totalVolume: number;
+  sessionsLast7Days: number;
+  sessionsLast30Days: number;
+  monthVolume: number;
+  currentStreak: number;
 }

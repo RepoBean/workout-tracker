@@ -11,7 +11,7 @@ const router = Router();
 // ============================================
 
 const startSessionSchema = z.object({
-  workoutId: z.number().int().positive(),
+  workoutId: z.number().int().positive().optional(),
   isAdHoc: z.boolean().optional().default(false),
 });
 
@@ -106,7 +106,196 @@ router.get('/next-workout', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/sessions/:id - Get session by ID
+// GET /api/sessions/active - Find incomplete session for resume
+router.get('/active', async (req: Request, res: Response) => {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const session = await Session.findOne({
+      where: {
+        completedAt: { [Op.is]: null as any },
+        createdAt: { [Op.gte]: twentyFourHoursAgo },
+      },
+      include: [{ model: SetModel, as: 'sets' }],
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!session) {
+      res.json(null);
+      return;
+    }
+
+    // Include exercises from the associated workout
+    let exercises: any[] = [];
+    if (session.workoutId) {
+      const workout = await Workout.findByPk(session.workoutId, {
+        include: [{
+          model: Exercise,
+          as: 'exercises',
+        }],
+        order: [
+          [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+        ]
+      });
+      exercises = (workout as any)?.exercises || [];
+    }
+
+    res.json({
+      ...session.toJSON(),
+      exercises,
+    });
+  } catch (error) {
+    console.error('Error fetching active session:', error);
+    res.status(500).json({ error: 'Failed to fetch active session' });
+  }
+});
+
+// GET /api/sessions/export-csv - Export all session history as CSV
+router.get('/export-csv', async (req: Request, res: Response) => {
+  try {
+    const sessions = await Session.findAll({
+      where: { completedAt: { [Op.ne]: null } },
+      include: [{ model: SetModel, as: 'sets' }],
+      order: [['completedAt', 'DESC']],
+    });
+
+    // CSV field escaping to prevent formula injection
+    const escapeCSV = (value: string | number | null | undefined): string => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (/^[=+\-@\t\r]/.test(str)) {
+        return `"'${str.replace(/"/g, '""')}"`;
+      }
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const header = 'Date,Program,Workout,Exercise,Set#,Weight(lbs),Reps,RPE,DropIndex';
+    const rows: string[] = [];
+
+    for (const session of sessions) {
+      const sets = (session as any).sets || [];
+      const date = session.completedAt
+        ? new Date(session.completedAt).toISOString().split('T')[0]
+        : '';
+
+      for (const set of sets) {
+        rows.push([
+          escapeCSV(date),
+          escapeCSV(session.programName),
+          escapeCSV(session.workoutName),
+          escapeCSV(set.exerciseName),
+          escapeCSV(set.setNumber),
+          escapeCSV(set.weight),
+          escapeCSV(set.reps),
+          escapeCSV(set.perceivedEffort),
+          escapeCSV(set.dropIndex),
+        ].join(','));
+      }
+    }
+
+    const csv = [header, ...rows].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=workout-history.csv');
+    res.send(csv);
+  } catch (error) {
+    console.error('Error exporting CSV:', error);
+    res.status(500).json({ error: 'Failed to export CSV' });
+  }
+});
+
+// GET /api/sessions/stats - Summary statistics
+router.get('/stats', async (req: Request, res: Response) => {
+  try {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    // Total completed sessions
+    const totalSessions = await Session.count({
+      where: { completedAt: { [Op.ne]: null } },
+    });
+
+    // Sessions last 7 days
+    const sessionsLast7Days = await Session.count({
+      where: {
+        completedAt: { [Op.ne]: null, [Op.gte]: sevenDaysAgo },
+      },
+    });
+
+    // Sessions last 30 days
+    const sessionsLast30Days = await Session.count({
+      where: {
+        completedAt: { [Op.ne]: null, [Op.gte]: thirtyDaysAgo },
+      },
+    });
+
+    // Total sets and volume
+    const [volumeResult]: any = await sequelize.query(`
+      SELECT
+        COUNT(*) as totalSets,
+        COALESCE(SUM(weight * reps), 0) as totalVolume
+      FROM Sets
+      WHERE sessionId IN (
+        SELECT id FROM Sessions WHERE completedAt IS NOT NULL
+      )
+    `);
+    const totalSets = volumeResult[0]?.totalSets || 0;
+    const totalVolume = volumeResult[0]?.totalVolume || 0;
+
+    // Volume last 30 days
+    const [monthVolumeResult]: any = await sequelize.query(`
+      SELECT COALESCE(SUM(s.weight * s.reps), 0) as monthVolume
+      FROM Sets s
+      JOIN Sessions sess ON s.sessionId = sess.id
+      WHERE sess.completedAt IS NOT NULL
+        AND sess.completedAt >= :thirtyDaysAgo
+    `, { replacements: { thirtyDaysAgo: thirtyDaysAgo.toISOString() } });
+    const monthVolume = monthVolumeResult[0]?.monthVolume || 0;
+
+    // Current streak: consecutive days with sessions counting back from today
+    const [streakResult]: any = await sequelize.query(`
+      SELECT DISTINCT date(completedAt) as sessionDate
+      FROM Sessions
+      WHERE completedAt IS NOT NULL
+      ORDER BY sessionDate DESC
+    `);
+
+    let currentStreak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < streakResult.length; i++) {
+      const expectedDate = new Date(today);
+      expectedDate.setDate(expectedDate.getDate() - i);
+      const expectedStr = expectedDate.toISOString().split('T')[0];
+
+      if (streakResult[i].sessionDate === expectedStr) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+
+    res.json({
+      totalSessions,
+      totalSets,
+      totalVolume,
+      sessionsLast7Days,
+      sessionsLast30Days,
+      monthVolume,
+      currentStreak,
+    });
+  } catch (error) {
+    console.error('Error fetching stats:', error);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// GET /api/sessions/:id - Get session by ID (includes exercises from workout)
 router.get('/:id', async (req: Request, res: Response) => {
   try {
     const session = await Session.findByPk(Number(req.params.id), {
@@ -121,7 +310,25 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(session);
+    // Include exercises from the associated workout (needed for active session UI)
+    let exercises: any[] = [];
+    if (session.workoutId) {
+      const workout = await Workout.findByPk(session.workoutId, {
+        include: [{
+          model: Exercise,
+          as: 'exercises',
+        }],
+        order: [
+          [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+        ]
+      });
+      exercises = (workout as any)?.exercises || [];
+    }
+
+    res.json({
+      ...session.toJSON(),
+      exercises,
+    });
   } catch (error) {
     console.error('Error fetching session:', error);
     res.status(500).json({ error: 'Failed to fetch session' });
@@ -156,15 +363,16 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
     }
 
     // Build a map: exerciseId -> { lastWeight, lastReps }
-    const exerciseData: Record<number, { lastWeight: number; lastReps: number }> = {};
+    const exerciseData: Record<number, { lastWeight: number; lastReps: number; setNumber: number }> = {};
 
     for (const set of (previousSession as any).sets || []) {
       if (set.exerciseId) {
         // Keep the last (highest set number) for each exercise
-        if (!exerciseData[set.exerciseId] || set.setNumber > exerciseData[set.exerciseId].lastWeight) {
+        if (!exerciseData[set.exerciseId] || set.setNumber > exerciseData[set.exerciseId].setNumber) {
           exerciseData[set.exerciseId] = {
             lastWeight: set.weight,
-            lastReps: set.reps
+            lastReps: set.reps,
+            setNumber: set.setNumber,
           };
         }
       }
@@ -184,6 +392,24 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
 router.post('/start', validate(startSessionSchema), async (req: Request, res: Response) => {
   try {
     const { workoutId, isAdHoc } = req.body;
+
+    // Ad-hoc session without a workout
+    if (!workoutId) {
+      const session = await Session.create({
+        programId: null,
+        programName: 'Ad-hoc',
+        workoutId: null,
+        workoutName: 'Quick Workout',
+        isAdHoc: true,
+      });
+
+      res.status(201).json({
+        ...session.toJSON(),
+        exercises: [],
+        sets: [],
+      });
+      return;
+    }
 
     // Fetch workout with program and exercises
     const workout = await Workout.findByPk(workoutId, {

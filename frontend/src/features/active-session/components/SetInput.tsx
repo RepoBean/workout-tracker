@@ -101,6 +101,7 @@ export function SetInput({
           <input
             type="number"
             inputMode="decimal"
+            aria-label="Weight in pounds"
             value={weight}
             onChange={(e) => setWeight(Math.max(0, Number(e.target.value)))}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
@@ -144,6 +145,7 @@ export function SetInput({
           <input
             type="number"
             inputMode="numeric"
+            aria-label="Number of reps"
             value={reps}
             onChange={(e) => setReps(Math.max(1, Number(e.target.value)))}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
