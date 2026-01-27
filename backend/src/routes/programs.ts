@@ -22,6 +22,29 @@ const updateProgramSchema = z.object({
   message: 'At least one field must be provided',
 });
 
+const importExerciseSchema = z.object({
+  name: z.string().min(1).max(255),
+  targetSets: z.number().int().min(1),
+  targetReps: z.string().min(1).max(50),
+  orderIndex: z.number().int().min(0),
+  supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional().default(null),
+});
+
+const importWorkoutSchema = z.object({
+  name: z.string().min(1).max(255),
+  orderIndex: z.number().int().min(0),
+  exercises: z.array(importExerciseSchema).max(100).default([]),
+});
+
+const importProgramSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string().optional(),
+  program: z.object({
+    name: z.string().min(1).max(255),
+    workouts: z.array(importWorkoutSchema).max(50).default([]),
+  }),
+});
+
 // ============================================
 // Routes
 // ============================================
@@ -86,6 +109,60 @@ router.get('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// GET /api/programs/:id/export - Export program as JSON
+router.get('/:id/export', async (req: Request, res: Response) => {
+  try {
+    const program = await Program.findByPk(Number(req.params.id), {
+      include: [{
+        model: Workout,
+        as: 'workouts',
+        include: [{
+          model: Exercise,
+          as: 'exercises'
+        }]
+      }],
+      order: [
+        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
+        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    if (!program) {
+      res.status(404).json({ error: 'Program not found' });
+      return;
+    }
+
+    const programJSON = program.toJSON() as unknown as Record<string, unknown>;
+    const workouts = (programJSON.workouts as Array<Record<string, unknown>>) || [];
+
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      program: {
+        name: program.name,
+        workouts: workouts.map((w) => ({
+          name: w.name as string,
+          orderIndex: w.orderIndex as number,
+          exercises: ((w.exercises as Array<Record<string, unknown>>) || []).map((e) => ({
+            name: e.name as string,
+            targetSets: e.targetSets as number,
+            targetReps: e.targetReps as string,
+            orderIndex: e.orderIndex as number,
+            supersetGroup: (e.supersetGroup as string) || null,
+          })),
+        })),
+      },
+    };
+
+    const sanitized = program.name.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50);
+    res.setHeader('Content-Disposition', `attachment; filename="${sanitized}.json"`);
+    res.status(200).json(exportData);
+  } catch (error) {
+    console.error('Error exporting program:', error);
+    res.status(500).json({ error: 'Failed to export program' });
+  }
+});
+
 // POST /api/programs - Create new program
 router.post('/', validate(createProgramSchema), async (req: Request, res: Response) => {
   try {
@@ -96,6 +173,63 @@ router.post('/', validate(createProgramSchema), async (req: Request, res: Respon
   } catch (error) {
     console.error('Error creating program:', error);
     res.status(500).json({ error: 'Failed to create program' });
+  }
+});
+
+// POST /api/programs/import - Import program from JSON
+router.post('/import', validate(importProgramSchema), async (req: Request, res: Response) => {
+  try {
+    const data = req.body;
+
+    const program = await sequelize.transaction(async (t) => {
+      const newProgram = await Program.create({
+        name: data.program.name,
+        isActive: false,
+        isArchived: false,
+        currentWorkoutIndex: 0,
+      }, { transaction: t });
+
+      for (const workoutData of data.program.workouts) {
+        const newWorkout = await Workout.create({
+          programId: newProgram.id,
+          name: workoutData.name,
+          orderIndex: workoutData.orderIndex,
+        }, { transaction: t });
+
+        for (const exerciseData of workoutData.exercises) {
+          await Exercise.create({
+            workoutId: newWorkout.id,
+            name: exerciseData.name,
+            targetSets: exerciseData.targetSets,
+            targetReps: exerciseData.targetReps,
+            orderIndex: exerciseData.orderIndex,
+            supersetGroup: exerciseData.supersetGroup || null,
+          }, { transaction: t });
+        }
+      }
+
+      return newProgram;
+    });
+
+    const fullProgram = await Program.findByPk(program.id, {
+      include: [{
+        model: Workout,
+        as: 'workouts',
+        include: [{
+          model: Exercise,
+          as: 'exercises'
+        }]
+      }],
+      order: [
+        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
+        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    res.status(201).json(fullProgram);
+  } catch (error) {
+    console.error('Error importing program:', error);
+    res.status(500).json({ error: 'Failed to import program' });
   }
 });
 

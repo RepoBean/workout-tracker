@@ -181,3 +181,30 @@ export interface StatsResponse {
   monthVolume: number;
   currentStreak: number;
 }
+
+// ============================================
+// Program Export/Import Types
+// ============================================
+
+export interface ProgramExportExercise {
+  name: string;
+  targetSets: number;
+  targetReps: string;
+  orderIndex: number;
+  supersetGroup: string | null;
+}
+
+export interface ProgramExportWorkout {
+  name: string;
+  orderIndex: number;
+  exercises: ProgramExportExercise[];
+}
+
+export interface ProgramExportPayload {
+  version: 1;
+  exportedAt: string;
+  program: {
+    name: string;
+    workouts: ProgramExportWorkout[];
+  };
+}

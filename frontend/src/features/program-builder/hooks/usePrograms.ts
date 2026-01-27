@@ -12,6 +12,7 @@ import type {
   UpdateWorkoutRequest,
   CreateExerciseRequest,
   UpdateExerciseRequest,
+  ProgramExportPayload,
 } from '../../../shared/api/types';
 
 export function useProgramMutations() {
@@ -74,6 +75,20 @@ export function useProgramMutations() {
     },
     onError: () => {
       toast.error('Failed to activate program');
+    },
+  });
+
+  const importProgram = useMutation({
+    mutationFn: async (data: ProgramExportPayload) => {
+      const { data: program } = await api.post<Program>('/programs/import', data);
+      return program;
+    },
+    onSuccess: () => {
+      invalidatePrograms();
+      toast.success('Program imported');
+    },
+    onError: () => {
+      toast.error('Failed to import program');
     },
   });
 
@@ -183,6 +198,7 @@ export function useProgramMutations() {
     updateProgram,
     deleteProgram,
     activateProgram,
+    importProgram,
     createWorkout,
     updateWorkout,
     deleteWorkout,

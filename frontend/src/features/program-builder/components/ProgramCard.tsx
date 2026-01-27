@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { WorkoutCard } from './WorkoutCard';
+import { api } from '../../../shared/api/client';
+import { useToast } from '../../../shared/ui/Toast';
 import type { Program } from '../../../shared/api/types';
 
 interface ProgramCardProps {
@@ -14,6 +16,7 @@ export function ProgramCard({ program }: ProgramCardProps) {
   const [editName, setEditName] = useState(program.name);
 
   const { updateProgram, deleteProgram, activateProgram, createWorkout, reorderWorkouts } = useProgramMutations();
+  const toast = useToast();
   const workouts = program.workouts || [];
 
   const handleSaveName = () => {
@@ -37,6 +40,22 @@ export function ProgramCard({ program }: ProgramCardProps) {
         name: name.trim(),
         orderIndex: workouts.length,
       });
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      const { data } = await api.get(`/programs/${program.id}/export`);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${program.name.replace(/[^a-zA-Z0-9]/g, '-').substring(0, 50)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Program exported');
+    } catch {
+      toast.error('Failed to export program');
     }
   };
 
@@ -142,6 +161,13 @@ export function ProgramCard({ program }: ProgramCardProps) {
                 Archive
               </Button>
             )}
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleExport}
+            >
+              Export
+            </Button>
           </div>
 
           {/* Workouts List */}
