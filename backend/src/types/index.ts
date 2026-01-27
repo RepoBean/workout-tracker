@@ -57,6 +57,7 @@ export interface SetType {
   reps: number;
   setNumber: number;
   perceivedEffort: number | null;
+  dropIndex: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -103,8 +104,7 @@ export interface UpdateExerciseRequest {
 }
 
 export interface StartSessionRequest {
-  programId: number;
-  workoutId: number;
+  workoutId?: number;
   isAdHoc?: boolean;
 }
 
@@ -115,6 +115,7 @@ export interface LogSetRequest {
   reps: number;
   setNumber: number;
   perceivedEffort?: number;
+  dropIndex?: number;
 }
 
 export interface UpdateEffortRequest {

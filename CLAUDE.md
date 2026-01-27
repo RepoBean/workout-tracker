@@ -1,8 +1,8 @@
-# Workout Tracker V2 — Personal Edition
+# Workout Tracker — Personal Edition
 
 ## What This Is
 
-A ground-up rebuild of a self-hosted workout tracking app. V1 exists at `~/projects/workout_app/` and works fine — this is V2 with better architecture, better UX, and TypeScript.
+A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 **This is a personal app.** Single user, self-hosted, used at the gym on a phone. No multi-user, no cloud sync, no enterprise features.
 
@@ -27,7 +27,7 @@ A ground-up rebuild of a self-hosted workout tracking app. V1 exists at `~/proje
 |-------|------------|
 | Frontend | React 19 + TypeScript + Vite + Tailwind CSS |
 | Backend | Express + TypeScript + Sequelize ORM |
-| Database | SQLite (shared with V1, symlinked) |
+| Database | SQLite (self-contained) |
 | Data Fetching | TanStack Query (React Query) |
 | State | React Context for global state (timer, theme, offline status) |
 | Validation | Zod (backend request validation) |
@@ -49,12 +49,7 @@ A ground-up rebuild of a self-hosted workout tracking app. V1 exists at `~/proje
 
 ## Database
 
-V2 has its own independent database at `backend/database.sqlite`. Not linked to V1 in any way.
-
-**Option A: Fresh Start** — Let Sequelize create empty tables on first run.
-**Option B: Copy Data** — One-time copy from V1: `cp ~/projects/workout_app/backend/database.sqlite ./backend/database.sqlite`
-
-Either way, V2 owns its database completely.
+Database lives at `backend/database.sqlite`. Sequelize creates tables on first run.
 
 ## Database Schema
 
@@ -68,7 +63,7 @@ Program (id, name, isActive, isArchived, currentWorkoutIndex, createdAt, updated
     └─> Exercise (id, workoutId, name, targetSets, targetReps, orderIndex, supersetGroup, createdAt, updatedAt)
 
 Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc, createdAt, updatedAt)
-└─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort, createdAt, updatedAt)
+└─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort, dropIndex, createdAt, updatedAt)
 ```
 
 ### Key Patterns
@@ -84,14 +79,7 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
 | **Ad-hoc Exercises** | `exerciseId: null` with `exerciseName` stored — added mid-workout |
 | **Supersets** | `supersetGroup` field (letters A-E) groups exercises that rotate together |
 | **RPE Scale** | `perceivedEffort` is 1-10 |
-
-### Potential Schema Addition (V2)
-
-For drop set support, may need:
-```sql
-ALTER TABLE Sets ADD COLUMN dropIndex INTEGER DEFAULT 0;
-```
-Standard sets have `dropIndex = 0`, drop sets have `1, 2, 3...`
+| **Drop Sets** | `dropIndex` field on Sets — standard sets have `dropIndex = 0`, drops have `1, 2, 3...` |
 
 ---
 
@@ -108,11 +96,12 @@ src/
 │   │   │   ├── ExerciseCard.tsx   # Single exercise with all its sets
 │   │   │   ├── RestTimer.tsx      # Timer display + controls
 │   │   │   ├── PlateCalculator.tsx
-│   │   │   └── DropSetInput.tsx
+│   │   │   ├── SessionHeader.tsx
+│   │   │   └── AddExercise.tsx
 │   │   ├── hooks/
-│   │   │   ├── useSession.ts      # Session state + optimistic updates
-│   │   │   ├── useTimer.ts        # Timer with notifications
-│   │   │   └── usePreviousData.ts # Cached previous weights/reps
+│   │   │   ├── useActiveSession.ts # Session state + optimistic updates
+│   │   │   ├── usePreviousData.ts  # Cached previous weights/reps
+│   │   │   └── useStartSession.ts  # Session initialization
 │   │   ├── logic/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   └── plates.ts          # Plate calculator math
@@ -138,7 +127,9 @@ src/
 │   └── dashboard/                 # Home/landing page
 │       ├── components/
 │       │   ├── NextWorkout.tsx    # "What's Next?" display
-│       │   └── Calendar.tsx       # Month view with workout dots
+│       │   ├── Calendar.tsx       # Month view with workout dots
+│       │   ├── ResumeWorkout.tsx
+│       │   └── StatsCard.tsx
 │       └── index.tsx              # Home page entry
 │
 ├── shared/
@@ -146,7 +137,9 @@ src/
 │   │   ├── Button.tsx
 │   │   ├── Input.tsx
 │   │   ├── Modal.tsx
-│   │   └── Toast.tsx
+│   │   ├── Toast.tsx
+│   │   ├── SwipeableRow.tsx
+│   │   └── TimerIndicator.tsx
 │   ├── api/
 │   │   ├── client.ts              # Axios instance, error handling
 │   │   ├── types.ts               # Shared API request/response types
@@ -188,7 +181,7 @@ backend/
 │   ├── types/
 │   │   └── index.ts         # Shared types (can be imported by frontend)
 │   └── index.ts             # Express app setup
-├── database.sqlite              # Symlink to V1's database
+├── database.sqlite              # SQLite database
 ├── package.json
 └── tsconfig.json
 ```
@@ -208,7 +201,36 @@ backend/
 
 ---
 
-## Key Features to Build
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/programs | List all programs with workouts/exercises |
+| POST | /api/programs | Create program |
+| PUT | /api/programs/:id | Update program |
+| DELETE | /api/programs/:id | Archive program (soft delete) |
+| PUT | /api/programs/:id/set-active | Set as active program |
+| POST | /api/programs/:programId/workouts | Create workout |
+| PUT | /api/workouts/:id | Update workout |
+| DELETE | /api/workouts/:id | Delete workout (cascade) |
+| PUT | /api/programs/:programId/workouts/reorder | Reorder workouts |
+| POST | /api/workouts/:workoutId/exercises | Create exercise |
+| PUT | /api/exercises/:id | Update exercise |
+| DELETE | /api/exercises/:id | Delete exercise |
+| GET | /api/sessions/active | Find incomplete session (resume) |
+| GET | /api/sessions/history | List completed sessions |
+| GET | /api/sessions/stats | Summary statistics |
+| GET | /api/sessions/export-csv | Export history as CSV |
+| GET | /api/sessions/next-workout | Get next workout info |
+| POST | /api/sessions/start | Start new session |
+| POST | /api/sessions/:id/sets | Log a set |
+| DELETE | /api/sessions/:id/sets/:setId | Delete a set |
+| PUT | /api/sessions/:id/complete | Complete session |
+| GET | /api/sessions/:id/previous | Previous session hints |
+
+---
+
+## Key Features (Implemented)
 
 ### 1. Optimistic UI
 - User taps "Log Set" → UI updates instantly
@@ -248,93 +270,68 @@ backend/
 
 ## Development Setup
 
-### Ports (Avoid V1 Conflict)
-- V2 Frontend: **5174**
-- V2 Backend: **3002**
-- (V1 stays on 5173/3001)
+### Ports
+- Frontend: **5174**
+- Backend: **3002**
 
-### Database Setup
+### Running
 ```bash
-# Option A: Fresh start (empty database, Sequelize creates tables)
-# Just start the backend - it will create database.sqlite automatically
+# Backend
+cd backend && npm run dev    # localhost:3002
 
-# Option B: Copy existing data (one-time, then independent)
-cp ~/projects/workout_app/backend/database.sqlite ./backend/database.sqlite
-```
-
-V2's database is completely independent from V1.
-
-### Running Both Versions
-```bash
-# Terminal 1: V1 (production use)
-cd ~/projects/workout_app && npm run dev
-
-# Terminal 2: V2 backend
-cd ~/projects/workout_app_v2/backend && npm run dev
-
-# Terminal 3: V2 frontend
-cd ~/projects/workout_app_v2/frontend && npm run dev
+# Frontend
+cd frontend && npm run dev   # localhost:5174
 ```
 
 ---
 
 ## Development Phases
 
-### Phase 1: Foundation
-- [ ] Vite + React + TypeScript + Tailwind frontend
-- [ ] Express + TypeScript backend
-- [ ] Feature-based folder structure (empty folders OK)
-- [ ] Shared types for database models
-- [ ] Connect to existing SQLite database
-- [ ] PWA manifest skeleton
-- [ ] ThemeContext + dark mode
-- [ ] Basic routing to 4 feature entry points
+### Phase 1: Foundation ✓ (841bd3e)
+- [x] Vite + React + TypeScript + Tailwind frontend
+- [x] Express + TypeScript backend
+- [x] Feature-based folder structure (empty folders OK)
+- [x] Shared types for database models
+- [x] Connect to existing SQLite database
+- [x] PWA manifest skeleton
+- [x] ThemeContext + dark mode
+- [x] Basic routing to 4 feature entry points
 
-### Phase 2: Active Session (The Core)
-- [ ] `features/active-session/` components
-- [ ] SetInput with optimistic UI
-- [ ] ExerciseCard with previous weight display
-- [ ] Client-side "What's Next?" logic
-- [ ] Basic set logging flow
+### Phase 2: Active Session (The Core) ✓ (3749438)
+- [x] `features/active-session/` components
+- [x] SetInput with optimistic UI
+- [x] ExerciseCard with previous weight display
+- [x] Client-side "What's Next?" logic
+- [x] Basic set logging flow
 
-### Phase 3: Timer & Notifications
-- [ ] Global TimerContext
-- [ ] RestTimer component
-- [ ] Web Notifications API integration
-- [ ] Background tab drift correction
+### Phase 3: Timer & Notifications ✓ (fff95b2)
+- [x] Global TimerContext
+- [x] RestTimer component
+- [x] Web Notifications API integration
+- [x] Background tab drift correction
 
-### Phase 4: New Features
-- [ ] Plate calculator
-- [ ] Drop set support
-- [ ] Swipe gestures
+### Phase 4: New Features ✓ (1673588)
+- [x] Plate calculator
+- [x] Drop set support
+- [x] Swipe gestures
 
-### Phase 5: Remaining Features
-- [ ] Program builder CRUD
-- [ ] History view
-- [ ] Dashboard with calendar
-- [ ] Full PWA offline support
+### Phase 5: Remaining Features ✓ (0f2b133)
+- [x] Program builder CRUD
+- [x] History view
+- [x] Dashboard with calendar
+- [x] Full PWA offline support
 
-### Phase 6: Polish & Cutover
-- [ ] Feature parity with V1
-- [ ] Performance audit
-- [ ] Switch to V2 for daily use
-
----
-
-## V1 Reference (For Inspiration Only)
-
-V1 lives at `~/projects/workout_app/`. V2 is completely independent — no shared code, no shared database. Reference V1 only if you need to understand how a feature worked:
-
-- `backend/database.js` — Sequelize models and associations
-- `backend/routes/sessions.js` — Session/set logging logic
-- `frontend/src/pages/WorkoutSession.jsx` — Current workout UI (to be decomposed in V2)
+### Phase 6: Polish & Cutover ✓ (c94db51)
+- [x] Feature parity
+- [x] Performance audit
+- [x] Switch to V2 for daily use
 
 ---
 
 ## Style Guide
 
 - **Tailwind**: Mobile-first, use `sm:` breakpoints for larger screens
-- **Colors**: Indigo primary (`indigo-600`), follow V1's palette
+- **Colors**: Indigo primary (`indigo-600`)
 - **Components**: Small and focused, <500 lines per file
 - **Types**: Strict TypeScript, no `any` unless absolutely necessary
 - **Naming**: Feature folders are `kebab-case`, components are `PascalCase`
