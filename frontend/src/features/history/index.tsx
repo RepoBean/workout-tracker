@@ -1,9 +1,11 @@
 import { Button } from '../../shared/ui/Button';
-import { useSessionHistory } from './hooks/useHistory';
+import { SwipeableRow } from '../../shared/ui/SwipeableRow';
+import { useSessionHistory, useDeleteSession } from './hooks/useHistory';
 import { SessionCard } from './components/SessionCard';
 
 export default function History() {
   const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory();
+  const deleteSession = useDeleteSession();
 
   const handleExport = () => {
     window.open('/api/sessions/export-csv', '_blank');
@@ -55,7 +57,24 @@ export default function History() {
       )}
 
       {sessions.map(session => (
-        <SessionCard key={session.id} session={session} />
+        <SwipeableRow
+          key={session.id}
+          onSwipeLeft={() => {
+            if (confirm(`Delete "${session.workoutName}" session?`)) {
+              deleteSession.mutate(session.id);
+            }
+          }}
+          disabled={deleteSession.isPending}
+        >
+          <SessionCard
+            session={session}
+            onDelete={() => {
+              if (confirm(`Delete "${session.workoutName}" session?`)) {
+                deleteSession.mutate(session.id);
+              }
+            }}
+          />
+        </SwipeableRow>
       ))}
 
       {hasMore && (

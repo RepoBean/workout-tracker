@@ -3,6 +3,7 @@ import type { Session, Set } from '../../../shared/api/types';
 
 interface SessionCardProps {
   session: Session;
+  onDelete?: () => void;
 }
 
 function formatDate(dateStr: string): string {
@@ -36,7 +37,7 @@ interface ExerciseGroup {
   sets: Set[];
 }
 
-export function SessionCard({ session }: SessionCardProps) {
+export function SessionCard({ session, onDelete }: SessionCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   const stats = useMemo(() => {
@@ -137,6 +138,17 @@ export function SessionCard({ session }: SessionCardProps) {
               </div>
             </div>
           ))}
+        {onDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="w-full mt-2 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+            >
+              Delete Session
+            </button>
+          )}
         </div>
       )}
     </div>

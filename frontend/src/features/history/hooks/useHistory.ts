@@ -1,5 +1,8 @@
 import { useState, useMemo } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useHistory as useHistoryQuery } from '../../../shared/api/queries';
+import { api } from '../../../shared/api/client';
+import { useToast } from '../../../shared/ui/Toast';
 
 const PAGE_SIZE = 10;
 
@@ -28,4 +31,24 @@ export function useSessionHistory() {
     loadMore,
     isLoadingMore: query.isFetching && sessions.length > 0,
   };
+}
+
+export function useDeleteSession() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async (sessionId: number) => {
+      await api.delete(`/sessions/${sessionId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['calendarSessions'] });
+      toast.success('Session deleted');
+    },
+    onError: () => {
+      toast.error('Failed to delete session');
+    },
+  });
 }
