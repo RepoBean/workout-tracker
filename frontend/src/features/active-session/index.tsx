@@ -23,6 +23,9 @@ export default function ActiveSession() {
   // State for ad-hoc exercises added to program workouts (virtual exercises with negative IDs)
   const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>([]);
 
+  // Ref to hold the set-logged callback (allows passing to useActiveSession before navigation is available)
+  const handleSetLoggedRef = useRef<(exerciseId: number | null, exerciseName: string) => void>(() => { });
+
   const {
     session,
     isLoading,
@@ -34,7 +37,9 @@ export default function ActiveSession() {
     deleteSet,
     completeSession,
     isCompletingSession,
-  } = useActiveSession(sessionId);
+  } = useActiveSession(sessionId, {
+    onSetLogged: (exerciseId, exerciseName) => handleSetLoggedRef.current(exerciseId, exerciseName),
+  });
 
   // Per-exercise RPE prompt state
   const [rpePromptExercise, setRpePromptExercise] = useState<{ id: number; name: string } | null>(null);
@@ -147,28 +152,28 @@ export default function ActiveSession() {
     return setsByExercise.get(exercise.id) || [];
   };
 
-  // Track previous set count to detect new set logged
-  const [prevSetCount, setPrevSetCount] = useState(sets.length);
-
-  // Auto-rotate superset and auto-advance when sets are logged
-  // FIXED: Show RPE prompt for ANY exercise completion, including supersets
+  // Update the ref with the actual callback logic (after navigation is available)
   useEffect(() => {
-    if (sets.length > prevSetCount && navigation.activeExercise) {
-      const exerciseId = navigation.activeExercise.id;
-      const wasComplete = completedExercisesRef.current.has(exerciseId);
-      const isNowComplete = navigation.isExerciseComplete(exerciseId);
+    handleSetLoggedRef.current = (exerciseId: number | null, exerciseName: string) => {
+      // Find the exercise that was just logged to
+      const exercise = exerciseId !== null
+        ? mergedExercises.find(e => e.id === exerciseId)
+        : mergedExercises.find(e => e.name === exerciseName);
+
+      if (!exercise) return;
+
+      const wasComplete = completedExercisesRef.current.has(exercise.id);
+      const isNowComplete = navigation.isExerciseComplete(exercise.id);
 
       // Check if this exercise just completed
       if (!wasComplete && isNowComplete) {
-        // Mark as completed
-        completedExercisesRef.current.add(exerciseId);
+        completedExercisesRef.current.add(exercise.id);
 
-        // Show RPE prompt for completed exercise
+        // Show RPE prompt
         setRpePromptExercise({
-          id: exerciseId,
-          name: navigation.activeExercise.name
+          id: exercise.id,
+          name: exercise.name,
         });
-        setPrevSetCount(sets.length);
         return; // Wait for RPE before navigating
       }
 
@@ -182,9 +187,8 @@ export default function ActiveSession() {
       } else if (navigation.isCurrentStepComplete) {
         navigation.goToNext();
       }
-    }
-    setPrevSetCount(sets.length);
-  }, [sets.length, prevSetCount, navigation]);
+    };
+  }, [mergedExercises, navigation]);
 
   // RPE submit handler - navigate AFTER RPE
   const handleRpeSubmit = (rpe: number) => {

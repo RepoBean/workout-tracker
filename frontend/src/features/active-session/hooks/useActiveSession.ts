@@ -11,7 +11,11 @@ interface UpdateSetRequest {
   perceivedEffort?: number | null;
 }
 
-export function useActiveSession(sessionId: number) {
+interface UseActiveSessionOptions {
+  onSetLogged?: (exerciseId: number | null, exerciseName: string) => void;
+}
+
+export function useActiveSession(sessionId: number, options?: UseActiveSessionOptions) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { startTimer } = useTimer();
@@ -63,7 +67,7 @@ export function useActiveSession(sessionId: number) {
       }
       toast.error('Failed to log set. Please try again.');
     },
-    onSuccess: (savedSet) => {
+    onSuccess: (savedSet, variables) => {
       // Replace optimistic set with real one
       const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
       if (currentSession) {
@@ -79,6 +83,9 @@ export function useActiveSession(sessionId: number) {
 
       // Auto-start rest timer (90s default)
       startTimer(90);
+
+      // Call the callback if provided
+      options?.onSetLogged?.(variables.exerciseId ?? null, variables.exerciseName);
     },
     onSettled: () => {
       // Refetch to ensure consistency
