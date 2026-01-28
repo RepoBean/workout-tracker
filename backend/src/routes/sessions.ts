@@ -362,20 +362,28 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
       return;
     }
 
-    // Build a map: exerciseId -> { lastWeight, lastReps }
-    const exerciseData: Record<number, { lastWeight: number; lastReps: number; setNumber: number }> = {};
+    // Build a map: exerciseId -> { sets: [...] } with all standard sets
+    const exerciseData: Record<number, { sets: Array<{ setNumber: number; weight: number; reps: number }> }> = {};
 
     for (const set of (previousSession as any).sets || []) {
       if (set.exerciseId) {
-        // Keep the last (highest set number) for each exercise
-        if (!exerciseData[set.exerciseId] || set.setNumber > exerciseData[set.exerciseId].setNumber) {
-          exerciseData[set.exerciseId] = {
-            lastWeight: set.weight,
-            lastReps: set.reps,
+        if (!exerciseData[set.exerciseId]) {
+          exerciseData[set.exerciseId] = { sets: [] };
+        }
+        // Only include standard sets (dropIndex = 0)
+        if ((set.dropIndex || 0) === 0) {
+          exerciseData[set.exerciseId].sets.push({
             setNumber: set.setNumber,
-          };
+            weight: set.weight,
+            reps: set.reps,
+          });
         }
       }
+    }
+
+    // Sort sets by setNumber
+    for (const data of Object.values(exerciseData)) {
+      data.sets.sort((a, b) => a.setNumber - b.setNumber);
     }
 
     res.json({

@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
@@ -7,12 +7,10 @@ import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
 import { RestTimer } from './components/RestTimer';
-import { SetInput } from './components/SetInput';
 import { AddExercise } from './components/AddExercise';
 import { RpePrompt } from './components/RpePrompt';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
-import { Button } from '../../shared/ui/Button';
-import type { Set, Exercise } from '../../shared/api/types';
+import type { Set as SetType, Exercise } from '../../shared/api/types';
 import type { AdHocExercise } from './components/AddExercise';
 
 export default function ActiveSession() {
@@ -37,6 +35,9 @@ export default function ActiveSession() {
   // Per-exercise RPE prompt state
   const [rpePromptExercise, setRpePromptExercise] = useState<{ id: number; name: string } | null>(null);
 
+  // Track which exercises have been completed (for superset RPE fix)
+  const completedExercisesRef = useRef<Set<number>>(new Set());
+
   const { exerciseHints } = usePreviousData(sessionId);
 
   const isAdHoc = session?.isAdHoc || false;
@@ -53,38 +54,78 @@ export default function ActiveSession() {
   const [prevSetCount, setPrevSetCount] = useState(sets.length);
 
   // Auto-rotate superset and auto-advance when sets are logged
+  // FIXED: Show RPE prompt for ANY exercise completion, including supersets
   useEffect(() => {
-    if (sets.length > prevSetCount) {
-      // A new set was logged
+    if (sets.length > prevSetCount && navigation.activeExercise) {
+      const exerciseId = navigation.activeExercise.id;
+      const wasComplete = completedExercisesRef.current.has(exerciseId);
+      const isNowComplete = navigation.isExerciseComplete(exerciseId);
+
+      // Check if this exercise just completed
+      if (!wasComplete && isNowComplete) {
+        // Mark as completed
+        completedExercisesRef.current.add(exerciseId);
+
+        // Show RPE prompt for completed exercise
+        setRpePromptExercise({
+          id: exerciseId,
+          name: navigation.activeExercise.name
+        });
+        setPrevSetCount(sets.length);
+        return; // Wait for RPE before navigating
+      }
+
+      // Not newly complete — handle rotation/advance
       if (navigation.currentStep?.type === 'superset') {
-        // Check if current active exercise is now complete
-        if (navigation.activeExercise && navigation.isExerciseComplete(navigation.activeExercise.id)) {
-          // Check if all exercises in superset are complete
-          if (navigation.isCurrentStepComplete) {
-            navigation.goToNext();
-          } else {
-            navigation.rotateSupersetActive();
-          }
+        if (navigation.isCurrentStepComplete) {
+          navigation.goToNext();
         } else {
-          // Rotate to next exercise in superset
           navigation.rotateSupersetActive();
         }
       } else if (navigation.isCurrentStepComplete) {
-        // Single exercise complete, show RPE prompt then auto-advance
-        if (navigation.activeExercise) {
-          setRpePromptExercise({
-            id: navigation.activeExercise.id,
-            name: navigation.activeExercise.name
-          });
-        }
+        navigation.goToNext();
       }
     }
     setPrevSetCount(sets.length);
   }, [sets.length, prevSetCount, navigation]);
 
+  // RPE submit handler - navigate AFTER RPE
+  const handleRpeSubmit = (rpe: number) => {
+    if (rpePromptExercise) {
+      updateSetsEffort(rpePromptExercise.id, rpe);
+    }
+    setRpePromptExercise(null);
+
+    // Navigate after RPE
+    if (navigation.currentStep?.type === 'superset') {
+      if (navigation.isCurrentStepComplete) {
+        navigation.goToNext();
+      } else {
+        navigation.rotateSupersetActive();
+      }
+    } else {
+      navigation.goToNext();
+    }
+  };
+
+  const handleRpeSkip = () => {
+    setRpePromptExercise(null);
+
+    // Navigate after skip
+    if (navigation.currentStep?.type === 'superset') {
+      if (navigation.isCurrentStepComplete) {
+        navigation.goToNext();
+      } else {
+        navigation.rotateSupersetActive();
+      }
+    } else {
+      navigation.goToNext();
+    }
+  };
+
   // Group sets by exercise ID, sorted by setNumber then dropIndex
   const setsByExercise = useMemo(() => {
-    const map = new Map<number, Set[]>();
+    const map = new Map<number, SetType[]>();
     for (const set of sets) {
       if (set.exerciseId) {
         const existing = map.get(set.exerciseId) || [];
@@ -98,7 +139,7 @@ export default function ActiveSession() {
 
   // Group ad-hoc sets by exerciseName (for ad-hoc sessions with exerciseId=null)
   const adHocSetsByName = useMemo(() => {
-    const map = new Map<string, Set[]>();
+    const map = new Map<string, SetType[]>();
     for (const set of sets) {
       if (!set.exerciseId) {
         const existing = map.get(set.exerciseName) || [];
@@ -161,6 +202,14 @@ export default function ActiveSession() {
     return idx;
   };
 
+  // Get next exercise for "Up next" preview
+  const getNextExercise = (): Exercise | null => {
+    const nextStep = navigation.steps[navigation.currentStepIndex + 1];
+    if (!nextStep) return null;
+    return nextStep.type === 'single' ? nextStep.exercise : nextStep.exercises[0];
+  };
+  const nextExercise = getNextExercise();
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -212,7 +261,7 @@ export default function ActiveSession() {
   }
 
   return (
-    <div className="pb-32">
+    <div className="pb-8">
       <SessionHeader
         session={session}
         totalSetsLogged={totalSetsLogged}
@@ -242,14 +291,22 @@ export default function ActiveSession() {
 
             {navigation.currentStep?.type === 'superset' && (() => {
               const supersetExercises = navigation.currentStep.exercises;
+              const activeIdx = navigation.supersetActiveIndex % supersetExercises.length;
+
+              // Reorder so active exercise is first
+              const reorderedExercises = [
+                supersetExercises[activeIdx],
+                ...supersetExercises.filter((_, idx) => idx !== activeIdx)
+              ];
+
               return (
                 <div className="space-y-4">
                   <div className="text-sm font-medium text-purple-600 dark:text-purple-400 
                                px-3 py-1 bg-purple-100 dark:bg-purple-900/30 rounded-lg inline-block">
                     Superset {navigation.currentStep.group}
                   </div>
-                  {supersetExercises.map((exercise, idx) => {
-                    const isActive = idx === navigation.supersetActiveIndex % supersetExercises.length;
+                  {reorderedExercises.map((exercise, displayIdx) => {
+                    const isActive = displayIdx === 0; // First is always active
                     const isComplete = navigation.isExerciseComplete(exercise.id);
 
                     return (
@@ -269,6 +326,7 @@ export default function ActiveSession() {
                             previousHint={exerciseHints.get(exercise.id)}
                             onLogSet={logSet}
                             onDeleteSet={deleteSet}
+                            onUpdateSet={updateSet}
                             isLogging={isLoggingSet}
                           />
                         ) : (
@@ -277,8 +335,9 @@ export default function ActiveSession() {
                             className={`card py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
                               }`}
                             onClick={() => {
-                              // Allow clicking to make this the active exercise
-                              const diff = idx - (navigation.supersetActiveIndex % supersetExercises.length);
+                              // Click to switch to this exercise
+                              const originalIdx = supersetExercises.findIndex(e => e.id === exercise.id);
+                              const diff = originalIdx - activeIdx;
                               for (let i = 0; i < Math.abs(diff); i++) {
                                 navigation.rotateSupersetActive();
                               }
@@ -307,54 +366,35 @@ export default function ActiveSession() {
             })()}
           </div>
 
-          {/* Exercise list dropdown (below active exercise) */}
-          <ExerciseListDropdown
-            exercises={exercises}
-            currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
-            getExerciseProgress={navigation.getExerciseProgress}
-            isExerciseComplete={navigation.isExerciseComplete}
-            onSelectExercise={(idx) => {
-              // Find step containing this exercise
-              let count = 0;
-              for (let i = 0; i < navigation.steps.length; i++) {
-                const step = navigation.steps[i];
-                const stepSize = step.type === 'single' ? 1 : step.exercises.length;
-                if (idx < count + stepSize) {
-                  navigation.goToStep(i);
-                  return;
+          {/* Up next preview */}
+          {nextExercise && (
+            <div className="text-sm text-gray-500 dark:text-gray-400 py-3 px-4 mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+              Up next: <span className="font-medium text-gray-700 dark:text-gray-300">{nextExercise.name}</span>
+            </div>
+          )}
+
+          {/* Exercise list dropdown (below up next) */}
+          <div className="mt-4">
+            <ExerciseListDropdown
+              exercises={exercises}
+              currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
+              getExerciseProgress={navigation.getExerciseProgress}
+              isExerciseComplete={navigation.isExerciseComplete}
+              onSelectExercise={(idx) => {
+                // Find step containing this exercise
+                let count = 0;
+                for (let i = 0; i < navigation.steps.length; i++) {
+                  const step = navigation.steps[i];
+                  const stepSize = step.type === 'single' ? 1 : step.exercises.length;
+                  if (idx < count + stepSize) {
+                    navigation.goToStep(i);
+                    return;
+                  }
+                  count += stepSize;
                 }
-                count += stepSize;
-              }
-            }}
-            onMoveExercise={navigation.moveExercise}
-          />
-
-          {/* Navigation footer */}
-          <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t 
-                         border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={navigation.goToPrevious}
-              disabled={navigation.currentStepIndex === 0}
-              className="w-24"
-            >
-              ← Previous
-            </Button>
-
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              Exercise {navigation.currentStepIndex + 1} of {navigation.steps.length}
-            </span>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={navigation.goToNext}
-              disabled={navigation.currentStepIndex >= navigation.steps.length - 1}
-              className="w-24"
-            >
-              Next →
-            </Button>
+              }}
+              onMoveExercise={navigation.moveExercise}
+            />
           </div>
         </>
       )}
@@ -412,16 +452,29 @@ export default function ActiveSession() {
                   </div>
                 )}
 
-                {/* Set input for next set */}
-                <SetInput
-                  exerciseId={null}
-                  exerciseName={adHocEx.name}
-                  setNumber={nextSetNumber}
-                  previousWeight={lastSet?.weight || 0}
-                  previousReps={lastSet?.reps || 10}
-                  onLogSet={logSet}
-                  isLogging={isLoggingSet}
-                />
+                {/* Set input for next set - import SetInput for ad-hoc */}
+                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
+                    Set {nextSetNumber}
+                  </div>
+                  <div className="text-sm text-gray-400 mb-2">
+                    Last: {lastSet ? `${lastSet.weight} lbs × ${lastSet.reps}` : '—'}
+                  </div>
+                  {/* Simplified inline logging for ad-hoc */}
+                  <button
+                    onClick={() => logSet({
+                      exerciseId: null,
+                      exerciseName: adHocEx.name,
+                      weight: lastSet?.weight || 0,
+                      reps: lastSet?.reps || 10,
+                      setNumber: nextSetNumber,
+                    })}
+                    className="w-full py-2 bg-primary-600 text-white rounded-lg font-medium"
+                    disabled={isLoggingSet}
+                  >
+                    Log Set {nextSetNumber}
+                  </button>
+                </div>
               </div>
             );
           })}
@@ -442,21 +495,13 @@ export default function ActiveSession() {
           </Link>
         </div>
       )}
+
       {/* RPE Prompt Modal */}
       <RpePrompt
         isOpen={rpePromptExercise !== null}
         exerciseName={rpePromptExercise?.name || ''}
-        onSubmit={(rpe) => {
-          if (rpePromptExercise) {
-            updateSetsEffort(rpePromptExercise.id, rpe);
-          }
-          setRpePromptExercise(null);
-          navigation.goToNext();
-        }}
-        onSkip={() => {
-          setRpePromptExercise(null);
-          navigation.goToNext();
-        }}
+        onSubmit={handleRpeSubmit}
+        onSkip={handleRpeSkip}
       />
     </div>
   );

@@ -96,9 +96,14 @@ export interface ActiveSession extends Session {
   exercises: Exercise[];
 }
 
+export interface PreviousSetData {
+  setNumber: number;
+  weight: number;
+  reps: number;
+}
+
 export interface PreviousExerciseData {
-  lastWeight: number;
-  lastReps: number;
+  sets: PreviousSetData[];
 }
 
 export interface PreviousSessionResponse {
