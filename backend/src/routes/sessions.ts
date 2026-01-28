@@ -59,6 +59,9 @@ router.get('/history', async (req: Request, res: Response) => {
   }
 });
 
+// DEPRECATED: This endpoint violates "Smart Frontend, Dumb Backend".
+// Frontend should use calculateNextWorkout() from whatIsNext.ts instead.
+// Keeping for backwards compatibility but will be removed in future.
 // GET /api/sessions/next-workout - Get next workout for active program
 router.get('/next-workout', async (req: Request, res: Response) => {
   try {

@@ -203,7 +203,7 @@ export function useActiveSession(sessionId: number) {
       toast.success('Workout completed!');
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
-      queryClient.invalidateQueries({ queryKey: queryKeys.nextWorkout });
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs }); // Refreshes useNextWorkoutLocal
       queryClient.invalidateQueries({ queryKey: ['history'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats });

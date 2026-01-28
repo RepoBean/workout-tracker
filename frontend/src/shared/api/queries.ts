@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, ActiveSession, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData } from './types';
+import type { Program, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData } from './types';
 
 // ============================================
 // Query Keys
@@ -16,7 +16,7 @@ export const queryKeys = {
   session: (id: number) => ['sessions', id] as const,
   activeSession: ['activeSession'] as const,
   previousSession: (sessionId: number) => ['previousSession', sessionId] as const,
-  nextWorkout: ['nextWorkout'] as const,
+  // nextWorkout removed - frontend calculates locally via useNextWorkoutLocal
   history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
@@ -69,19 +69,6 @@ export function useProgram(id: number) {
   });
 }
 
-/**
- * Fetch the next workout for the active program
- */
-export function useNextWorkout() {
-  return useQuery({
-    queryKey: queryKeys.nextWorkout,
-    queryFn: async () => {
-      const { data } = await api.get<NextWorkoutResponse>('/sessions/next-workout');
-      return data;
-    },
-    staleTime: 2 * 60 * 1000, // Only changes when session is completed
-  });
-}
 
 /**
  * Fetch a single session with its sets

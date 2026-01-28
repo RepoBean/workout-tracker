@@ -21,7 +21,7 @@ export function useProgramMutations() {
 
   const invalidatePrograms = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.programs });
-    queryClient.invalidateQueries({ queryKey: queryKeys.nextWorkout });
+    // Note: useNextWorkoutLocal uses programs query, so no separate invalidation needed
   };
 
   const createProgram = useMutation({

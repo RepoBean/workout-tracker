@@ -1,9 +1,9 @@
 import { Button } from '../../../shared/ui/Button';
-import { useNextWorkout } from '../../../shared/api/queries';
+import { useNextWorkoutLocal } from '../hooks/useNextWorkoutLocal';
 import { useStartSession } from '../../active-session/hooks/useStartSession';
 
 export function NextWorkout() {
-  const { data: nextWorkout, isLoading, error } = useNextWorkout();
+  const { data: nextWorkout, isLoading, error } = useNextWorkoutLocal();
   const startSession = useStartSession();
 
   const handleStart = () => {
