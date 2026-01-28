@@ -47,10 +47,71 @@ export default function ActiveSession() {
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
 
+  // Group sets by exercise ID, sorted by setNumber then dropIndex
+  const setsByExercise = useMemo(() => {
+    const map = new Map<number, SetType[]>();
+    for (const set of sets) {
+      if (set.exerciseId) {
+        const existing = map.get(set.exerciseId) || [];
+        map.set(set.exerciseId, [...existing, set].sort(
+          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
+        ));
+      }
+    }
+    return map;
+  }, [sets]);
+
+  // Group ad-hoc sets by exerciseName (for ad-hoc sessions with exerciseId=null)
+  const adHocSetsByName = useMemo(() => {
+    const map = new Map<string, SetType[]>();
+    for (const set of sets) {
+      if (!set.exerciseId) {
+        const existing = map.get(set.exerciseName) || [];
+        map.set(set.exerciseName, [...existing, set].sort(
+          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
+        ));
+      }
+    }
+    return map;
+  }, [sets]);
+
+  // Reconstruct ad-hoc exercises added to program workouts from sets
+  const reconstructedAdHocExercises = useMemo(() => {
+    if (exercises.length === 0) return []; // Blank ad-hoc sessions handled elsewhere
+
+    const programExerciseNames = new Set(exercises.map(e => e.name.toLowerCase()));
+    const result: Exercise[] = [];
+
+    for (const [name] of adHocSetsByName.entries()) {
+      // Skip if this name matches a program exercise
+      if (programExerciseNames.has(name.toLowerCase())) continue;
+
+      // Create virtual exercise from the set data
+      result.push({
+        id: -name.length - Date.now() % 1000, // Stable-ish negative ID
+        workoutId: session?.workoutId || 0,
+        name,
+        targetSets: 3,
+        targetReps: '10',
+        orderIndex: exercises.length + result.length,
+        supersetGroup: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    return result;
+  }, [exercises, adHocSetsByName, session?.workoutId]);
+
   // Merge program exercises with ad-hoc program exercises for navigation
   const mergedExercises = useMemo(() => {
-    return [...exercises, ...adHocProgramExercises];
-  }, [exercises, adHocProgramExercises]);
+    // Combine: program exercises + reconstructed ad-hoc + newly added ad-hoc
+    const reconstructedNames = new Set(reconstructedAdHocExercises.map(e => e.name.toLowerCase()));
+    const newAdHoc = adHocProgramExercises.filter(
+      e => !reconstructedNames.has(e.name.toLowerCase())
+    );
+    return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
+  }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
 
   // Exercise navigation hook for focused view (non-ad-hoc sessions only)
   const navigation = useExerciseNavigation({
@@ -159,33 +220,7 @@ export default function ActiveSession() {
     }
   };
 
-  // Group sets by exercise ID, sorted by setNumber then dropIndex
-  const setsByExercise = useMemo(() => {
-    const map = new Map<number, SetType[]>();
-    for (const set of sets) {
-      if (set.exerciseId) {
-        const existing = map.get(set.exerciseId) || [];
-        map.set(set.exerciseId, [...existing, set].sort(
-          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
-        ));
-      }
-    }
-    return map;
-  }, [sets]);
 
-  // Group ad-hoc sets by exerciseName (for ad-hoc sessions with exerciseId=null)
-  const adHocSetsByName = useMemo(() => {
-    const map = new Map<string, SetType[]>();
-    for (const set of sets) {
-      if (!set.exerciseId) {
-        const existing = map.get(set.exerciseName) || [];
-        map.set(set.exerciseName, [...existing, set].sort(
-          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
-        ));
-      }
-    }
-    return map;
-  }, [sets]);
 
   // Merge ad-hoc exercises from state with those derived from logged sets
   const allAdHocExercises = useMemo(() => {
