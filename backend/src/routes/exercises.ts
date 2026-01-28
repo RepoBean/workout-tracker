@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Exercise, Workout, Set as SetModel } from '../models/index.js';
+import { Exercise, Workout, Set as SetModel, Session } from '../models/index.js';
 import { validate } from '../middleware/validate.js';
 import { Op } from 'sequelize';
 
@@ -29,9 +29,75 @@ const updateExerciseSchema = z.object({
   message: 'At least one field must be provided',
 });
 
+const historyByNameSchema = z.object({
+  name: z.string().min(1),
+});
+
 // ============================================
 // Routes
 // ============================================
+
+// GET /api/exercises/history-by-name - Get exercise history by name
+router.get('/history-by-name', async (req: Request, res: Response) => {
+  try {
+    const result = historyByNameSchema.safeParse({ name: req.query.name });
+    if (!result.success) {
+      res.status(400).json({ error: 'Name parameter is required' });
+      return;
+    }
+
+    const { name } = result.data;
+
+    // Find all sets with matching exerciseName from completed sessions
+    const matchingSets = await SetModel.findAll({
+      where: {
+        dropIndex: 0, // Only standard sets
+      },
+      include: [{
+        model: Session,
+        as: 'session',
+        where: {
+          completedAt: { [Op.not]: null },
+        },
+        attributes: ['id', 'completedAt'],
+      }],
+      order: [
+        [{ model: Session, as: 'session' }, 'completedAt', 'DESC'],
+        ['setNumber', 'ASC'],
+      ],
+    });
+
+    // Filter by name (case-insensitive) since SQLite LOWER() in Sequelize is tricky
+    const filtered = matchingSets.filter(
+      set => set.exerciseName.toLowerCase() === name.toLowerCase()
+    );
+
+    if (filtered.length === 0) {
+      res.json({ sets: [], fromSessionDate: null });
+      return;
+    }
+
+    // Get the most recent session's sets
+    const mostRecentSessionId = (filtered[0] as any).session.id;
+    const mostRecentDate = (filtered[0] as any).session.completedAt;
+
+    const setsFromMostRecent = filtered
+      .filter(set => (set as any).session.id === mostRecentSessionId)
+      .map(set => ({
+        setNumber: set.setNumber,
+        weight: set.weight,
+        reps: set.reps,
+      }));
+
+    res.json({
+      sets: setsFromMostRecent,
+      fromSessionDate: mostRecentDate,
+    });
+  } catch (error) {
+    console.error('Error fetching exercise history by name:', error);
+    res.status(500).json({ error: 'Failed to fetch exercise history' });
+  }
+});
 
 // GET /api/exercises/suggestions - Autocomplete suggestions
 router.get('/suggestions', async (req: Request, res: Response) => {

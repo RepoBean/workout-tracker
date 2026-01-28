@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, ActiveSession, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse, StatsResponse } from './types';
+import type { Program, Session, ActiveSession, NextWorkoutResponse, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData } from './types';
 
 // ============================================
 // Query Keys
@@ -19,6 +19,7 @@ export const queryKeys = {
   nextWorkout: ['nextWorkout'] as const,
   history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
+  exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   stats: ['stats'] as const,
 };
@@ -124,6 +125,25 @@ export function useExerciseSuggestions(query: string) {
       return data;
     },
     enabled: query.length >= 2,
+  });
+}
+
+/**
+ * Fetch exercise history by name (for ad-hoc exercises)
+ * Returns sets from the most recent completed session with that exercise name
+ */
+export function useExerciseHistoryByName(name: string) {
+  return useQuery({
+    queryKey: queryKeys.exerciseHistoryByName(name),
+    queryFn: async () => {
+      const { data } = await api.get<{ sets: PreviousSetData[]; fromSessionDate: string | null }>(
+        '/exercises/history-by-name',
+        { params: { name } }
+      );
+      return data;
+    },
+    enabled: name.length > 0,
+    staleTime: 5 * 60 * 1000,
   });
 }
 

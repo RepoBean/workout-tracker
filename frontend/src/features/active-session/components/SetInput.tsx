@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { PlateCalculator } from './PlateCalculator';
 
@@ -37,6 +37,17 @@ export function SetInput({
   const [weightStr, setWeightStr] = useState(String(previousWeight));
   const [reps, setReps] = useState(previousReps);
   const [repsStr, setRepsStr] = useState(String(previousReps));
+
+  // Sync state when previousWeight/previousReps change (e.g., after async data loads)
+  useEffect(() => {
+    setWeight(previousWeight);
+    setWeightStr(String(previousWeight));
+  }, [previousWeight]);
+
+  useEffect(() => {
+    setReps(previousReps);
+    setRepsStr(String(previousReps));
+  }, [previousReps]);
 
   const updateWeight = useCallback((value: number) => {
     const clamped = Math.max(0, value);
@@ -105,12 +116,12 @@ export function SetInput({
 
   return (
     <div className={`rounded-lg p-4 space-y-4 ${isDropSet
-        ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
-        : 'bg-gray-50 dark:bg-gray-800/50'
+      ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
+      : 'bg-gray-50 dark:bg-gray-800/50'
       }`}>
       <div className={`text-sm font-medium ${isDropSet
-          ? 'text-orange-600 dark:text-orange-400'
-          : 'text-gray-500 dark:text-gray-400'
+        ? 'text-orange-600 dark:text-orange-400'
+        : 'text-gray-500 dark:text-gray-400'
         }`}>
         {label}
       </div>

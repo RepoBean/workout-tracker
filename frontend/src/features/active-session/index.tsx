@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation } from './hooks/useExerciseNavigation';
+import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
@@ -18,6 +19,9 @@ export default function ActiveSession() {
   const navigate = useNavigate();
   const sessionId = Number(id);
   const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>([]);
+
+  // State for ad-hoc exercises added to program workouts (virtual exercises with negative IDs)
+  const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>([]);
 
   const {
     session,
@@ -44,11 +48,44 @@ export default function ActiveSession() {
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
 
+  // Merge program exercises with ad-hoc program exercises for navigation
+  const mergedExercises = useMemo(() => {
+    return [...exercises, ...adHocProgramExercises];
+  }, [exercises, adHocProgramExercises]);
+
   // Exercise navigation hook for focused view (non-ad-hoc sessions only)
   const navigation = useExerciseNavigation({
-    exercises,
+    exercises: mergedExercises,
     sets,
   });
+
+  // For ad-hoc exercises (negative ID), fetch history by name
+  const currentActiveExercise = navigation.activeExercise;
+  const isCurrentExerciseAdHoc = currentActiveExercise && currentActiveExercise.id < 0;
+  const adHocExerciseName = isCurrentExerciseAdHoc ? currentActiveExercise.name : '';
+  const { data: adHocHistory } = useExerciseHistoryByName(adHocExerciseName);
+
+  // Get previous hint for an exercise - handles both regular and ad-hoc
+  const getPreviousHintForExercise = (exercise: Exercise) => {
+    if (exercise.id < 0 && adHocHistory && exercise.name === adHocExerciseName) {
+      // Ad-hoc exercise with history data
+      return {
+        lastWeight: adHocHistory.sets[adHocHistory.sets.length - 1]?.weight || 0,
+        lastReps: adHocHistory.sets[adHocHistory.sets.length - 1]?.reps || 0,
+        sets: adHocHistory.sets,
+      };
+    }
+    return exerciseHints.get(exercise.id);
+  };
+
+  // Get sets for an exercise - handles both regular (by ID) and ad-hoc (by name)
+  const getSetsForExercise = (exercise: Exercise): SetType[] => {
+    if (exercise.id < 0) {
+      // Ad-hoc exercise: look up by name in adHocSetsByName
+      return adHocSetsByName.get(exercise.name) || [];
+    }
+    return setsByExercise.get(exercise.id) || [];
+  };
 
   // Track previous set count to detect new set logged
   const [prevSetCount, setPrevSetCount] = useState(sets.length);
@@ -188,6 +225,25 @@ export default function ActiveSession() {
     });
   };
 
+  // Handler for adding an ad-hoc exercise to a program workout
+  const handleAddExercise = (name: string) => {
+    // Create virtual exercise with negative ID to identify as ad-hoc
+    const virtualExercise: Exercise = {
+      id: -Date.now(),
+      workoutId: 0,
+      name,
+      targetSets: 3,
+      targetReps: '10',
+      orderIndex: navigation.currentStepIndex,
+      supersetGroup: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setAdHocProgramExercises(prev => [...prev, virtualExercise]);
+    navigation.insertExercise(virtualExercise);
+  };
+
   // Find exercise index in flat list for dropdown navigation
   const getExerciseIndexInList = (stepIndex: number): number => {
     let idx = 0;
@@ -273,21 +329,29 @@ export default function ActiveSession() {
       <RestTimer />
 
       {/* Non-ad-hoc: Focused exercise view */}
-      {!isAdHoc && exercises.length > 0 && (
+      {!isAdHoc && mergedExercises.length > 0 && (
         <>
           {/* Current step exercises */}
           <div className="space-y-4">
-            {navigation.currentStep?.type === 'single' && (
-              <ExerciseCard
-                exercise={navigation.currentStep.exercise}
-                loggedSets={setsByExercise.get(navigation.currentStep.exercise.id) || []}
-                previousHint={exerciseHints.get(navigation.currentStep.exercise.id)}
-                onLogSet={logSet}
-                onDeleteSet={deleteSet}
-                onUpdateSet={updateSet}
-                isLogging={isLoggingSet}
-              />
-            )}
+            {navigation.currentStep?.type === 'single' && (() => {
+              const exercise = navigation.currentStep.exercise;
+              const isExerciseAdHoc = exercise.id < 0;
+              return (
+                <ExerciseCard
+                  exercise={exercise}
+                  loggedSets={getSetsForExercise(exercise)}
+                  previousHint={getPreviousHintForExercise(exercise)}
+                  onLogSet={(data) => {
+                    // For ad-hoc exercises, use null exerciseId
+                    const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
+                    logSet({ ...data, exerciseId: exerciseIdForApi });
+                  }}
+                  onDeleteSet={deleteSet}
+                  onUpdateSet={updateSet}
+                  isLogging={isLoggingSet}
+                />
+              );
+            })()}
 
             {navigation.currentStep?.type === 'superset' && (() => {
               const supersetExercises = navigation.currentStep.exercises;
@@ -319,17 +383,23 @@ export default function ActiveSession() {
                             : 'opacity-75'
                           }`}
                       >
-                        {isActive ? (
-                          <ExerciseCard
-                            exercise={exercise}
-                            loggedSets={setsByExercise.get(exercise.id) || []}
-                            previousHint={exerciseHints.get(exercise.id)}
-                            onLogSet={logSet}
-                            onDeleteSet={deleteSet}
-                            onUpdateSet={updateSet}
-                            isLogging={isLoggingSet}
-                          />
-                        ) : (
+                        {isActive ? (() => {
+                          const isExerciseAdHoc = exercise.id < 0;
+                          return (
+                            <ExerciseCard
+                              exercise={exercise}
+                              loggedSets={getSetsForExercise(exercise)}
+                              previousHint={getPreviousHintForExercise(exercise)}
+                              onLogSet={(data) => {
+                                const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
+                                logSet({ ...data, exerciseId: exerciseIdForApi });
+                              }}
+                              onDeleteSet={deleteSet}
+                              onUpdateSet={updateSet}
+                              isLogging={isLoggingSet}
+                            />
+                          );
+                        })() : (
                           // Collapsed view for non-active superset exercises
                           <div
                             className={`card py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
@@ -376,7 +446,7 @@ export default function ActiveSession() {
           {/* Exercise list dropdown (below up next) */}
           <div className="mt-4">
             <ExerciseListDropdown
-              exercises={exercises}
+              exercises={mergedExercises}
               currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
               getExerciseProgress={navigation.getExerciseProgress}
               isExerciseComplete={navigation.isExerciseComplete}
@@ -395,6 +465,11 @@ export default function ActiveSession() {
               }}
               onMoveExercise={navigation.moveExercise}
             />
+          </div>
+
+          {/* Add Exercise for program workouts */}
+          <div className="mt-4">
+            <AddExercise onAdd={(ex) => handleAddExercise(ex.name)} />
           </div>
         </>
       )}
