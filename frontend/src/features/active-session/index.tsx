@@ -44,7 +44,6 @@ export default function ActiveSession() {
 
   const { exerciseHints } = usePreviousData(sessionId);
 
-  const isAdHoc = session?.isAdHoc || false;
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
 
@@ -328,8 +327,8 @@ export default function ActiveSession() {
 
       <RestTimer />
 
-      {/* Non-ad-hoc: Focused exercise view */}
-      {!isAdHoc && mergedExercises.length > 0 && (
+      {/* Focused exercise view (when session has workout exercises) */}
+      {exercises.length > 0 && (
         <>
           {/* Current step exercises */}
           <div className="space-y-4">
@@ -474,8 +473,8 @@ export default function ActiveSession() {
         </>
       )}
 
-      {/* Ad-hoc sessions: show all exercises */}
-      {isAdHoc && (
+      {/* Blank ad-hoc sessions: show all exercises */}
+      {exercises.length === 0 && (
         <div className="space-y-4">
           {allAdHocExercises.map((adHocEx) => {
             const adHocSets = adHocSetsByName.get(adHocEx.name) || [];
@@ -561,15 +560,7 @@ export default function ActiveSession() {
         </div>
       )}
 
-      {/* Empty state for non-ad-hoc sessions with no exercises */}
-      {!isAdHoc && exercises.length === 0 && (
-        <div className="card text-center text-gray-500 dark:text-gray-400 py-8">
-          <p>No exercises in this workout</p>
-          <Link to="/" className="text-primary-600 hover:underline mt-2 inline-block">
-            Return to Dashboard
-          </Link>
-        </div>
-      )}
+
 
       {/* RPE Prompt Modal */}
       <RpePrompt

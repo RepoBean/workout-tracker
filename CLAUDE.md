@@ -219,6 +219,8 @@ backend/
 | POST | /api/workouts/:workoutId/exercises | Create exercise |
 | PUT | /api/exercises/:id | Update exercise |
 | DELETE | /api/exercises/:id | Delete exercise |
+| GET | /api/exercises/suggestions | Autocomplete suggestions (name search) |
+| GET | /api/exercises/history-by-name | Previous sets by exercise name |
 | GET | /api/sessions/active | Find incomplete session (resume) |
 | GET | /api/sessions/history | List completed sessions |
 | GET | /api/sessions/stats | Summary statistics |
@@ -304,6 +306,15 @@ backend/
 - Option for blank workout or select from existing programs/workouts
 - Starts session with `isAdHoc: true`
 
+### 13. Add Exercise Mid-Workout
+- During a program workout, "Add Exercise" button below exercise list
+- Autocomplete suggestions from all exercise names (programs + history)
+- Inserts at current navigation position and becomes active
+- Uses negative ID convention (`-Date.now()`) to identify as ad-hoc
+- Sets stored with `exerciseId: null` and `exerciseName` (history independence)
+- Previous data hints fetched by exercise name via `/api/exercises/history-by-name`
+- Does NOT modify the workout definition — session-only
+
 ---
 
 ## Established Patterns
@@ -370,6 +381,7 @@ cd frontend && npm run dev   # localhost:5174
 | 7437412 | Feature: Program export/import (JSON format) |
 | 2ddc1b9 | Feature: Delete session from history (swipe + button) |
 | — | UX Overhaul: focused exercise view, per-exercise RPE, inline set editing, ad-hoc picker |
+| e241939 | Feature: Add exercise mid-workout with history auto-population |
 
 ---
 
