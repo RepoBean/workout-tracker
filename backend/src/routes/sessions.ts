@@ -3,6 +3,15 @@ import { z } from 'zod';
 import { Session, Set as SetModel, Program, Workout, Exercise, sequelize } from '../models/index.js';
 import { validate } from '../middleware/validate.js';
 import { Op } from 'sequelize';
+import type {
+  ProgramWithWorkouts,
+  WorkoutWithExercises,
+  WorkoutWithProgramAndExercises,
+  SessionWithSets,
+  VolumeQueryResult,
+  MonthVolumeQueryResult,
+  StreakQueryResult,
+} from '../types/associations.js';
 
 const router = Router();
 
@@ -37,7 +46,7 @@ router.get('/history', async (req: Request, res: Response) => {
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
 
-    const completedAtFilter: any = { [Op.ne]: null };
+    const completedAtFilter: Record<symbol, unknown> = { [Op.ne]: null };
     if (from) completedAtFilter[Op.gte] = from;
     if (to) completedAtFilter[Op.lte] = to;
 
@@ -86,7 +95,7 @@ router.get('/next-workout', async (req: Request, res: Response) => {
       return;
     }
 
-    const workouts = (activeProgram as any).workouts || [];
+    const workouts = (activeProgram as ProgramWithWorkouts).workouts || [];
     if (workouts.length === 0) {
       res.status(404).json({ error: 'Active program has no workouts' });
       return;
@@ -116,7 +125,7 @@ router.get('/active', async (req: Request, res: Response) => {
 
     const session = await Session.findOne({
       where: {
-        completedAt: { [Op.is]: null as any },
+        completedAt: null,
         createdAt: { [Op.gte]: twentyFourHoursAgo },
       },
       include: [{ model: SetModel, as: 'sets' }],
@@ -129,7 +138,7 @@ router.get('/active', async (req: Request, res: Response) => {
     }
 
     // Include exercises from the associated workout
-    let exercises: any[] = [];
+    let exercises: Exercise[] = [];
     if (session.workoutId) {
       const workout = await Workout.findByPk(session.workoutId, {
         include: [{
@@ -140,7 +149,7 @@ router.get('/active', async (req: Request, res: Response) => {
           [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
         ]
       });
-      exercises = (workout as any)?.exercises || [];
+      exercises = (workout as WorkoutWithExercises | null)?.exercises || [];
     }
 
     res.json({
@@ -179,7 +188,7 @@ router.get('/export-csv', async (req: Request, res: Response) => {
     const rows: string[] = [];
 
     for (const session of sessions) {
-      const sets = (session as any).sets || [];
+      const sets = (session as SessionWithSets).sets || [];
       const date = session.completedAt
         ? new Date(session.completedAt).toISOString().split('T')[0]
         : '';
@@ -237,7 +246,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     });
 
     // Total sets and volume
-    const [volumeResult]: any = await sequelize.query(`
+    const [volumeResult] = await sequelize.query(`
       SELECT
         COUNT(*) as totalSets,
         COALESCE(SUM(weight * reps), 0) as totalVolume
@@ -246,37 +255,40 @@ router.get('/stats', async (req: Request, res: Response) => {
         SELECT id FROM Sessions WHERE completedAt IS NOT NULL
       )
     `);
-    const totalSets = volumeResult[0]?.totalSets || 0;
-    const totalVolume = volumeResult[0]?.totalVolume || 0;
+    const volumeRows = volumeResult as VolumeQueryResult[];
+    const totalSets = Number(volumeRows[0]?.totalSets) || 0;
+    const totalVolume = Number(volumeRows[0]?.totalVolume) || 0;
 
     // Volume last 30 days
-    const [monthVolumeResult]: any = await sequelize.query(`
+    const [monthVolumeResult] = await sequelize.query(`
       SELECT COALESCE(SUM(s.weight * s.reps), 0) as monthVolume
       FROM Sets s
       JOIN Sessions sess ON s.sessionId = sess.id
       WHERE sess.completedAt IS NOT NULL
         AND sess.completedAt >= :thirtyDaysAgo
     `, { replacements: { thirtyDaysAgo: thirtyDaysAgo.toISOString() } });
-    const monthVolume = monthVolumeResult[0]?.monthVolume || 0;
+    const monthRows = monthVolumeResult as MonthVolumeQueryResult[];
+    const monthVolume = Number(monthRows[0]?.monthVolume) || 0;
 
     // Current streak: consecutive days with sessions counting back from today
-    const [streakResult]: any = await sequelize.query(`
+    const [streakResult] = await sequelize.query(`
       SELECT DISTINCT date(completedAt) as sessionDate
       FROM Sessions
       WHERE completedAt IS NOT NULL
       ORDER BY sessionDate DESC
     `);
+    const streakRows = streakResult as StreakQueryResult[];
 
     let currentStreak = 0;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < streakResult.length; i++) {
+    for (let i = 0; i < streakRows.length; i++) {
       const expectedDate = new Date(today);
       expectedDate.setDate(expectedDate.getDate() - i);
       const expectedStr = expectedDate.toISOString().split('T')[0];
 
-      if (streakResult[i].sessionDate === expectedStr) {
+      if (streakRows[i].sessionDate === expectedStr) {
         currentStreak++;
       } else {
         break;
@@ -314,7 +326,7 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 
     // Include exercises from the associated workout (needed for active session UI)
-    let exercises: any[] = [];
+    let exercises: Exercise[] = [];
     if (session.workoutId) {
       const workout = await Workout.findByPk(session.workoutId, {
         include: [{
@@ -325,7 +337,7 @@ router.get('/:id', async (req: Request, res: Response) => {
           [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
         ]
       });
-      exercises = (workout as any)?.exercises || [];
+      exercises = (workout as WorkoutWithExercises | null)?.exercises || [];
     }
 
     res.json({
@@ -368,7 +380,7 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
     // Build a map: exerciseId -> { sets: [...] } with all standard sets
     const exerciseData: Record<number, { sets: Array<{ setNumber: number; weight: number; reps: number }> }> = {};
 
-    for (const set of (previousSession as any).sets || []) {
+    for (const set of (previousSession as SessionWithSets).sets || []) {
       if (set.exerciseId) {
         if (!exerciseData[set.exerciseId]) {
           exerciseData[set.exerciseId] = { sets: [] };
@@ -442,7 +454,8 @@ router.post('/start', validate(startSessionSchema), async (req: Request, res: Re
       return;
     }
 
-    const program = (workout as any).program;
+    const workoutFull = workout as WorkoutWithProgramAndExercises;
+    const program = workoutFull.program;
 
     // Create session with denormalized names (history independence)
     const session = await Session.create({
@@ -456,7 +469,7 @@ router.post('/start', validate(startSessionSchema), async (req: Request, res: Re
     // Return session with exercises for frontend
     res.status(201).json({
       ...session.toJSON(),
-      exercises: (workout as any).exercises || [],
+      exercises: workoutFull.exercises || [],
       sets: [],
     });
   } catch (error) {
@@ -578,7 +591,7 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
         });
 
         if (program) {
-          const workoutCount = (program as any).workouts?.length || 1;
+          const workoutCount = (program as ProgramWithWorkouts).workouts?.length || 1;
           program.currentWorkoutIndex = (program.currentWorkoutIndex + 1) % workoutCount;
           await program.save({ transaction: t });
         }

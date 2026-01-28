@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Exercise, Workout, Set as SetModel, Session } from '../models/index.js';
 import { validate } from '../middleware/validate.js';
 import { Op } from 'sequelize';
+import type { SetWithSession } from '../types/associations.js';
 
 const router = Router();
 
@@ -78,11 +79,12 @@ router.get('/history-by-name', async (req: Request, res: Response) => {
     }
 
     // Get the most recent session's sets
-    const mostRecentSessionId = (filtered[0] as any).session.id;
-    const mostRecentDate = (filtered[0] as any).session.completedAt;
+    const mostRecentSet = filtered[0] as SetWithSession;
+    const mostRecentSessionId = mostRecentSet.session.id;
+    const mostRecentDate = mostRecentSet.session.completedAt;
 
     const setsFromMostRecent = filtered
-      .filter(set => (set as any).session.id === mostRecentSessionId)
+      .filter(set => (set as SetWithSession).session.id === mostRecentSessionId)
       .map(set => ({
         setNumber: set.setNumber,
         weight: set.weight,

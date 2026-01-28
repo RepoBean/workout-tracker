@@ -292,8 +292,8 @@ router.put('/:id/set-active', async (req: Request, res: Response) => {
     });
 
     res.json(program);
-  } catch (error: any) {
-    if (error.message === 'Program not found') {
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Program not found') {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
