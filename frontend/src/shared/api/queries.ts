@@ -17,7 +17,7 @@ export const queryKeys = {
   activeSession: ['activeSession'] as const,
   previousSession: (sessionId: number) => ['previousSession', sessionId] as const,
   nextWorkout: ['nextWorkout'] as const,
-  history: (params?: { limit?: number; offset?: number }) => ['history', params] as const,
+  history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   stats: ['stats'] as const,

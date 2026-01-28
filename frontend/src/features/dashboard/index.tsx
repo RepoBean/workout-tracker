@@ -1,19 +1,16 @@
+import { useState } from 'react';
 import { useTheme } from '../../shared/context/ThemeContext';
 import { Link } from 'react-router-dom';
 import { NextWorkout } from './components/NextWorkout';
 import { Calendar } from './components/Calendar';
 import { ResumeWorkout } from './components/ResumeWorkout';
 import { StatsCard } from './components/StatsCard';
-import { useStartSession } from '../active-session/hooks/useStartSession';
+import { AdHocWorkoutPicker } from './components/AdHocWorkoutPicker';
 import { Button } from '../../shared/ui/Button';
 
 export default function Dashboard() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const startSession = useStartSession();
-
-  const handleQuickWorkout = () => {
-    startSession.mutate({ isAdHoc: true });
-  };
+  const { theme, setTheme } = useTheme();
+  const [showWorkoutPicker, setShowWorkoutPicker] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -30,10 +27,9 @@ export default function Dashboard() {
         variant="secondary"
         size="lg"
         className="w-full"
-        onClick={handleQuickWorkout}
-        disabled={startSession.isPending}
+        onClick={() => setShowWorkoutPicker(true)}
       >
-        {startSession.isPending ? 'Starting...' : 'Quick Workout (Ad-hoc)'}
+        Quick Workout (Ad-hoc)
       </Button>
 
       {/* Calendar */}
@@ -75,24 +71,26 @@ export default function Dashboard() {
       <div className="card">
         <h2 className="text-lg font-semibold mb-4">Theme Settings</h2>
         <div className="flex gap-2 flex-wrap">
-          {(['light', 'dark', 'system'] as const).map((t) => (
+          {(['light', 'dark'] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTheme(t)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                theme === t
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${theme === t
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                }`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
-        <p className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-          Current resolved theme: <span className="font-medium">{resolvedTheme}</span>
-        </p>
       </div>
+
+      {/* Ad-hoc Workout Picker Modal */}
+      <AdHocWorkoutPicker
+        isOpen={showWorkoutPicker}
+        onClose={() => setShowWorkoutPicker(false)}
+      />
     </div>
   );
 }

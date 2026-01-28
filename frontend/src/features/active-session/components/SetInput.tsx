@@ -14,7 +14,6 @@ interface SetInputProps {
     weight: number;
     reps: number;
     setNumber: number;
-    perceivedEffort?: number;
     dropIndex?: number;
   }) => void;
   isLogging?: boolean;
@@ -33,18 +32,62 @@ export function SetInput({
   dropIndex,
   isDropSet = false,
 }: SetInputProps) {
+  // Use string state for display to prevent leading zeros issue
   const [weight, setWeight] = useState(previousWeight);
+  const [weightStr, setWeightStr] = useState(String(previousWeight));
   const [reps, setReps] = useState(previousReps);
-  const [showRpe, setShowRpe] = useState(false);
-  const [rpe, setRpe] = useState<number | null>(null);
+  const [repsStr, setRepsStr] = useState(String(previousReps));
 
-  const adjustWeight = useCallback((delta: number) => {
-    setWeight(w => Math.max(0, w + delta));
+  const updateWeight = useCallback((value: number) => {
+    const clamped = Math.max(0, value);
+    setWeight(clamped);
+    setWeightStr(String(clamped));
   }, []);
 
-  const adjustReps = useCallback((delta: number) => {
-    setReps(r => Math.max(1, r + delta));
+  const updateReps = useCallback((value: number) => {
+    const clamped = Math.max(1, value);
+    setReps(clamped);
+    setRepsStr(String(clamped));
   }, []);
+
+  const handleWeightChange = useCallback((raw: string) => {
+    // Allow empty input while typing
+    if (raw === '' || raw === '.') {
+      setWeightStr(raw);
+      setWeight(0);
+      return;
+    }
+    // Strip leading zeros and parse
+    const parsed = parseFloat(raw);
+    if (!isNaN(parsed)) {
+      setWeight(Math.max(0, parsed));
+      setWeightStr(raw);
+    }
+  }, []);
+
+  const handleWeightBlur = useCallback(() => {
+    // On blur, normalize the display value
+    setWeightStr(String(weight));
+  }, [weight]);
+
+  const handleRepsChange = useCallback((raw: string) => {
+    // Allow empty input while typing
+    if (raw === '') {
+      setRepsStr(raw);
+      setReps(1);
+      return;
+    }
+    const parsed = parseInt(raw, 10);
+    if (!isNaN(parsed)) {
+      setReps(Math.max(1, parsed));
+      setRepsStr(raw);
+    }
+  }, []);
+
+  const handleRepsBlur = useCallback(() => {
+    // On blur, normalize the display value
+    setRepsStr(String(reps));
+  }, [reps]);
 
   const handleLog = () => {
     onLogSet({
@@ -53,28 +96,22 @@ export function SetInput({
       weight,
       reps,
       setNumber,
-      perceivedEffort: rpe || undefined,
       dropIndex: isDropSet ? dropIndex : undefined,
     });
-    // Reset RPE for next set
-    setRpe(null);
-    setShowRpe(false);
   };
 
   const label = isDropSet ? `Drop ${dropIndex}` : `Set ${setNumber}`;
   const buttonLabel = isDropSet ? `Log Drop ${dropIndex}` : `Log Set ${setNumber}`;
 
   return (
-    <div className={`rounded-lg p-4 space-y-4 ${
-      isDropSet
+    <div className={`rounded-lg p-4 space-y-4 ${isDropSet
         ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
         : 'bg-gray-50 dark:bg-gray-800/50'
-    }`}>
-      <div className={`text-sm font-medium ${
-        isDropSet
+      }`}>
+      <div className={`text-sm font-medium ${isDropSet
           ? 'text-orange-600 dark:text-orange-400'
           : 'text-gray-500 dark:text-gray-400'
-      }`}>
+        }`}>
         {label}
       </div>
 
@@ -85,43 +122,29 @@ export function SetInput({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => adjustWeight(-5)}
-            className="w-11 h-11 text-base font-semibold"
-          >
-            -5
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => adjustWeight(-2.5)}
-            className="w-10 h-11 text-xs"
+            onClick={() => updateWeight(weight - 2.5)}
+            className="w-14 h-11 text-sm font-medium"
           >
             -2.5
           </Button>
           <input
-            type="number"
+            type="text"
             inputMode="decimal"
+            pattern="[0-9]*\.?[0-9]*"
             aria-label="Weight in pounds"
-            value={weight}
-            onChange={(e) => setWeight(Math.max(0, Number(e.target.value)))}
+            value={weightStr}
+            onChange={(e) => handleWeightChange(e.target.value)}
+            onBlur={handleWeightBlur}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
                        dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => adjustWeight(2.5)}
-            className="w-10 h-11 text-xs"
+            onClick={() => updateWeight(weight + 2.5)}
+            className="w-14 h-11 text-sm font-medium"
           >
             +2.5
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => adjustWeight(5)}
-            className="w-11 h-11 text-base font-semibold"
-          >
-            +5
           </Button>
         </div>
         <span className="text-sm text-gray-500 dark:text-gray-400 w-8 shrink-0">lbs</span>
@@ -137,24 +160,26 @@ export function SetInput({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => adjustReps(-1)}
+            onClick={() => updateReps(reps - 1)}
             className="w-12 h-11 text-lg font-semibold"
           >
             -1
           </Button>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
+            pattern="[0-9]*"
             aria-label="Number of reps"
-            value={reps}
-            onChange={(e) => setReps(Math.max(1, Number(e.target.value)))}
+            value={repsStr}
+            onChange={(e) => handleRepsChange(e.target.value)}
+            onBlur={handleRepsBlur}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
                        dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => adjustReps(1)}
+            onClick={() => updateReps(reps + 1)}
             className="w-12 h-11 text-lg font-semibold"
           >
             +1
@@ -162,42 +187,6 @@ export function SetInput({
         </div>
         <span className="w-8 shrink-0"></span>
       </div>
-
-      {/* RPE Toggle */}
-      {showRpe ? (
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">RPE:</span>
-          {[6, 7, 8, 9, 10].map((value) => (
-            <button
-              key={value}
-              onClick={() => setRpe(rpe === value ? null : value)}
-              className={`w-9 h-9 rounded-full text-sm font-medium transition-colors
-                ${rpe === value
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              {value}
-            </button>
-          ))}
-          <button
-            onClick={() => {
-              setShowRpe(false);
-              setRpe(null);
-            }}
-            className="text-sm text-gray-500 dark:text-gray-400 ml-2"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setShowRpe(true)}
-          className="text-sm text-primary-600 dark:text-primary-400 hover:underline"
-        >
-          + Add RPE
-        </button>
-      )}
 
       {/* Log Button */}
       <Button

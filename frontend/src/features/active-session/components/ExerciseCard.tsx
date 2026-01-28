@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { SetInput } from './SetInput';
 import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
+import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
@@ -18,6 +19,7 @@ interface ExerciseCardProps {
     dropIndex?: number;
   }) => void;
   onDeleteSet: (setId: number) => void;
+  onUpdateSet?: (setId: number, updates: { weight?: number; reps?: number }) => void;
   isLogging: boolean;
 }
 
@@ -27,15 +29,23 @@ interface DropSetMode {
   lastWeight: number;
 }
 
+interface EditingSet {
+  id: number;
+  weight: string;
+  reps: string;
+}
+
 export function ExerciseCard({
   exercise,
   loggedSets,
   previousHint,
   onLogSet,
   onDeleteSet,
+  onUpdateSet,
   isLogging,
 }: ExerciseCardProps) {
   const [dropSetMode, setDropSetMode] = useState<DropSetMode | null>(null);
+  const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
 
   // Only count standard sets (dropIndex=0) for completion
   const standardSets = useMemo(
@@ -89,6 +99,99 @@ export function ExerciseCard({
     });
   };
 
+  const handleSetTap = (set: Set) => {
+    if (editingSet?.id === set.id || !onUpdateSet) return;
+    setEditingSet({
+      id: set.id,
+      weight: String(set.weight),
+      reps: String(set.reps),
+    });
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingSet || !onUpdateSet) return;
+
+    const weight = parseFloat(editingSet.weight);
+    const reps = parseInt(editingSet.reps, 10);
+
+    if (!isNaN(weight) && weight >= 0 && !isNaN(reps) && reps > 0) {
+      onUpdateSet(editingSet.id, { weight, reps });
+    }
+    setEditingSet(null);
+  };
+
+  const renderSetRow = (set: Set, isDropSet: boolean) => {
+    const isEditing = editingSet?.id === set.id;
+    const bgClass = isDropSet
+      ? 'bg-orange-50 dark:bg-orange-900/20'
+      : 'bg-green-50 dark:bg-green-900/20';
+    const textClass = isDropSet
+      ? 'text-orange-800 dark:text-orange-300'
+      : 'text-green-800 dark:text-green-300';
+    const valueClass = isDropSet
+      ? 'text-orange-800 dark:text-orange-200'
+      : 'text-green-900 dark:text-green-200';
+
+    if (isEditing) {
+      return (
+        <div className={`flex items-center gap-2 py-2 px-3 ${bgClass} rounded-lg ${isDropSet ? 'ml-4 mt-1' : ''}`}>
+          <span className={`text-sm font-medium ${textClass} w-12`}>
+            {isDropSet ? `↳ Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
+          </span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={editingSet.weight}
+            onChange={(e) => setEditingSet(prev => prev ? { ...prev, weight: e.target.value } : null)}
+            className="w-16 text-center text-sm font-semibold border rounded py-1
+                       dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            autoFocus
+          />
+          <span className="text-sm">lbs x</span>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={editingSet.reps}
+            onChange={(e) => setEditingSet(prev => prev ? { ...prev, reps: e.target.value } : null)}
+            className="w-12 text-center text-sm font-semibold border rounded py-1
+                       dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+          />
+          <Button variant="primary" size="sm" onClick={handleSaveEdit} className="ml-auto">
+            Save
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setEditingSet(null)}>
+            Cancel
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <SwipeableRow
+        onSwipeLeft={() => onDeleteSet(set.id)}
+        disabled={set.id < 0}
+      >
+        <div
+          className={`flex items-center justify-between py-2 px-3 ${bgClass} rounded-lg
+                      ${isDropSet ? 'ml-4 mt-1' : ''} ${onUpdateSet ? 'cursor-pointer active:opacity-80' : ''}`}
+          onClick={() => handleSetTap(set)}
+        >
+          <span className={`text-sm font-medium ${textClass}`}>
+            {isDropSet ? `↳ Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
+          </span>
+          <span className={`font-semibold ${valueClass} ${isDropSet ? 'text-sm' : ''}`}>
+            {set.weight} lbs x {set.reps}
+            {set.perceivedEffort && (
+              <span className={`ml-2 text-sm ${isDropSet ? 'text-orange-600 dark:text-orange-400' : 'text-green-600 dark:text-green-400'}`}>
+                RPE {set.perceivedEffort}
+              </span>
+            )}
+          </span>
+        </div>
+      </SwipeableRow>
+    );
+  };
+
   return (
     <div className={`card transition-all ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''}`}>
       {/* Header */}
@@ -119,7 +222,7 @@ export function ExerciseCard({
                        text-sm text-blue-700 dark:text-blue-300 flex items-center gap-2">
           <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
           <span>
             Last time: <strong>{previousHint.lastWeight} lbs</strong> x <strong>{previousHint.lastReps}</strong> reps
@@ -139,50 +242,13 @@ export function ExerciseCard({
             return (
               <div key={setNumber}>
                 {/* Standard set row */}
-                {standardSet && (
-                  <SwipeableRow
-                    onSwipeLeft={() => onDeleteSet(standardSet.id)}
-                    disabled={standardSet.id < 0}
-                  >
-                    <div className="flex items-center justify-between py-2 px-3 bg-green-50
-                                    dark:bg-green-900/20 rounded-lg">
-                      <span className="text-sm font-medium text-green-800 dark:text-green-300">
-                        Set {standardSet.setNumber}
-                      </span>
-                      <span className="font-semibold text-green-900 dark:text-green-200">
-                        {standardSet.weight} lbs x {standardSet.reps}
-                        {standardSet.perceivedEffort && (
-                          <span className="ml-2 text-sm text-green-600 dark:text-green-400">
-                            RPE {standardSet.perceivedEffort}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </SwipeableRow>
-                )}
+                {standardSet && renderSetRow(standardSet, false)}
 
                 {/* Drop sets (indented) */}
                 {dropSets.map((dropSet) => (
-                  <SwipeableRow
-                    key={dropSet.id}
-                    onSwipeLeft={() => onDeleteSet(dropSet.id)}
-                    disabled={dropSet.id < 0}
-                  >
-                    <div className="flex items-center justify-between py-1.5 px-3 ml-4
-                                    bg-orange-50 dark:bg-orange-900/20 rounded-lg mt-1">
-                      <span className="text-sm font-medium text-orange-700 dark:text-orange-300">
-                        ↳ Drop {dropSet.dropIndex}
-                      </span>
-                      <span className="font-semibold text-orange-800 dark:text-orange-200 text-sm">
-                        {dropSet.weight} lbs x {dropSet.reps}
-                        {dropSet.perceivedEffort && (
-                          <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">
-                            RPE {dropSet.perceivedEffort}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                  </SwipeableRow>
+                  <div key={dropSet.id}>
+                    {renderSetRow(dropSet, true)}
+                  </div>
                 ))}
 
                 {/* Drop Set input (if in drop mode for this set) */}

@@ -488,14 +488,28 @@ router.post('/:id/sets', validate(logSetSchema), async (req: Request, res: Respo
   }
 });
 
-// PUT /api/sessions/:id/sets/:setId/effort - Update RPE
-router.put('/:id/sets/:setId/effort', async (req: Request, res: Response) => {
-  try {
-    const setId = Number(req.params.setId);
-    const { perceivedEffort } = req.body;
+// Update set schema
+const updateSetSchema = z.object({
+  weight: z.number().min(0).optional(),
+  reps: z.number().int().min(1).optional(),
+  perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
+});
 
-    if (perceivedEffort !== null && (perceivedEffort < 1 || perceivedEffort > 10)) {
-      res.status(400).json({ error: 'Perceived effort must be between 1 and 10' });
+// PUT /api/sessions/:id/sets/:setId - Update a set (weight, reps, RPE)
+router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, res: Response) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const setId = Number(req.params.setId);
+    const { weight, reps, perceivedEffort } = req.body;
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    if (session.completedAt) {
+      res.status(400).json({ error: 'Cannot edit sets in completed session' });
       return;
     }
 
@@ -505,13 +519,22 @@ router.put('/:id/sets/:setId/effort', async (req: Request, res: Response) => {
       return;
     }
 
-    set.perceivedEffort = perceivedEffort;
+    if (set.sessionId !== sessionId) {
+      res.status(400).json({ error: 'Set does not belong to this session' });
+      return;
+    }
+
+    // Update only provided fields
+    if (weight !== undefined) set.weight = weight;
+    if (reps !== undefined) set.reps = reps;
+    if (perceivedEffort !== undefined) set.perceivedEffort = perceivedEffort;
+
     await set.save();
 
     res.json(set);
   } catch (error) {
-    console.error('Error updating RPE:', error);
-    res.status(500).json({ error: 'Failed to update RPE' });
+    console.error('Error updating set:', error);
+    res.status(500).json({ error: 'Failed to update set' });
   }
 });
 

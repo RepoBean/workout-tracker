@@ -5,6 +5,12 @@ import type { Set, ActiveSession, LogSetRequest } from '../../../shared/api/type
 import { useToast } from '../../../shared/ui/Toast';
 import { useTimer } from '../../../shared/context/TimerContext';
 
+interface UpdateSetRequest {
+  weight?: number;
+  reps?: number;
+  perceivedEffort?: number | null;
+}
+
 export function useActiveSession(sessionId: number) {
   const queryClient = useQueryClient();
   const toast = useToast();
@@ -80,6 +86,83 @@ export function useActiveSession(sessionId: number) {
     },
   });
 
+  // Update Set Mutation with Optimistic Update
+  const updateSetMutation = useMutation({
+    mutationFn: async ({ setId, updates }: { setId: number; updates: UpdateSetRequest }) => {
+      const { data } = await api.put<Set>(`/sessions/${sessionId}/sets/${setId}`, updates);
+      return data;
+    },
+    onMutate: async ({ setId, updates }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+
+      const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      if (previousSession) {
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previousSession,
+          sets: previousSession.sets?.map(s =>
+            s.id === setId ? { ...s, ...updates, updatedAt: new Date().toISOString() } : s
+          ) || [],
+        });
+      }
+
+      return { previousSession };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousSession) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession);
+      }
+      toast.error('Failed to update set. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+    },
+  });
+
+  // Update effort for all sets of an exercise
+  const updateSetsEffortMutation = useMutation({
+    mutationFn: async ({ exerciseId, effort }: { exerciseId: number; effort: number }) => {
+      const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+      const setsToUpdate = currentSession?.sets?.filter(s => s.exerciseId === exerciseId) || [];
+
+      // Update each set sequentially
+      const results = await Promise.all(
+        setsToUpdate.map(set =>
+          api.put<Set>(`/sessions/${sessionId}/sets/${set.id}`, { perceivedEffort: effort })
+        )
+      );
+
+      return results.map(r => r.data);
+    },
+    onMutate: async ({ exerciseId, effort }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+
+      const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      if (previousSession) {
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previousSession,
+          sets: previousSession.sets?.map(s =>
+            s.exerciseId === exerciseId
+              ? { ...s, perceivedEffort: effort, updatedAt: new Date().toISOString() }
+              : s
+          ) || [],
+        });
+      }
+
+      return { previousSession };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousSession) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession);
+      }
+      toast.error('Failed to save RPE. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+    },
+  });
+
   // Delete Set Mutation with Optimistic Update
   const deleteSetMutation = useMutation({
     mutationFn: async (setId: number) => {
@@ -121,9 +204,10 @@ export function useActiveSession(sessionId: number) {
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.nextWorkout });
-      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
+      queryClient.invalidateQueries({ queryKey: ['history'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats });
+      queryClient.invalidateQueries({ queryKey: ['calendarSessions'] });
     },
     onError: () => {
       toast.error('Failed to complete workout. Please try again.');
@@ -136,6 +220,12 @@ export function useActiveSession(sessionId: number) {
     error,
     logSet: logSetMutation.mutate,
     isLoggingSet: logSetMutation.isPending,
+    updateSet: (setId: number, updates: UpdateSetRequest) =>
+      updateSetMutation.mutate({ setId, updates }),
+    isUpdatingSet: updateSetMutation.isPending,
+    updateSetsEffort: (exerciseId: number, effort: number) =>
+      updateSetsEffortMutation.mutate({ exerciseId, effort }),
+    isUpdatingSetsEffort: updateSetsEffortMutation.isPending,
     deleteSet: deleteSetMutation.mutate,
     isDeletingSet: deleteSetMutation.isPending,
     completeSession: completeSessionMutation.mutate,

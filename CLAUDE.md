@@ -210,6 +210,8 @@ backend/
 | PUT | /api/programs/:id | Update program |
 | DELETE | /api/programs/:id | Archive program (soft delete) |
 | PUT | /api/programs/:id/set-active | Set as active program |
+| GET | /api/programs/:id/export | Export program as JSON |
+| POST | /api/programs/import | Import program from JSON |
 | POST | /api/programs/:programId/workouts | Create workout |
 | PUT | /api/workouts/:id | Update workout |
 | DELETE | /api/workouts/:id | Delete workout (cascade) |
@@ -224,8 +226,10 @@ backend/
 | GET | /api/sessions/next-workout | Get next workout info |
 | POST | /api/sessions/start | Start new session |
 | POST | /api/sessions/:id/sets | Log a set |
+| PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE) |
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
 | PUT | /api/sessions/:id/complete | Complete session |
+| DELETE | /api/sessions/:id | Delete session (cascades to sets) |
 | GET | /api/sessions/:id/previous | Previous session hints |
 
 ---
@@ -256,8 +260,7 @@ backend/
 - Example: Set 1 (100lbs), Drop 1 (80lbs), Drop 2 (60lbs)
 
 ### 5. Dark Mode
-- Respect system preference by default
-- Manual toggle to override
+- Manual toggle (Light/Dark)
 - Persist preference in localStorage
 
 ### 6. PWA
@@ -265,6 +268,74 @@ backend/
 - Service worker caches app shell
 - Works offline for viewing cached data
 - Clear indicator when offline
+
+### 7. Program Export/Import
+- Export any program as a portable JSON file (version 1 format)
+- Import JSON to create a new program with all workouts and exercises
+- Preview modal shows program name, workout count, exercise count before importing
+- Exported files strip IDs, timestamps, and state flags
+
+### 8. Session Delete
+- Swipe left on a history card to reveal delete action
+- Also accessible via Delete button in expanded card view
+- `confirm()` dialog before deletion
+- Cascades to delete associated sets
+- Invalidates history, stats, and calendar queries
+
+### 9. Focused Exercise View
+- Active session shows one exercise at a time ("focused" view)
+- Previous/Next navigation with step indicator
+- Exercise list dropdown for quick navigation and drag-to-reorder
+- Auto-advances when all target sets are logged
+- Superset exercises grouped and rotate automatically
+
+### 10. Per-Exercise RPE Prompt
+- After completing all sets for an exercise, modal prompts for RPE (1-10)
+- Applies RPE to all sets of that exercise
+- Skip button to bypass
+
+### 11. Inline Set Editing
+- Tap any logged set row to enter inline edit mode
+- Modify weight/reps directly, save or cancel
+- Swipe-to-delete for removing sets
+
+### 12. Ad-Hoc Workout Picker
+- "Quick Workout" button opens picker modal
+- Option for blank workout or select from existing programs/workouts
+- Starts session with `isAdHoc: true`
+
+---
+
+## Established Patterns
+
+These are conventions established in the codebase. New features should follow them.
+
+### Mutation Hook
+`useMutation` with `mutationFn`, `onSuccess` (invalidateQueries + toast.success), `onError` (toast.error).
+Reference: `program-builder/hooks/usePrograms.ts`, `history/hooks/useHistory.ts`
+
+### Destructive Action
+`confirm('message')` before calling `mutation.mutate()`. No custom modals for destructive confirms.
+Reference: `program-builder/components/ProgramCard.tsx`, `features/history/index.tsx`
+
+### Swipe-to-Delete
+Wrap content with `<SwipeableRow onSwipeLeft={handler} disabled={bool}>`. The component handles touch gestures and shows a red background with trash icon.
+Reference: `features/history/index.tsx`, `shared/ui/SwipeableRow.tsx`
+
+### File Download
+Fetch as blob → create object URL → create anchor element → programmatic click → revoke URL.
+Reference: `program-builder/components/ProgramCard.tsx`
+
+### File Import
+Hidden `<input type="file">` triggered by visible button click → parse file content → show preview in Modal → confirm action triggers mutation.
+Reference: `features/program-builder/index.tsx`
+
+### Query Keys
+All query keys defined in the `queryKeys` object in `shared/api/queries.ts`. Array-based keys with factory functions for parameterized queries (e.g., `program: (id: number) => ['programs', id]`).
+
+### Toast Notifications
+`const toast = useToast()` then `toast.success('message')` or `toast.error('message')`. Never use raw `alert()`.
+Reference: `shared/ui/Toast.tsx`
 
 ---
 
@@ -285,46 +356,20 @@ cd frontend && npm run dev   # localhost:5174
 
 ---
 
-## Development Phases
+## Changelog
 
-### Phase 1: Foundation ✓ (841bd3e)
-- [x] Vite + React + TypeScript + Tailwind frontend
-- [x] Express + TypeScript backend
-- [x] Feature-based folder structure (empty folders OK)
-- [x] Shared types for database models
-- [x] Connect to existing SQLite database
-- [x] PWA manifest skeleton
-- [x] ThemeContext + dark mode
-- [x] Basic routing to 4 feature entry points
-
-### Phase 2: Active Session (The Core) ✓ (3749438)
-- [x] `features/active-session/` components
-- [x] SetInput with optimistic UI
-- [x] ExerciseCard with previous weight display
-- [x] Client-side "What's Next?" logic
-- [x] Basic set logging flow
-
-### Phase 3: Timer & Notifications ✓ (fff95b2)
-- [x] Global TimerContext
-- [x] RestTimer component
-- [x] Web Notifications API integration
-- [x] Background tab drift correction
-
-### Phase 4: New Features ✓ (1673588)
-- [x] Plate calculator
-- [x] Drop set support
-- [x] Swipe gestures
-
-### Phase 5: Remaining Features ✓ (0f2b133)
-- [x] Program builder CRUD
-- [x] History view
-- [x] Dashboard with calendar
-- [x] Full PWA offline support
-
-### Phase 6: Polish & Cutover ✓ (c94db51)
-- [x] Feature parity
-- [x] Performance audit
-- [x] Switch to V2 for daily use
+| Commit | Description |
+|--------|-------------|
+| 841bd3e | Phase 1: Foundation (Vite, Express, routing, dark mode, PWA skeleton) |
+| 3749438 | Phase 2: Active session (set logging, optimistic UI, "What's Next?") |
+| fff95b2 | Phase 3: Persistent rest timer with notifications |
+| 1673588 | Phase 4: Plate calculator, drop set support, swipe gestures |
+| 0f2b133 | Phase 5: Program builder, history view, dashboard calendar, PWA offline |
+| c94db51 | Phase 6: Resume sessions, stats, CSV export, ad-hoc workouts, polish |
+| 8749d28 | Fix: Sync TypeScript types with Zod schemas and model |
+| 7437412 | Feature: Program export/import (JSON format) |
+| 2ddc1b9 | Feature: Delete session from history (swipe + button) |
+| — | UX Overhaul: focused exercise view, per-exercise RPE, inline set editing, ad-hoc picker |
 
 ---
 
