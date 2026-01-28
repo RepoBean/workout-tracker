@@ -226,28 +226,6 @@ export default function ActiveSession() {
       {/* Non-ad-hoc: Focused exercise view */}
       {!isAdHoc && exercises.length > 0 && (
         <>
-          {/* Exercise list dropdown */}
-          <ExerciseListDropdown
-            exercises={exercises}
-            currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
-            getExerciseProgress={navigation.getExerciseProgress}
-            isExerciseComplete={navigation.isExerciseComplete}
-            onSelectExercise={(idx) => {
-              // Find step containing this exercise
-              let count = 0;
-              for (let i = 0; i < navigation.steps.length; i++) {
-                const step = navigation.steps[i];
-                const stepSize = step.type === 'single' ? 1 : step.exercises.length;
-                if (idx < count + stepSize) {
-                  navigation.goToStep(i);
-                  return;
-                }
-                count += stepSize;
-              }
-            }}
-            onMoveExercise={navigation.moveExercise}
-          />
-
           {/* Current step exercises */}
           <div className="space-y-4">
             {navigation.currentStep?.type === 'single' && (
@@ -328,6 +306,28 @@ export default function ActiveSession() {
               );
             })()}
           </div>
+
+          {/* Exercise list dropdown (below active exercise) */}
+          <ExerciseListDropdown
+            exercises={exercises}
+            currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
+            getExerciseProgress={navigation.getExerciseProgress}
+            isExerciseComplete={navigation.isExerciseComplete}
+            onSelectExercise={(idx) => {
+              // Find step containing this exercise
+              let count = 0;
+              for (let i = 0; i < navigation.steps.length; i++) {
+                const step = navigation.steps[i];
+                const stepSize = step.type === 'single' ? 1 : step.exercises.length;
+                if (idx < count + stepSize) {
+                  navigation.goToStep(i);
+                  return;
+                }
+                count += stepSize;
+              }
+            }}
+            onMoveExercise={navigation.moveExercise}
+          />
 
           {/* Navigation footer */}
           <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-900 border-t 
