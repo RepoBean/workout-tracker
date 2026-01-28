@@ -222,6 +222,11 @@ router.get('/export-csv', async (req: Request, res: Response) => {
 // GET /api/sessions/stats - Summary statistics
 router.get('/stats', async (req: Request, res: Response) => {
   try {
+    // Timezone offset in minutes (e.g., -600 for UTC+10, 300 for UTC-5)
+    // Matches JavaScript's getTimezoneOffset() which returns minutes
+    // Positive = west of UTC, negative = east of UTC
+    const tzOffset = parseInt(req.query.tzOffset as string) || 0;
+
     const now = new Date();
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -271,8 +276,13 @@ router.get('/stats', async (req: Request, res: Response) => {
     const monthVolume = Number(monthRows[0]?.monthVolume) || 0;
 
     // Current streak: consecutive days with sessions counting back from today
+    // Convert UTC timestamps to user's local date using timezone offset
+    // tzOffset from getTimezoneOffset() is positive for west of UTC, negative for east
+    // To convert UTC to local: subtract tzOffset (since east = negative = add hours)
+    const offsetSeconds = -tzOffset * 60; // Convert minutes to seconds, flip sign
+
     const [streakResult] = await sequelize.query(`
-      SELECT DISTINCT date(completedAt) as sessionDate
+      SELECT DISTINCT date(datetime(completedAt, '${offsetSeconds >= 0 ? '+' : ''}${offsetSeconds} seconds')) as sessionDate
       FROM Sessions
       WHERE completedAt IS NOT NULL
       ORDER BY sessionDate DESC
@@ -280,11 +290,13 @@ router.get('/stats', async (req: Request, res: Response) => {
     const streakRows = streakResult as StreakQueryResult[];
 
     let currentStreak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Calculate "today" from the user's timezone perspective
+    // Subtract tzOffset from UTC to get user's local time
+    const userNow = new Date(now.getTime() - tzOffset * 60 * 1000);
+    const todayStr = userNow.toISOString().split('T')[0];
 
     for (let i = 0; i < streakRows.length; i++) {
-      const expectedDate = new Date(today);
+      const expectedDate = new Date(todayStr);
       expectedDate.setDate(expectedDate.getDate() - i);
       const expectedStr = expectedDate.toISOString().split('T')[0];
 

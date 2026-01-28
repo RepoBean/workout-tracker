@@ -24,9 +24,9 @@ export function Button({
   };
 
   const sizes = {
-    sm: 'px-3 py-1.5 text-sm',
-    md: 'px-4 py-2 text-base',
-    lg: 'px-6 py-3 text-lg',
+    sm: 'px-3 py-2.5 text-sm min-h-[44px]',      // 44px min touch target
+    md: 'px-4 py-3 text-base min-h-[44px]',      // 44px min touch target
+    lg: 'px-6 py-3.5 text-lg min-h-[48px]',      // 48px for emphasis
   };
 
   return (

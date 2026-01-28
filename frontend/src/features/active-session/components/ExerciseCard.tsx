@@ -190,10 +190,10 @@ export function ExerciseCard({
                           className="w-10 text-center text-sm font-semibold border rounded py-0.5
                                      dark:bg-gray-700 dark:border-gray-600 dark:text-white"
                         />
-                        <Button variant="primary" size="sm" onClick={handleSaveEdit} className="text-xs px-2 py-0.5">
+                        <Button variant="primary" size="sm" onClick={handleSaveEdit}>
                           ✓
                         </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setEditingSet(null)} className="text-xs px-2 py-0.5">
+                        <Button variant="secondary" size="sm" onClick={() => setEditingSet(null)}>
                           ✕
                         </Button>
                       </div>

@@ -37,7 +37,7 @@ export function RestTimer() {
               variant="secondary"
               size="sm"
               onClick={() => startTimer(seconds)}
-              className="flex-1 text-xs py-1"
+              className="flex-1 text-xs py-1 min-h-[44px]"
             >
               {label}
             </Button>
