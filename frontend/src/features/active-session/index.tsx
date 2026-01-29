@@ -91,14 +91,19 @@ export default function ActiveSession() {
       // Skip if this name matches a program exercise
       if (programExerciseNames.has(name.toLowerCase())) continue;
 
+      // Check if this exercise exists in adHocProgramExercises to preserve its orderIndex
+      const existingAdHoc = adHocProgramExercises.find(
+        e => e.name.toLowerCase() === name.toLowerCase()
+      );
+
       // Create virtual exercise from the set data
       result.push({
-        id: -name.length - Date.now() % 1000, // Stable-ish negative ID
+        id: existingAdHoc?.id ?? (-name.length - Date.now() % 1000),
         workoutId: session?.workoutId || 0,
         name,
-        targetSets: 3,
-        targetReps: '10',
-        orderIndex: exercises.length + result.length,
+        targetSets: existingAdHoc?.targetSets ?? 3,
+        targetReps: existingAdHoc?.targetReps ?? '10',
+        orderIndex: existingAdHoc?.orderIndex ?? (exercises.length + result.length),
         supersetGroup: null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
@@ -106,7 +111,7 @@ export default function ActiveSession() {
     }
 
     return result;
-  }, [exercises, adHocSetsByName, session?.workoutId]);
+  }, [exercises, adHocSetsByName, session?.workoutId, adHocProgramExercises]);
 
   // Merge program exercises with ad-hoc program exercises for navigation
   const mergedExercises = useMemo(() => {
@@ -282,7 +287,7 @@ export default function ActiveSession() {
 
     // Calculate orderIndex to place between surrounding program exercises
     // Use fractional values to slot between existing exercises
-    const orderIndex = insertionIndex + 0.5; // Fractional to sort between integers
+    const orderIndex = insertionIndex - 0.5; // Insert AT current position, not after
 
     const virtualExercise: Exercise = {
       id: -Date.now(),
