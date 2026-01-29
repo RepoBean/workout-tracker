@@ -1,8 +1,11 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation } from './hooks/useExerciseNavigation';
+import { useAdHocExercises } from './hooks/useAdHocExercises';
+import { useExerciseOrdering } from './hooks/useExerciseOrdering';
+import { useRpeFlow } from './hooks/useRpeFlow';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
@@ -11,23 +14,12 @@ import { RestTimer } from './components/RestTimer';
 import { AddExercise } from './components/AddExercise';
 import { RpePrompt } from './components/RpePrompt';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
-import type { Set as SetType, Exercise } from '../../shared/api/types';
-import type { AdHocExercise } from './components/AddExercise';
+import type { Exercise } from '../../shared/api/types';
 
 export default function ActiveSession() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const sessionId = Number(id);
-  const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>([]);
-
-  // State for ad-hoc exercises added to program workouts (virtual exercises with negative IDs)
-  const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>([]);
-
-  // Single source of truth for exercise ordering
-  const [orderedExercises, setOrderedExercises] = useState<Exercise[]>([]);
-
-  // Ref to hold the set-logged callback (allows passing to useActiveSession before navigation is available)
-  const handleSetLoggedRef = useRef<(exerciseId: number | null, exerciseName: string) => void>(() => { });
 
   const {
     session,
@@ -40,117 +32,60 @@ export default function ActiveSession() {
     deleteSet,
     completeSession,
     isCompletingSession,
-  } = useActiveSession(sessionId, {
-    onSetLogged: (exerciseId, exerciseName) => handleSetLoggedRef.current(exerciseId, exerciseName),
-  });
-
-  // Per-exercise RPE prompt state
-  const [rpePromptExercise, setRpePromptExercise] = useState<{ id: number; name: string } | null>(null);
-
-  // Track which exercises have been completed (for superset RPE fix)
-  const completedExercisesRef = useRef<Set<number>>(new Set());
+  } = useActiveSession(sessionId);
 
   const { exerciseHints } = usePreviousData(sessionId);
 
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
 
-  // Group sets by exercise ID, sorted by setNumber then dropIndex
-  const setsByExercise = useMemo(() => {
-    const map = new Map<number, SetType[]>();
-    for (const set of sets) {
-      if (set.exerciseId) {
-        const existing = map.get(set.exerciseId) || [];
-        map.set(set.exerciseId, [...existing, set].sort(
-          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
-        ));
-      }
-    }
-    return map;
-  }, [sets]);
+  // Ad-hoc exercise management
+  const {
+    setAdHocExercises,
+    setAdHocProgramExercises,
+    mergedExercises,
+    adHocSetsByName,
+    getSetsForExercise,
+    allAdHocExercises,
+  } = useAdHocExercises({
+    session: session ?? null,
+    exercises,
+    sets,
+  });
 
-  // Group ad-hoc sets by exerciseName (for ad-hoc sessions with exerciseId=null)
-  const adHocSetsByName = useMemo(() => {
-    const map = new Map<string, SetType[]>();
-    for (const set of sets) {
-      if (!set.exerciseId) {
-        const existing = map.get(set.exerciseName) || [];
-        map.set(set.exerciseName, [...existing, set].sort(
-          (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
-        ));
-      }
-    }
-    return map;
-  }, [sets]);
+  // Exercise ordering
+  const {
+    orderedExercises,
+    handleMoveExercise,
+    insertExerciseAt,
+  } = useExerciseOrdering({ mergedExercises });
 
-  // Reconstruct ad-hoc exercises added to program workouts from sets
-  const reconstructedAdHocExercises = useMemo(() => {
-    if (exercises.length === 0) return []; // Blank ad-hoc sessions handled elsewhere
-
-    const programExerciseNames = new Set(exercises.map(e => e.name.toLowerCase()));
-    const result: Exercise[] = [];
-
-    for (const [name] of adHocSetsByName.entries()) {
-      // Skip if this name matches a program exercise
-      if (programExerciseNames.has(name.toLowerCase())) continue;
-
-      // Check if this exercise exists in adHocProgramExercises to preserve its orderIndex
-      const existingAdHoc = adHocProgramExercises.find(
-        e => e.name.toLowerCase() === name.toLowerCase()
-      );
-
-      // Create virtual exercise from the set data
-      result.push({
-        id: existingAdHoc?.id ?? (-name.length - Date.now() % 1000),
-        workoutId: session?.workoutId || 0,
-        name,
-        targetSets: existingAdHoc?.targetSets ?? 3,
-        targetReps: existingAdHoc?.targetReps ?? '10',
-        orderIndex: existingAdHoc?.orderIndex ?? (exercises.length + result.length),
-        supersetGroup: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    }
-
-    return result;
-  }, [exercises, adHocSetsByName, session?.workoutId, adHocProgramExercises]);
-
-  // Merge program exercises with ad-hoc program exercises for navigation
-  const mergedExercises = useMemo(() => {
-    // Combine: program exercises + reconstructed ad-hoc + newly added ad-hoc
-    const reconstructedNames = new Set(reconstructedAdHocExercises.map(e => e.name.toLowerCase()));
-    const newAdHoc = adHocProgramExercises.filter(
-      e => !reconstructedNames.has(e.name.toLowerCase())
-    );
-
-    // Combine all exercises (no sorting - orderedExercises handles order)
-    return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
-  }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
-
-  // Initialize orderedExercises from mergedExercises (sorted by orderIndex) on first load
-  useEffect(() => {
-    if (orderedExercises.length === 0 && mergedExercises.length > 0) {
-      setOrderedExercises(
-        [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex)
-      );
-    }
-  }, [mergedExercises, orderedExercises.length]);
-
-  // Sync: add new exercises that appear in mergedExercises but not in orderedExercises
-  useEffect(() => {
-    const orderedIds = new Set(orderedExercises.map(e => e.id));
-    const newExercises = mergedExercises.filter(e => !orderedIds.has(e.id));
-    if (newExercises.length > 0) {
-      setOrderedExercises(prev => [...prev, ...newExercises]);
-    }
-  }, [mergedExercises, orderedExercises]);
-
-  // Exercise navigation hook for focused view (uses orderedExercises)
+  // Exercise navigation hook for focused view
   const navigation = useExerciseNavigation({
     exercises: orderedExercises,
     sets,
   });
+
+  // RPE flow management
+  const {
+    rpePromptExercise,
+    handleSetLogged,
+    handleRpeSubmit,
+    handleRpeSkip,
+  } = useRpeFlow({
+    navigation,
+    mergedExercises,
+    updateSetsEffort,
+  });
+
+  // Wire up set logging callback
+  const handleLogSet = (data: Parameters<typeof logSet>[0]) => {
+    logSet(data, {
+      onSuccess: () => {
+        handleSetLogged(data.exerciseId ?? null, data.exerciseName);
+      },
+    });
+  };
 
   // For ad-hoc exercises (negative ID), fetch history by name
   const currentActiveExercise = navigation.activeExercise;
@@ -161,7 +96,6 @@ export default function ActiveSession() {
   // Get previous hint for an exercise - handles both regular and ad-hoc
   const getPreviousHintForExercise = (exercise: Exercise) => {
     if (exercise.id < 0 && adHocHistory && exercise.name === adHocExerciseName) {
-      // Ad-hoc exercise with history data
       return {
         lastWeight: adHocHistory.sets[adHocHistory.sets.length - 1]?.weight || 0,
         lastReps: adHocHistory.sets[adHocHistory.sets.length - 1]?.reps || 0,
@@ -170,108 +104,6 @@ export default function ActiveSession() {
     }
     return exerciseHints.get(exercise.id);
   };
-
-  // Get sets for an exercise - handles both regular (by ID) and ad-hoc (by name)
-  const getSetsForExercise = (exercise: Exercise): SetType[] => {
-    if (exercise.id < 0) {
-      // Ad-hoc exercise: look up by name in adHocSetsByName
-      return adHocSetsByName.get(exercise.name) || [];
-    }
-    return setsByExercise.get(exercise.id) || [];
-  };
-
-  // Update the ref with the actual callback logic (after navigation is available)
-  useEffect(() => {
-    handleSetLoggedRef.current = (exerciseId: number | null, exerciseName: string) => {
-      // Find the exercise that was just logged to
-      const exercise = exerciseId !== null
-        ? mergedExercises.find(e => e.id === exerciseId)
-        : mergedExercises.find(e => e.name === exerciseName);
-
-      if (!exercise) return;
-
-      const wasComplete = completedExercisesRef.current.has(exercise.id);
-      const isNowComplete = navigation.isExerciseComplete(exercise.id);
-
-      // Check if this exercise just completed
-      if (!wasComplete && isNowComplete) {
-        completedExercisesRef.current.add(exercise.id);
-
-        // Show RPE prompt
-        setRpePromptExercise({
-          id: exercise.id,
-          name: exercise.name,
-        });
-        return; // Wait for RPE before navigating
-      }
-
-      // Not newly complete — handle rotation/advance
-      if (navigation.currentStep?.type === 'superset') {
-        if (navigation.isCurrentStepComplete) {
-          navigation.goToNext();
-        } else {
-          navigation.rotateSupersetActive();
-        }
-      } else if (navigation.isCurrentStepComplete) {
-        navigation.goToNext();
-      }
-    };
-  }, [mergedExercises, navigation]);
-
-  // RPE submit handler - navigate AFTER RPE
-  const handleRpeSubmit = (rpe: number) => {
-    if (rpePromptExercise) {
-      updateSetsEffort(rpePromptExercise.id, rpe);
-    }
-    setRpePromptExercise(null);
-
-    // Navigate after RPE
-    if (navigation.currentStep?.type === 'superset') {
-      if (navigation.isCurrentStepComplete) {
-        navigation.goToNext();
-      } else {
-        navigation.rotateSupersetActive();
-      }
-    } else {
-      navigation.goToNext();
-    }
-  };
-
-  const handleRpeSkip = () => {
-    setRpePromptExercise(null);
-
-    // Navigate after skip
-    if (navigation.currentStep?.type === 'superset') {
-      if (navigation.isCurrentStepComplete) {
-        navigation.goToNext();
-      } else {
-        navigation.rotateSupersetActive();
-      }
-    } else {
-      navigation.goToNext();
-    }
-  };
-
-
-
-  // Merge ad-hoc exercises from state with those derived from logged sets
-  const allAdHocExercises = useMemo(() => {
-    const names = new Set<string>();
-    const result: AdHocExercise[] = [];
-    for (const name of adHocSetsByName.keys()) {
-      if (!names.has(name)) {
-        names.add(name);
-        result.push({ tempId: `logged-${name}`, name });
-      }
-    }
-    for (const ex of adHocExercises) {
-      if (!names.has(ex.name)) {
-        names.add(ex.name);
-        result.push(ex);
-      }
-    }
-    return result;
-  }, [adHocSetsByName, adHocExercises]);
 
   // Calculate totals (only count standard sets for progress)
   const { totalSetsLogged, totalSetsTarget } = useMemo(() => {
@@ -299,7 +131,7 @@ export default function ActiveSession() {
       name,
       targetSets: 3,
       targetReps: '10',
-      orderIndex: 0, // Not used for ordering anymore
+      orderIndex: 0,
       supersetGroup: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -310,21 +142,7 @@ export default function ActiveSession() {
 
     // Insert directly into orderedExercises at current position
     const insertPos = navigation.getCurrentFlatIndex();
-    setOrderedExercises(prev => {
-      const newList = [...prev];
-      newList.splice(insertPos, 0, virtualExercise);
-      return newList;
-    });
-  };
-
-  // Handler for reordering exercises via dropdown
-  const handleMoveExercise = (fromIndex: number, toIndex: number) => {
-    setOrderedExercises(prev => {
-      const newList = [...prev];
-      const [moved] = newList.splice(fromIndex, 1);
-      newList.splice(toIndex, 0, moved);
-      return newList;
-    });
+    insertExerciseAt(virtualExercise, insertPos);
   };
 
   // Find exercise index in flat list for dropdown navigation
@@ -425,9 +243,8 @@ export default function ActiveSession() {
                   loggedSets={getSetsForExercise(exercise)}
                   previousHint={getPreviousHintForExercise(exercise)}
                   onLogSet={(data) => {
-                    // For ad-hoc exercises, use null exerciseId
                     const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-                    logSet({ ...data, exerciseId: exerciseIdForApi });
+                    handleLogSet({ ...data, exerciseId: exerciseIdForApi });
                   }}
                   onDeleteSet={deleteSet}
                   onUpdateSet={updateSet}
@@ -475,7 +292,7 @@ export default function ActiveSession() {
                               previousHint={getPreviousHintForExercise(exercise)}
                               onLogSet={(data) => {
                                 const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-                                logSet({ ...data, exerciseId: exerciseIdForApi });
+                                handleLogSet({ ...data, exerciseId: exerciseIdForApi });
                               }}
                               onDeleteSet={deleteSet}
                               onUpdateSet={updateSet}

@@ -13,7 +13,7 @@ interface UseExerciseNavigationOptions {
     sets: Set[];
 }
 
-interface UseExerciseNavigationResult {
+export interface UseExerciseNavigationResult {
     /** All navigation steps */
     steps: NavigationStep[];
     /** Current step index */
