@@ -225,7 +225,6 @@ backend/
 | GET | /api/sessions/history | List completed sessions |
 | GET | /api/sessions/stats | Summary statistics |
 | GET | /api/sessions/export-csv | Export history as CSV |
-| GET | /api/sessions/next-workout | Get next workout info |
 | POST | /api/sessions/start | Start new session |
 | POST | /api/sessions/:id/sets | Log a set |
 | PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE) |

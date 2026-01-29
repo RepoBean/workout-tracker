@@ -68,56 +68,6 @@ router.get('/history', async (req: Request, res: Response) => {
   }
 });
 
-// DEPRECATED: This endpoint violates "Smart Frontend, Dumb Backend".
-// Frontend should use calculateNextWorkout() from whatIsNext.ts instead.
-// Keeping for backwards compatibility but will be removed in future.
-// GET /api/sessions/next-workout - Get next workout for active program
-router.get('/next-workout', async (req: Request, res: Response) => {
-  try {
-    const activeProgram = await Program.findOne({
-      where: { isActive: true, isArchived: false },
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
-
-    if (!activeProgram) {
-      res.status(404).json({ error: 'No active program found' });
-      return;
-    }
-
-    const workouts = (activeProgram as ProgramWithWorkouts).workouts || [];
-    if (workouts.length === 0) {
-      res.status(404).json({ error: 'Active program has no workouts' });
-      return;
-    }
-
-    const nextIndex = activeProgram.currentWorkoutIndex % workouts.length;
-    const nextWorkout = workouts[nextIndex];
-
-    res.json({
-      program: {
-        id: activeProgram.id,
-        name: activeProgram.name,
-        currentWorkoutIndex: activeProgram.currentWorkoutIndex
-      },
-      workout: nextWorkout
-    });
-  } catch (error) {
-    console.error('Error fetching next workout:', error);
-    res.status(500).json({ error: 'Failed to fetch next workout' });
-  }
-});
-
 // GET /api/sessions/active - Find incomplete session for resume
 router.get('/active', async (req: Request, res: Response) => {
   try {
