@@ -10,6 +10,12 @@ export interface ExerciseSession {
     bestWeight: number;     // heaviest weight in this session
 }
 
+export interface WeeklyVolume {
+    weekStart: string;      // ISO date of Monday
+    weekLabel: string;      // e.g., "Jan 6"
+    totalVolume: number;    // sum of weight × reps for all sets
+}
+
 export interface UseProgressDataReturn {
     isLoading: boolean;
     error: Error | null;
@@ -21,6 +27,13 @@ export interface UseProgressDataReturn {
 
     // For chart/list
     getExerciseHistory: (name: string) => ExerciseSession[];
+
+    // For volume trends
+    weeklyVolumes: WeeklyVolume[];        // Last 12 weeks, oldest first
+    thisWeekVolume: number;
+    lastWeekVolume: number;
+    thisMonthVolume: number;
+    lastMonthVolume: number;
 }
 
 export function useProgressData(): UseProgressDataReturn {
@@ -113,6 +126,109 @@ export function useProgressData(): UseProgressDataReturn {
         };
     }, [sessions]);
 
+    // Helper: Get Monday (week start) for a given date
+    const getMonday = (date: Date): Date => {
+        const d = new Date(date);
+        const day = d.getDay();
+        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
+        d.setDate(diff);
+        d.setHours(0, 0, 0, 0);
+        return d;
+    };
+
+    // Helper: Format week label (e.g., "Jan 6")
+    const formatWeekLabel = (date: Date): string => {
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    // Calculate weekly volumes (last 12 weeks)
+    const weeklyVolumes = useMemo((): WeeklyVolume[] => {
+        if (!sessions) return [];
+
+        // Group sessions by week and calculate volume
+        const volumeByWeek = new Map<string, number>();
+
+        sessions.forEach((session: Session) => {
+            if (!session.completedAt) return;
+
+            const sessionDate = new Date(session.completedAt);
+            const monday = getMonday(sessionDate);
+            const weekKey = monday.toISOString().split('T')[0];
+
+            let sessionVolume = 0;
+            session.sets?.forEach((set: Set) => {
+                sessionVolume += set.weight * set.reps;
+            });
+
+            volumeByWeek.set(weekKey, (volumeByWeek.get(weekKey) || 0) + sessionVolume);
+        });
+
+        // Generate last 12 weeks
+        const today = new Date();
+        const currentMonday = getMonday(today);
+        const weeks: WeeklyVolume[] = [];
+
+        for (let i = 11; i >= 0; i--) {
+            const weekStart = new Date(currentMonday);
+            weekStart.setDate(weekStart.getDate() - (i * 7));
+            const weekKey = weekStart.toISOString().split('T')[0];
+
+            weeks.push({
+                weekStart: weekKey,
+                weekLabel: formatWeekLabel(weekStart),
+                totalVolume: volumeByWeek.get(weekKey) || 0,
+            });
+        }
+
+        return weeks;
+    }, [sessions]);
+
+    // Calculate current and previous week volumes
+    const { thisWeekVolume, lastWeekVolume } = useMemo(() => {
+        if (weeklyVolumes.length < 2) {
+            return { thisWeekVolume: 0, lastWeekVolume: 0 };
+        }
+        return {
+            thisWeekVolume: weeklyVolumes[weeklyVolumes.length - 1]?.totalVolume || 0,
+            lastWeekVolume: weeklyVolumes[weeklyVolumes.length - 2]?.totalVolume || 0,
+        };
+    }, [weeklyVolumes]);
+
+    // Calculate current and previous month volumes
+    const { thisMonthVolume, lastMonthVolume } = useMemo(() => {
+        if (!sessions) return { thisMonthVolume: 0, lastMonthVolume: 0 };
+
+        const now = new Date();
+        const thisMonth = now.getMonth();
+        const thisYear = now.getFullYear();
+        const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
+        const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
+
+        let thisMonthTotal = 0;
+        let lastMonthTotal = 0;
+
+        sessions.forEach((session: Session) => {
+            if (!session.completedAt) return;
+
+            const sessionDate = new Date(session.completedAt);
+            const sessionMonth = sessionDate.getMonth();
+            const sessionYear = sessionDate.getFullYear();
+
+            let sessionVolume = 0;
+            session.sets?.forEach((set: Set) => {
+                sessionVolume += set.weight * set.reps;
+            });
+
+            if (sessionMonth === thisMonth && sessionYear === thisYear) {
+                thisMonthTotal += sessionVolume;
+            } else if (sessionMonth === lastMonth && sessionYear === lastMonthYear) {
+                lastMonthTotal += sessionVolume;
+            }
+        });
+
+        return { thisMonthVolume: thisMonthTotal, lastMonthVolume: lastMonthTotal };
+    }, [sessions]);
+
     return {
         isLoading: historyLoading || programsLoading,
         error: historyError,
@@ -120,5 +236,11 @@ export function useProgressData(): UseProgressDataReturn {
         mostTrainedExercises,
         activeExercises,
         getExerciseHistory,
+        weeklyVolumes,
+        thisWeekVolume,
+        lastWeekVolume,
+        thisMonthVolume,
+        lastMonthVolume,
     };
 }
+
