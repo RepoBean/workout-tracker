@@ -23,6 +23,9 @@ export default function ActiveSession() {
   // State for ad-hoc exercises added to program workouts (virtual exercises with negative IDs)
   const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>([]);
 
+  // Single source of truth for exercise ordering
+  const [orderedExercises, setOrderedExercises] = useState<Exercise[]>([]);
+
   // Ref to hold the set-logged callback (allows passing to useActiveSession before navigation is available)
   const handleSetLoggedRef = useRef<(exerciseId: number | null, exerciseName: string) => void>(() => { });
 
@@ -121,14 +124,31 @@ export default function ActiveSession() {
       e => !reconstructedNames.has(e.name.toLowerCase())
     );
 
-    // Combine all exercises and sort by orderIndex
-    const combined = [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
-    return combined.sort((a, b) => a.orderIndex - b.orderIndex);
+    // Combine all exercises (no sorting - orderedExercises handles order)
+    return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
   }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
 
-  // Exercise navigation hook for focused view (non-ad-hoc sessions only)
+  // Initialize orderedExercises from mergedExercises (sorted by orderIndex) on first load
+  useEffect(() => {
+    if (orderedExercises.length === 0 && mergedExercises.length > 0) {
+      setOrderedExercises(
+        [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex)
+      );
+    }
+  }, [mergedExercises, orderedExercises.length]);
+
+  // Sync: add new exercises that appear in mergedExercises but not in orderedExercises
+  useEffect(() => {
+    const orderedIds = new Set(orderedExercises.map(e => e.id));
+    const newExercises = mergedExercises.filter(e => !orderedIds.has(e.id));
+    if (newExercises.length > 0) {
+      setOrderedExercises(prev => [...prev, ...newExercises]);
+    }
+  }, [mergedExercises, orderedExercises]);
+
+  // Exercise navigation hook for focused view (uses orderedExercises)
   const navigation = useExerciseNavigation({
-    exercises: mergedExercises,
+    exercises: orderedExercises,
     sets,
   });
 
@@ -271,46 +291,38 @@ export default function ActiveSession() {
     });
   };
 
-  // Calculate flat exercise index from current navigation step
-  const getCurrentFlatIndex = (): number => {
-    let index = 0;
-    for (let i = 0; i < navigation.currentStepIndex && i < navigation.steps.length; i++) {
-      const step = navigation.steps[i];
-      index += step.type === 'single' ? 1 : step.exercises.length;
-    }
-    return index;
-  };
-
   // Handler for adding an ad-hoc exercise to a program workout
   const handleAddExercise = (name: string) => {
-    const insertionIndex = getCurrentFlatIndex();
-
-    // Calculate orderIndex to place between surrounding program exercises
-    // Use fractional values to slot between existing exercises
-    const orderIndex = insertionIndex - 0.5; // Insert AT current position, not after
-
     const virtualExercise: Exercise = {
       id: -Date.now(),
       workoutId: 0,
       name,
       targetSets: 3,
       targetReps: '10',
-      orderIndex,
+      orderIndex: 0, // Not used for ordering anymore
       supersetGroup: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    // Insert at the calculated position in the ad-hoc array
-    setAdHocProgramExercises(prev => {
+    // Add to adHocProgramExercises (for reconstruction on session resume)
+    setAdHocProgramExercises(prev => [...prev, virtualExercise]);
+
+    // Insert directly into orderedExercises at current position
+    const insertPos = navigation.getCurrentFlatIndex();
+    setOrderedExercises(prev => {
       const newList = [...prev];
-      // Find where to insert based on orderIndex
-      const insertPos = newList.findIndex(ex => ex.orderIndex > orderIndex);
-      if (insertPos === -1) {
-        newList.push(virtualExercise);
-      } else {
-        newList.splice(insertPos, 0, virtualExercise);
-      }
+      newList.splice(insertPos, 0, virtualExercise);
+      return newList;
+    });
+  };
+
+  // Handler for reordering exercises via dropdown
+  const handleMoveExercise = (fromIndex: number, toIndex: number) => {
+    setOrderedExercises(prev => {
+      const newList = [...prev];
+      const [moved] = newList.splice(fromIndex, 1);
+      newList.splice(toIndex, 0, moved);
       return newList;
     });
   };
@@ -517,7 +529,7 @@ export default function ActiveSession() {
           {/* Exercise list dropdown (below up next) */}
           <div className="mt-4">
             <ExerciseListDropdown
-              exercises={mergedExercises}
+              exercises={orderedExercises}
               currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
               getExerciseProgress={navigation.getExerciseProgress}
               isExerciseComplete={navigation.isExerciseComplete}
@@ -534,7 +546,7 @@ export default function ActiveSession() {
                   count += stepSize;
                 }
               }}
-              onMoveExercise={navigation.moveExercise}
+              onMoveExercise={handleMoveExercise}
             />
           </div>
 

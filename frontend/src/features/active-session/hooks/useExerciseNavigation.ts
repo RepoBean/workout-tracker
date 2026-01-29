@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import type { Exercise, Set } from '../../../shared/api/types';
 
 /**
@@ -30,10 +30,8 @@ interface UseExerciseNavigationResult {
     goToPrevious: () => void;
     /** Jump to a specific step */
     goToStep: (index: number) => void;
-    /** Reorder exercises (session-local only) */
-    moveExercise: (fromIndex: number, toIndex: number) => void;
-    /** Insert a new exercise at current position */
-    insertExercise: (exercise: Exercise) => void;
+    /** Get the flat exercise index for the current step (for insertion) */
+    getCurrentFlatIndex: () => number;
     /** Advance to next exercise in superset (called after logging a set) */
     rotateSupersetActive: () => void;
     /** Check if exercise is complete (all target sets logged) */
@@ -56,11 +54,6 @@ export function useExerciseNavigation({
     exercises: initialExercises,
     sets,
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
-    // Local exercise order (for session-only reordering)
-    const [exerciseOrder, setExerciseOrder] = useState<number[]>(() =>
-        initialExercises.map(e => e.id)
-    );
-
     const [currentStepIndex, setCurrentStepIndex] = useState(0);
     const [supersetActiveIndex, setSupersetActiveIndex] = useState(0);
 
@@ -73,56 +66,15 @@ export function useExerciseNavigation({
         return map;
     }, [initialExercises]);
 
-    // Sync exerciseOrder when initialExercises changes (to pick up dynamically added exercises)
-    useEffect(() => {
-        setExerciseOrder(current => {
-            const currentIds = new Set(current);
-            const newExercises = initialExercises.filter(ex => !currentIds.has(ex.id));
-            if (newExercises.length === 0) {
-                return current;
-            }
+    // Note: initialExercises is already ordered by the parent component
 
-            // Insert new exercises at positions based on their orderIndex
-            const newOrder = [...current];
-            for (const newEx of newExercises) {
-                // Find the right position: after all exercises with lower orderIndex
-                let insertPos = 0;
-                for (let i = 0; i < newOrder.length; i++) {
-                    const existingEx = initialExercises.find(e => e.id === newOrder[i]);
-                    if (existingEx && existingEx.orderIndex < newEx.orderIndex) {
-                        insertPos = i + 1;
-                    }
-                }
-                newOrder.splice(insertPos, 0, newEx.id);
-            }
-            return newOrder;
-        });
-    }, [initialExercises]);
-
-    // Ordered exercises based on local order
-    const orderedExercises = useMemo(() => {
-        // Start with the current order, filter to only include exercises that still exist
-        const ordered: Exercise[] = [];
-        for (const id of exerciseOrder) {
-            const ex = exerciseMap.get(id);
-            if (ex) ordered.push(ex);
-        }
-        // Add any new exercises not in the order
-        for (const ex of initialExercises) {
-            if (!exerciseOrder.includes(ex.id)) {
-                ordered.push(ex);
-            }
-        }
-        return ordered;
-    }, [exerciseOrder, exerciseMap, initialExercises]);
-
-    // Build navigation steps from ordered exercises
+    // Build navigation steps from exercises (already ordered by parent)
     const steps = useMemo(() => {
         const result: NavigationStep[] = [];
         let i = 0;
 
-        while (i < orderedExercises.length) {
-            const exercise = orderedExercises[i];
+        while (i < initialExercises.length) {
+            const exercise = initialExercises[i];
 
             // Check if this starts a superset group
             if (exercise.supersetGroup) {
@@ -131,8 +83,8 @@ export function useExerciseNavigation({
 
                 // Collect consecutive exercises with the same supersetGroup
                 let j = i + 1;
-                while (j < orderedExercises.length && orderedExercises[j].supersetGroup === group) {
-                    supersetExercises.push(orderedExercises[j]);
+                while (j < initialExercises.length && initialExercises[j].supersetGroup === group) {
+                    supersetExercises.push(initialExercises[j]);
                     j++;
                 }
 
@@ -149,7 +101,7 @@ export function useExerciseNavigation({
         }
 
         return result;
-    }, [orderedExercises]);
+    }, [initialExercises]);
 
     // Get sets for a specific exercise (only standard sets, sorted)
     // For ad-hoc exercises (negative ID), look up by exerciseName
@@ -255,36 +207,14 @@ export function useExerciseNavigation({
         }
     }, [steps.length]);
 
-    // Reorder exercises
-    const moveExercise = useCallback((fromIndex: number, toIndex: number) => {
-        setExerciseOrder(current => {
-            const newOrder = [...current];
-            const [moved] = newOrder.splice(fromIndex, 1);
-            newOrder.splice(toIndex, 0, moved);
-            return newOrder;
-        });
-    }, []);
-
-    // Insert a new exercise at the current position
-    const insertExercise = useCallback((exercise: Exercise) => {
-        setExerciseOrder(current => {
-            // If already in the order, don't duplicate
-            if (current.includes(exercise.id)) {
-                return current;
-            }
-
-            // Calculate the flat exercise index for current step
-            let insertPosition = 0;
-            for (let i = 0; i < currentStepIndex && i < steps.length; i++) {
-                const step = steps[i];
-                insertPosition += step.type === 'single' ? 1 : step.exercises.length;
-            }
-
-            // Insert at the calculated position
-            const newOrder = [...current];
-            newOrder.splice(insertPosition, 0, exercise.id);
-            return newOrder;
-        });
+    // Get the flat exercise index for the current step (for parent's insertion logic)
+    const getCurrentFlatIndex = useCallback((): number => {
+        let index = 0;
+        for (let i = 0; i < currentStepIndex && i < steps.length; i++) {
+            const step = steps[i];
+            index += step.type === 'single' ? 1 : step.exercises.length;
+        }
+        return index;
     }, [currentStepIndex, steps]);
 
     // Rotate superset active index (called after logging a set)
@@ -304,8 +234,7 @@ export function useExerciseNavigation({
         goToNext,
         goToPrevious,
         goToStep,
-        moveExercise,
-        insertExercise,
+        getCurrentFlatIndex,
         rotateSupersetActive,
         isExerciseComplete,
         isCurrentStepComplete,
