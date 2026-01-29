@@ -115,7 +115,10 @@ export default function ActiveSession() {
     const newAdHoc = adHocProgramExercises.filter(
       e => !reconstructedNames.has(e.name.toLowerCase())
     );
-    return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
+
+    // Combine all exercises and sort by orderIndex
+    const combined = [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
+    return combined.sort((a, b) => a.orderIndex - b.orderIndex);
   }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
 
   // Exercise navigation hook for focused view (non-ad-hoc sessions only)
@@ -263,23 +266,48 @@ export default function ActiveSession() {
     });
   };
 
+  // Calculate flat exercise index from current navigation step
+  const getCurrentFlatIndex = (): number => {
+    let index = 0;
+    for (let i = 0; i < navigation.currentStepIndex && i < navigation.steps.length; i++) {
+      const step = navigation.steps[i];
+      index += step.type === 'single' ? 1 : step.exercises.length;
+    }
+    return index;
+  };
+
   // Handler for adding an ad-hoc exercise to a program workout
   const handleAddExercise = (name: string) => {
-    // Create virtual exercise with negative ID to identify as ad-hoc
+    const insertionIndex = getCurrentFlatIndex();
+
+    // Calculate orderIndex to place between surrounding program exercises
+    // Use fractional values to slot between existing exercises
+    const orderIndex = insertionIndex + 0.5; // Fractional to sort between integers
+
     const virtualExercise: Exercise = {
       id: -Date.now(),
       workoutId: 0,
       name,
       targetSets: 3,
       targetReps: '10',
-      orderIndex: navigation.currentStepIndex,
+      orderIndex,
       supersetGroup: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    setAdHocProgramExercises(prev => [...prev, virtualExercise]);
-    navigation.insertExercise(virtualExercise);
+    // Insert at the calculated position in the ad-hoc array
+    setAdHocProgramExercises(prev => {
+      const newList = [...prev];
+      // Find where to insert based on orderIndex
+      const insertPos = newList.findIndex(ex => ex.orderIndex > orderIndex);
+      if (insertPos === -1) {
+        newList.push(virtualExercise);
+      } else {
+        newList.splice(insertPos, 0, virtualExercise);
+      }
+      return newList;
+    });
   };
 
   // Find exercise index in flat list for dropdown navigation

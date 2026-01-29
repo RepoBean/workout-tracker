@@ -78,11 +78,24 @@ export function useExerciseNavigation({
         setExerciseOrder(current => {
             const currentIds = new Set(current);
             const newExercises = initialExercises.filter(ex => !currentIds.has(ex.id));
-            if (newExercises.length > 0) {
-                // Append new exercises to the end (they'll be inserted at correct position by insertExercise)
-                return [...current, ...newExercises.map(ex => ex.id)];
+            if (newExercises.length === 0) {
+                return current;
             }
-            return current;
+
+            // Insert new exercises at positions based on their orderIndex
+            const newOrder = [...current];
+            for (const newEx of newExercises) {
+                // Find the right position: after all exercises with lower orderIndex
+                let insertPos = 0;
+                for (let i = 0; i < newOrder.length; i++) {
+                    const existingEx = initialExercises.find(e => e.id === newOrder[i]);
+                    if (existingEx && existingEx.orderIndex < newEx.orderIndex) {
+                        insertPos = i + 1;
+                    }
+                }
+                newOrder.splice(insertPos, 0, newEx.id);
+            }
+            return newOrder;
         });
     }, [initialExercises]);
 
