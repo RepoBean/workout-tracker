@@ -82,7 +82,7 @@ export default function ActiveSession() {
   const handleLogSet = (data: Parameters<typeof logSet>[0]) => {
     logSet(data, {
       onSuccess: () => {
-        handleSetLogged(data.exerciseId ?? null, data.exerciseName);
+        handleSetLogged(data.exerciseId ?? null, data.exerciseName, data.dropIndex ?? 0);
       },
     });
   };

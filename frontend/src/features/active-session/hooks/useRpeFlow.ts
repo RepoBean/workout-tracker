@@ -10,7 +10,7 @@ interface UseRpeFlowParams {
 
 interface UseRpeFlowResult {
     rpePromptExercise: { id: number; name: string } | null;
-    handleSetLogged: (exerciseId: number | null, exerciseName: string) => void;
+    handleSetLogged: (exerciseId: number | null, exerciseName: string, dropIndex: number) => void;
     handleRpeSubmit: (rpe: number) => void;
     handleRpeSkip: () => void;
 }
@@ -36,7 +36,7 @@ export function useRpeFlow({
         }
     }, [navigation]);
 
-    const handleSetLogged = useCallback((exerciseId: number | null, exerciseName: string) => {
+    const handleSetLogged = useCallback((exerciseId: number | null, exerciseName: string, dropIndex: number) => {
         const exercise = exerciseId !== null
             ? mergedExercises.find(e => e.id === exerciseId)
             : mergedExercises.find(e => e.name === exerciseName);
@@ -44,7 +44,11 @@ export function useRpeFlow({
         if (!exercise) return;
 
         const wasComplete = completedExercisesRef.current.has(exercise.id);
-        const isNowComplete = navigation.isExerciseComplete(exercise.id);
+
+        // Predictive check: current count + 1 if we just logged a standard set
+        const { logged, target } = navigation.getExerciseProgress(exercise.id);
+        const effectiveCount = dropIndex === 0 ? logged + 1 : logged;
+        const isNowComplete = effectiveCount >= target;
 
         if (!wasComplete && isNowComplete) {
             completedExercisesRef.current.add(exercise.id);
@@ -53,13 +57,29 @@ export function useRpeFlow({
         }
 
         // Not newly complete — handle rotation/advance
+        // Compute step completion predictively
+        const isStepEffectivelyComplete = (() => {
+            if (!navigation.currentStep) return true;
+            if (navigation.currentStep.type === 'single') {
+                return effectiveCount >= target;
+            } else {
+                // Superset: all exercises must be complete
+                return navigation.currentStep.exercises.every(ex => {
+                    if (ex.id === exercise.id) {
+                        return effectiveCount >= target;
+                    }
+                    return navigation.isExerciseComplete(ex.id);
+                });
+            }
+        })();
+
         if (navigation.currentStep?.type === 'superset') {
-            if (navigation.isCurrentStepComplete) {
+            if (isStepEffectivelyComplete) {
                 navigation.goToNext();
             } else {
                 navigation.rotateSupersetActive();
             }
-        } else if (navigation.isCurrentStepComplete) {
+        } else if (isStepEffectivelyComplete) {
             navigation.goToNext();
         }
     }, [mergedExercises, navigation]);
