@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import Dashboard from './features/dashboard';
 import ProgramBuilder from './features/program-builder';
+import Progress from './features/progress';
 import ActiveSession from './features/active-session';
 import History from './features/history';
 import { TimerIndicator } from './shared/ui/TimerIndicator';
@@ -16,8 +17,8 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
     <Link
       to={to}
       className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
-          ? 'bg-primary-600 text-white'
-          : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
+        ? 'bg-primary-600 text-white'
+        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
         }`}
     >
       {children}
@@ -37,6 +38,7 @@ function Navigation() {
           <div className="flex gap-1">
             <NavLink to="/">Home</NavLink>
             <NavLink to="/programs">Programs</NavLink>
+            <NavLink to="/progress">Progress</NavLink>
             <NavLink to="/history">History</NavLink>
           </div>
         </div>
@@ -87,6 +89,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Dashboard />} />
               <Route path="/programs" element={<ProgramBuilder />} />
+              <Route path="/progress" element={<Progress />} />
               <Route
                 path="/workout/:id"
                 element={

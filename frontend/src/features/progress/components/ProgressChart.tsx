@@ -1,0 +1,93 @@
+import {
+    ResponsiveContainer,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    Tooltip,
+} from 'recharts';
+
+interface ChartDataPoint {
+    date: string;
+    weight: number;
+    displayDate: string;
+}
+
+interface ProgressChartProps {
+    data: Array<{ date: string; weight: number }>;
+    exerciseName: string;
+}
+
+function formatDate(dateString: string): string {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatShortDate(dateString: string): string {
+    const date = new Date(dateString);
+    return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+export function ProgressChart({ data, exerciseName }: ProgressChartProps) {
+    if (data.length === 0) {
+        return (
+            <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
+                No data for this exercise yet
+            </div>
+        );
+    }
+
+    const chartData: ChartDataPoint[] = data.map(d => ({
+        date: d.date,
+        weight: d.weight,
+        displayDate: formatShortDate(d.date),
+    }));
+
+    return (
+        <div className="h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <XAxis
+                        dataKey="displayDate"
+                        tick={{ fontSize: 12 }}
+                        stroke="#9ca3af"
+                    />
+                    <YAxis
+                        tick={{ fontSize: 12 }}
+                        stroke="#9ca3af"
+                        domain={['auto', 'auto']}
+                        tickFormatter={(value) => `${value}`}
+                    />
+                    <Tooltip
+                        formatter={(value: number | undefined) => {
+                            if (value !== undefined) {
+                                return [`${value} lbs`, exerciseName];
+                            }
+                            return undefined; // Or handle as appropriate for your UI
+                        }}
+                        labelFormatter={(label, payload) => {
+                            if (payload && payload[0]) {
+                                return formatDate(payload[0].payload.date);
+                            }
+                            return label;
+                        }}
+                        contentStyle={{
+                            backgroundColor: 'var(--tooltip-bg, #fff)',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                        }}
+                    />
+                    <Line
+                        type="monotone"
+                        dataKey="weight"
+                        stroke="#4f46e5"
+                        strokeWidth={2}
+                        dot={{ fill: '#4f46e5', strokeWidth: 0, r: 4 }}
+                        activeDot={{ r: 6, fill: '#4f46e5' }}
+                    />
+                </LineChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}

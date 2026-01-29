@@ -22,6 +22,7 @@ export const queryKeys = {
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   stats: ['stats'] as const,
+  progressHistory: ['progressHistory'] as const,
 };
 
 // ============================================
