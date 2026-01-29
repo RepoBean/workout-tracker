@@ -5,6 +5,8 @@ import ActiveSession from './features/active-session';
 import History from './features/history';
 import { TimerIndicator } from './shared/ui/TimerIndicator';
 import { useOffline } from './shared/context/OfflineContext';
+import { ErrorBoundary } from './shared/ui/ErrorBoundary';
+import { Button } from './shared/ui/Button';
 
 function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   const location = useLocation();
@@ -13,11 +15,10 @@ function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <Link
       to={to}
-      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-        isActive
+      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
           ? 'bg-primary-600 text-white'
           : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-      }`}
+        }`}
     >
       {children}
     </Link>
@@ -54,6 +55,27 @@ function OfflineBanner() {
   );
 }
 
+function WorkoutErrorFallback() {
+  return (
+    <div className="card max-w-md mx-auto text-center">
+      <h2 className="text-xl font-bold text-red-600 dark:text-red-400 mb-2">
+        Workout Error
+      </h2>
+      <p className="text-gray-600 dark:text-gray-400 mb-4">
+        Something went wrong during your workout. Your logged sets have been saved.
+      </p>
+      <div className="flex gap-2 justify-center">
+        <Button variant="secondary" onClick={() => window.location.href = '/'}>
+          Go Home
+        </Button>
+        <Button variant="primary" onClick={() => window.location.reload()}>
+          Reload
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -61,12 +83,21 @@ function App() {
         <Navigation />
         <OfflineBanner />
         <main className="container mx-auto px-4 py-6">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/programs" element={<ProgramBuilder />} />
-            <Route path="/workout/:id" element={<ActiveSession />} />
-            <Route path="/history" element={<History />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/programs" element={<ProgramBuilder />} />
+              <Route
+                path="/workout/:id"
+                element={
+                  <ErrorBoundary fallback={<WorkoutErrorFallback />}>
+                    <ActiveSession />
+                  </ErrorBoundary>
+                }
+              />
+              <Route path="/history" element={<History />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </BrowserRouter>

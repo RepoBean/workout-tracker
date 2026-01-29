@@ -72,3 +72,35 @@ export const validateParams = (schema: ZodSchema) => {
     }
   };
 };
+
+// ============================================
+// Validation Schemas
+// ============================================
+
+import { z } from 'zod';
+
+// Numeric ID param schema
+export const idParamSchema = z.object({
+  id: z.string().regex(/^\d+$/, 'Invalid ID').transform(Number),
+});
+
+// Session + Set ID params schema
+export const sessionSetParamsSchema = z.object({
+  id: z.string().regex(/^\d+$/, 'Invalid session ID').transform(Number),
+  setId: z.string().regex(/^\d+$/, 'Invalid set ID').transform(Number),
+});
+
+// Pagination query schema
+export const paginationQuerySchema = z.object({
+  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)).optional(),
+  offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)).optional(),
+});
+
+// Helper to validate and parse params
+export function parseParams<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; error: string } {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    return { success: false, error: result.error.errors[0]?.message || 'Invalid parameters' };
+  }
+  return { success: true, data: result.data };
+}
