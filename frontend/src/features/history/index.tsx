@@ -1,9 +1,12 @@
+import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../shared/ui/Button';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
 import { useSessionHistory, useDeleteSession } from './hooks/useHistory';
 import { SessionCard } from './components/SessionCard';
 
 export default function History() {
+  const [searchParams] = useSearchParams();
+  const highlightSessionId = searchParams.get('sessionId');
   const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory();
   const deleteSession = useDeleteSession();
 
@@ -68,6 +71,7 @@ export default function History() {
         >
           <SessionCard
             session={session}
+            highlightId={highlightSessionId}
             onDelete={() => {
               if (confirm(`Delete "${session.workoutName}" session?`)) {
                 deleteSession.mutate(session.id);

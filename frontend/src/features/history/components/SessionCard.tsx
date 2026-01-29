@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Session, Set } from '../../../shared/api/types';
 
 interface SessionCardProps {
   session: Session;
+  highlightId?: string | null;
   onDelete?: () => void;
 }
 
@@ -37,8 +38,17 @@ interface ExerciseGroup {
   sets: Set[];
 }
 
-export function SessionCard({ session, onDelete }: SessionCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function SessionCard({ session, highlightId, onDelete }: SessionCardProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [isExpanded, setIsExpanded] = useState(
+    highlightId ? session.id === Number(highlightId) : false
+  );
+
+  useEffect(() => {
+    if (highlightId && session.id === Number(highlightId) && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [highlightId, session.id]);
 
   const stats = useMemo(() => {
     const sets = session.sets || [];
@@ -77,6 +87,7 @@ export function SessionCard({ session, onDelete }: SessionCardProps) {
 
   return (
     <div
+      ref={cardRef}
       className="card cursor-pointer"
       onClick={() => setIsExpanded(!isExpanded)}
     >
@@ -122,9 +133,8 @@ export function SessionCard({ session, onDelete }: SessionCardProps) {
                 {group.sets.map((set) => (
                   <div
                     key={set.id}
-                    className={`text-xs flex items-center gap-2 ${
-                      set.dropIndex > 0 ? 'ml-4 text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'
-                    }`}
+                    className={`text-xs flex items-center gap-2 ${set.dropIndex > 0 ? 'ml-4 text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'
+                      }`}
                   >
                     <span className="w-12">
                       {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
@@ -138,7 +148,7 @@ export function SessionCard({ session, onDelete }: SessionCardProps) {
               </div>
             </div>
           ))}
-        {onDelete && (
+          {onDelete && (
             <button
               onClick={(e) => {
                 e.stopPropagation();

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCalendarSessions } from '../../../shared/api/queries';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -11,21 +12,28 @@ export function Calendar() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
+  const navigate = useNavigate();
 
   const { data: sessions, isLoading } = useCalendarSessions(year, month);
 
-  const workoutDays = useMemo(() => {
-    if (!sessions) return new Set<number>();
+  const { workoutDays, sessionByDay } = useMemo(() => {
     const days = new Set<number>();
+    const sessionMap = new Map<number, number>(); // day -> sessionId
+    if (!sessions) return { workoutDays: days, sessionByDay: sessionMap };
+
     for (const session of sessions) {
       if (session.completedAt) {
         const date = new Date(session.completedAt);
         if (date.getMonth() === month && date.getFullYear() === year) {
-          days.add(date.getDate());
+          const day = date.getDate();
+          days.add(day);
+          if (!sessionMap.has(day)) {
+            sessionMap.set(day, session.id); // first session wins
+          }
         }
       }
     }
-    return days;
+    return { workoutDays: days, sessionByDay: sessionMap };
   }, [sessions, month, year]);
 
   const calendarDays = useMemo(() => {
@@ -124,21 +132,24 @@ export function Calendar() {
           const hasWorkout = isCurrentMonth && workoutDays.has(day);
           const today = isToday(day, isCurrentMonth);
 
+          const handleDayClick = hasWorkout
+            ? () => navigate(`/history?sessionId=${sessionByDay.get(day)}`)
+            : undefined;
+
           return (
             <div
               key={index}
-              className={`relative flex flex-col items-center py-1.5 text-sm ${
-                isCurrentMonth
-                  ? 'text-gray-900 dark:text-gray-100'
-                  : 'text-gray-300 dark:text-gray-600'
-              }`}
+              className={`relative flex flex-col items-center py-1.5 text-sm ${isCurrentMonth
+                ? 'text-gray-900 dark:text-gray-100'
+                : 'text-gray-300 dark:text-gray-600'
+                } ${hasWorkout ? 'cursor-pointer' : ''}`}
+              onClick={handleDayClick}
             >
               <span
-                className={`w-7 h-7 flex items-center justify-center rounded-full ${
-                  today
-                    ? 'ring-2 ring-primary-600 font-bold'
-                    : ''
-                }`}
+                className={`w-7 h-7 flex items-center justify-center rounded-full ${today
+                  ? 'ring-2 ring-primary-600 font-bold'
+                  : ''
+                  }`}
               >
                 {day}
               </span>
