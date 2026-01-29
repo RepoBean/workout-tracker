@@ -97,15 +97,21 @@ src/
 │   │   │   ├── RestTimer.tsx      # Timer display + controls
 │   │   │   ├── PlateCalculator.tsx
 │   │   │   ├── SessionHeader.tsx
-│   │   │   └── AddExercise.tsx
+│   │   │   ├── AddExercise.tsx
+│   │   │   ├── ExerciseListDropdown.tsx  # Exercise picker + drag reorder
+│   │   │   └── RpePrompt.tsx      # Post-exercise RPE modal
 │   │   ├── hooks/
-│   │   │   ├── useActiveSession.ts # Session state + optimistic updates
-│   │   │   ├── usePreviousData.ts  # Cached previous weights/reps
-│   │   │   └── useStartSession.ts  # Session initialization
+│   │   │   ├── useActiveSession.ts    # Session state + optimistic updates
+│   │   │   ├── usePreviousData.ts     # Cached previous weights/reps
+│   │   │   ├── useStartSession.ts     # Session initialization
+│   │   │   ├── useExerciseNavigation.ts # Focused view navigation + supersets
+│   │   │   ├── useAdHocExercises.ts   # Ad-hoc exercise state + set lookups
+│   │   │   ├── useExerciseOrdering.ts # Single source of truth for order
+│   │   │   └── useRpeFlow.ts          # RPE prompt orchestration
 │   │   ├── logic/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   └── plates.ts          # Plate calculator math
-│   │   └── index.tsx              # WorkoutSession page entry
+│   │   └── index.tsx              # WorkoutSession page entry (~475 lines)
 │   │
 │   ├── program-builder/           # Program/workout/exercise CRUD
 │   │   ├── components/
@@ -139,7 +145,8 @@ src/
 │   │   ├── Modal.tsx
 │   │   ├── Toast.tsx
 │   │   ├── SwipeableRow.tsx
-│   │   └── TimerIndicator.tsx
+│   │   ├── TimerIndicator.tsx
+│   │   └── ErrorBoundary.tsx      # Crash protection wrapper
 │   ├── api/
 │   │   ├── client.ts              # Axios instance, error handling
 │   │   ├── types.ts               # Shared API request/response types
@@ -347,6 +354,10 @@ All query keys defined in the `queryKeys` object in `shared/api/queries.ts`. Arr
 `const toast = useToast()` then `toast.success('message')` or `toast.error('message')`. Never use raw `alert()`.
 Reference: `shared/ui/Toast.tsx`
 
+### Error Boundary
+Wrap route components with `<ErrorBoundary>` to catch render errors. Use custom `fallback` prop for context-specific error UI.
+Reference: `shared/ui/ErrorBoundary.tsx`, `App.tsx`
+
 ---
 
 ## Development Setup
@@ -381,6 +392,9 @@ cd frontend && npm run dev   # localhost:5174
 | 2ddc1b9 | Feature: Delete session from history (swipe + button) |
 | — | UX Overhaul: focused exercise view, per-exercise RPE, inline set editing, ad-hoc picker |
 | e241939 | Feature: Add exercise mid-workout with history auto-population |
+| 273bbb7 | Cleanup: Remove deprecated /next-workout endpoint, fix UpdateProgramRequest type |
+| 397903e | Resilience: Add ErrorBoundary, backend param validation |
+| bb0d4a5 | Refactor: Extract focused hooks from ActiveSession (useAdHocExercises, useExerciseOrdering, useRpeFlow) |
 
 ---
 
