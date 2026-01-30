@@ -12,19 +12,31 @@ function formatSetSummary(sets: ExerciseSession['sets']): string {
     if (sets.length === 0) return '';
 
     const weights = sets.map(s => s.weight);
+    const reps = sets.map(s => s.reps);
     const minWeight = Math.min(...weights);
     const maxWeight = Math.max(...weights);
+    const minReps = Math.min(...reps);
+    const maxReps = Math.max(...reps);
 
-    if (minWeight === maxWeight) {
-        return `${sets.length} sets, ${minWeight} lbs`;
-    }
-    return `${sets.length} sets, ${minWeight}-${maxWeight} lbs`;
+    const weightStr = minWeight === maxWeight
+        ? `${minWeight} lbs`
+        : `${minWeight}-${maxWeight} lbs`;
+
+    const repStr = minReps === maxReps
+        ? `${minReps} reps`
+        : `${minReps}-${maxReps} reps`;
+
+    return `${sets.length} sets × ${repStr} @ ${weightStr}`;
 }
+
+
+type ChartMetric = 'volume' | '1rm' | 'weight';
 
 export function ExerciseProgressTab() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedExercise, setSelectedExercise] = useState<string | null>(null);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [chartMetric, setChartMetric] = useState<ChartMetric>('1rm');
     const inputRef = useRef<HTMLInputElement>(null);
 
     const { data: suggestions } = useExerciseSuggestions(searchQuery);
@@ -52,7 +64,9 @@ export function ExerciseProgressTab() {
     const exerciseHistory = selectedExercise ? getExerciseHistory(selectedExercise) : [];
     const chartData = exerciseHistory.map(session => ({
         date: session.date,
-        weight: session.bestWeight,
+        value: chartMetric === 'volume' ? session.bestVolume
+            : chartMetric === '1rm' ? session.bestEstimated1RM
+                : session.bestWeight,
     }));
 
     if (isLoading) {
@@ -159,7 +173,33 @@ export function ExerciseProgressTab() {
                                 Clear
                             </button>
                         </div>
-                        <ProgressChart data={chartData} exerciseName={selectedExercise} />
+
+                        {/* Metric Toggle */}
+                        <div className="flex justify-center mb-6">
+                            <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                                {(['volume', '1rm', 'weight'] as const).map(metric => (
+                                    <button
+                                        key={metric}
+                                        onClick={() => setChartMetric(metric)}
+                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors
+                                            ${chartMetric === metric
+                                                ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-white shadow-sm'
+                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+                                            }`}
+                                    >
+                                        {metric === 'volume' ? 'Volume'
+                                            : metric === '1rm' ? 'Est. 1RM'
+                                                : 'Weight'}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <ProgressChart
+                            data={chartData}
+                            exerciseName={selectedExercise}
+                            metric={chartMetric}
+                        />
                     </div>
 
                     {/* Session history list */}

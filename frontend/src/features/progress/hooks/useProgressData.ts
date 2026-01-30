@@ -8,6 +8,8 @@ export interface ExerciseSession {
     workoutName: string;
     sets: Array<{ weight: number; reps: number; setNumber: number }>;
     bestWeight: number;     // heaviest weight in this session
+    bestVolume: number;     // highest (weight × reps) from a single set
+    bestEstimated1RM: number; // Epley: weight × (1 + reps/30) from best volume set
 }
 
 export interface WeeklyVolume {
@@ -119,6 +121,19 @@ export function useProgressData(): UseProgressDataReturn {
                 const weights = exerciseSets.map(s => s.weight);
                 const bestWeight = Math.max(...weights);
 
+                // Calculate best volume and estimated 1RM
+                let bestVolume = 0;
+                let bestEstimated1RM = 0;
+
+                exerciseSets.forEach(set => {
+                    const volume = set.weight * set.reps;
+                    if (volume > bestVolume) {
+                        bestVolume = volume;
+                        // Epley formula based on the best volume set
+                        bestEstimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                    }
+                });
+
                 result.push({
                     sessionId: session.id,
                     date: session.completedAt,
@@ -129,6 +144,8 @@ export function useProgressData(): UseProgressDataReturn {
                         setNumber: s.setNumber,
                     })),
                     bestWeight,
+                    bestVolume,
+                    bestEstimated1RM,
                 });
             });
 

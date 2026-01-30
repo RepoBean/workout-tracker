@@ -9,13 +9,14 @@ import {
 
 interface ChartDataPoint {
     date: string;
-    weight: number;
+    value: number;
     displayDate: string;
 }
 
 interface ProgressChartProps {
-    data: Array<{ date: string; weight: number }>;
+    data: Array<{ date: string; value: number }>;
     exerciseName: string;
+    metric: 'volume' | '1rm' | 'weight';
 }
 
 function formatDate(dateString: string): string {
@@ -28,7 +29,7 @@ function formatShortDate(dateString: string): string {
     return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export function ProgressChart({ data, exerciseName }: ProgressChartProps) {
+export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps) {
     if (data.length === 0) {
         return (
             <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
@@ -39,9 +40,11 @@ export function ProgressChart({ data, exerciseName }: ProgressChartProps) {
 
     const chartData: ChartDataPoint[] = data.map(d => ({
         date: d.date,
-        weight: d.weight,
+        value: d.value,
         displayDate: formatShortDate(d.date),
     }));
+
+    const unit = metric === 'volume' ? 'vol' : 'lbs';
 
     return (
         <div className="h-[250px]">
@@ -61,7 +64,7 @@ export function ProgressChart({ data, exerciseName }: ProgressChartProps) {
                     <Tooltip
                         formatter={(value: number | undefined) => {
                             if (value !== undefined) {
-                                return [`${value} lbs`, exerciseName];
+                                return [`${value} ${unit}`, exerciseName];
                             }
                             return undefined; // Or handle as appropriate for your UI
                         }}
@@ -80,7 +83,7 @@ export function ProgressChart({ data, exerciseName }: ProgressChartProps) {
                     />
                     <Line
                         type="monotone"
-                        dataKey="weight"
+                        dataKey="value"
                         stroke="#4f46e5"
                         strokeWidth={2}
                         dot={{ fill: '#4f46e5', strokeWidth: 0, r: 4 }}
