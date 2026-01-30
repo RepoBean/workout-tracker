@@ -16,6 +16,16 @@ export interface WeeklyVolume {
     totalVolume: number;    // sum of weight × reps for all sets
 }
 
+export interface PersonalRecord {
+    exerciseName: string;
+    bestVolume: number;           // weight × reps
+    bestVolumeWeight: number;     // weight of that set
+    bestVolumeReps: number;       // reps of that set
+    bestVolumeDate: string;       // when achieved (ISO date string)
+    estimated1RM: number;         // Epley formula: weight × (1 + reps / 30)
+    isRecentPR: boolean;          // achieved in last 30 days
+}
+
 export interface UseProgressDataReturn {
     isLoading: boolean;
     error: Error | null;
@@ -34,6 +44,9 @@ export interface UseProgressDataReturn {
     lastWeekVolume: number;
     thisMonthVolume: number;
     lastMonthVolume: number;
+
+    // For personal records
+    personalRecords: PersonalRecord[];    // Best set per exercise, sorted by 1RM desc
 }
 
 export function useProgressData(): UseProgressDataReturn {
@@ -229,6 +242,64 @@ export function useProgressData(): UseProgressDataReturn {
         return { thisMonthVolume: thisMonthTotal, lastMonthVolume: lastMonthTotal };
     }, [sessions]);
 
+    // Calculate personal records (best volume set per exercise)
+    const personalRecords = useMemo((): PersonalRecord[] => {
+        if (!sessions) return [];
+
+        // Track best set per exercise
+        const bestByExercise = new Map<string, {
+            volume: number;
+            weight: number;
+            reps: number;
+            date: string;
+        }>();
+
+        sessions.forEach((session: Session) => {
+            if (!session.completedAt) return;
+
+            session.sets?.forEach((set: Set) => {
+                if (!set.exerciseName) return;
+
+                const volume = set.weight * set.reps;
+                const existing = bestByExercise.get(set.exerciseName);
+
+                if (!existing || volume > existing.volume) {
+                    bestByExercise.set(set.exerciseName, {
+                        volume,
+                        weight: set.weight,
+                        reps: set.reps,
+                        date: session.completedAt!,
+                    });
+                }
+            });
+        });
+
+        // Convert to PersonalRecord array
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const records: PersonalRecord[] = [];
+        bestByExercise.forEach((best, exerciseName) => {
+            // Epley formula: weight × (1 + reps / 30)
+            const estimated1RM = Math.round(best.weight * (1 + best.reps / 30));
+            const prDate = new Date(best.date);
+            const isRecentPR = prDate >= thirtyDaysAgo;
+
+            records.push({
+                exerciseName,
+                bestVolume: best.volume,
+                bestVolumeWeight: best.weight,
+                bestVolumeReps: best.reps,
+                bestVolumeDate: best.date,
+                estimated1RM,
+                isRecentPR,
+            });
+        });
+
+        // Sort by estimated 1RM descending (strongest lifts first)
+        return records.sort((a, b) => b.estimated1RM - a.estimated1RM);
+    }, [sessions]);
+
     return {
         isLoading: historyLoading || programsLoading,
         error: historyError,
@@ -241,6 +312,7 @@ export function useProgressData(): UseProgressDataReturn {
         lastWeekVolume,
         thisMonthVolume,
         lastMonthVolume,
+        personalRecords,
     };
 }
 

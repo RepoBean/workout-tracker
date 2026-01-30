@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ExerciseProgressTab } from './components/ExerciseProgressTab';
 import { VolumeTrendsTab } from './components/VolumeTrendsTab';
+import { PersonalRecordsTab } from './components/PersonalRecordsTab';
 
 type TabId = 'exercise' | 'volume' | 'records';
 
@@ -39,11 +40,7 @@ export default function Progress() {
 
             {activeTab === 'volume' && <VolumeTrendsTab />}
 
-            {activeTab === 'records' && (
-                <div className="card text-center py-8 text-gray-500">
-                    Coming soon
-                </div>
-            )}
+            {activeTab === 'records' && <PersonalRecordsTab />}
         </div>
     );
 }
