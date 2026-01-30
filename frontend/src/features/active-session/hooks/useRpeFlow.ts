@@ -5,7 +5,7 @@ import type { UseExerciseNavigationResult } from './useExerciseNavigation';
 interface UseRpeFlowParams {
     navigation: UseExerciseNavigationResult;
     mergedExercises: Exercise[];
-    updateSetsEffort: (exerciseId: number, effort: number) => void;
+    updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) => void;
 }
 
 interface UseRpeFlowResult {
@@ -86,7 +86,8 @@ export function useRpeFlow({
 
     const handleRpeSubmit = useCallback((rpe: number) => {
         if (rpePromptExercise) {
-            updateSetsEffort(rpePromptExercise.id, rpe);
+            // Pass exerciseName for ad-hoc exercises (negative ID) which have null exerciseId in DB
+            updateSetsEffort(rpePromptExercise.id, rpe, rpePromptExercise.name);
         }
         setRpePromptExercise(null);
         navigateAfterRpe();

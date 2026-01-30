@@ -128,9 +128,13 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
 
   // Update effort for all sets of an exercise
   const updateSetsEffortMutation = useMutation({
-    mutationFn: async ({ exerciseId, effort }: { exerciseId: number; effort: number }) => {
+    mutationFn: async ({ exerciseId, effort, exerciseName }: { exerciseId: number; effort: number; exerciseName?: string }) => {
       const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
-      const setsToUpdate = currentSession?.sets?.filter(s => s.exerciseId === exerciseId) || [];
+
+      // For ad-hoc exercises (negative ID), filter by exerciseName since exerciseId is null in DB
+      const setsToUpdate = exerciseId < 0 && exerciseName
+        ? currentSession?.sets?.filter(s => s.exerciseId === null && s.exerciseName === exerciseName) || []
+        : currentSession?.sets?.filter(s => s.exerciseId === exerciseId) || [];
 
       // Update each set sequentially
       const results = await Promise.all(
@@ -141,19 +145,24 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
 
       return results.map(r => r.data);
     },
-    onMutate: async ({ exerciseId, effort }) => {
+    onMutate: async ({ exerciseId, effort, exerciseName }) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
 
       const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
 
       if (previousSession) {
+        // For ad-hoc exercises (negative ID), match by exerciseName since exerciseId is null in DB
+        const isAdHoc = exerciseId < 0 && exerciseName;
         queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
           ...previousSession,
-          sets: previousSession.sets?.map(s =>
-            s.exerciseId === exerciseId
+          sets: previousSession.sets?.map(s => {
+            const matches = isAdHoc
+              ? s.exerciseId === null && s.exerciseName === exerciseName
+              : s.exerciseId === exerciseId;
+            return matches
               ? { ...s, perceivedEffort: effort, updatedAt: new Date().toISOString() }
-              : s
-          ) || [],
+              : s;
+          }) || [],
         });
       }
 
@@ -230,8 +239,8 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
     updateSet: (setId: number, updates: UpdateSetRequest) =>
       updateSetMutation.mutate({ setId, updates }),
     isUpdatingSet: updateSetMutation.isPending,
-    updateSetsEffort: (exerciseId: number, effort: number) =>
-      updateSetsEffortMutation.mutate({ exerciseId, effort }),
+    updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) =>
+      updateSetsEffortMutation.mutate({ exerciseId, effort, exerciseName }),
     isUpdatingSetsEffort: updateSetsEffortMutation.isPending,
     deleteSet: deleteSetMutation.mutate,
     isDeletingSet: deleteSetMutation.isPending,
