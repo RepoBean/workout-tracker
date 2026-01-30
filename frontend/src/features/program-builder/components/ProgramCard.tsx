@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Button } from '../../../shared/ui/Button';
+import { Modal } from '../../../shared/ui/Modal';
+import { Input } from '../../../shared/ui/Input';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { WorkoutCard } from './WorkoutCard';
 import { api } from '../../../shared/api/client';
@@ -14,6 +16,8 @@ export function ProgramCard({ program }: ProgramCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(program.name);
+  const [showAddWorkout, setShowAddWorkout] = useState(false);
+  const [newWorkoutName, setNewWorkoutName] = useState('');
 
   const { updateProgram, deleteProgram, activateProgram, createWorkout, reorderWorkouts } = useProgramMutations();
   const toast = useToast();
@@ -33,14 +37,25 @@ export function ProgramCard({ program }: ProgramCardProps) {
   };
 
   const handleAddWorkout = () => {
-    const name = prompt('Workout name:');
-    if (name?.trim()) {
-      createWorkout.mutate({
+    setNewWorkoutName('');
+    setShowAddWorkout(true);
+  };
+
+  const handleCreateWorkout = () => {
+    if (!newWorkoutName.trim()) return;
+    createWorkout.mutate(
+      {
         programId: program.id,
-        name: name.trim(),
+        name: newWorkoutName.trim(),
         orderIndex: workouts.length,
-      });
-    }
+      },
+      {
+        onSuccess: () => {
+          setNewWorkoutName('');
+          setShowAddWorkout(false);
+        },
+      }
+    );
   };
 
   const handleExport = async () => {
@@ -212,6 +227,29 @@ export function ProgramCard({ program }: ProgramCardProps) {
           </Button>
         </div>
       )}
+
+      <Modal isOpen={showAddWorkout} onClose={() => setShowAddWorkout(false)} title="New Workout">
+        <div className="space-y-4">
+          <Input
+            label="Workout Name"
+            value={newWorkoutName}
+            onChange={(e) => setNewWorkoutName(e.target.value)}
+            placeholder="e.g. Push Day"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleCreateWorkout();
+            }}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <Button onClick={handleCreateWorkout} disabled={!newWorkoutName.trim() || createWorkout.isPending}>
+              Create
+            </Button>
+            <Button variant="secondary" onClick={() => setShowAddWorkout(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
