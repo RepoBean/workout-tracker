@@ -6,7 +6,13 @@ export interface ExerciseSession {
     sessionId: number;
     date: string;           // completedAt
     workoutName: string;
-    sets: Array<{ weight: number; reps: number; setNumber: number }>;
+    sets: Array<{
+        weight: number;
+        reps: number;
+        setNumber: number;
+        perceivedEffort?: number;
+        dropIndex: number;
+    }>;
     bestWeight: number;     // heaviest weight in this session
     bestVolume: number;     // highest (weight × reps) from a single set
     bestEstimated1RM: number; // Epley: weight × (1 + reps/30) from best volume set
@@ -138,11 +144,18 @@ export function useProgressData(): UseProgressDataReturn {
                     sessionId: session.id,
                     date: session.completedAt,
                     workoutName: session.workoutName,
-                    sets: exerciseSets.map(s => ({
-                        weight: s.weight,
-                        reps: s.reps,
-                        setNumber: s.setNumber,
-                    })),
+                    sets: exerciseSets
+                        .map(s => ({
+                            weight: s.weight,
+                            reps: s.reps,
+                            setNumber: s.setNumber,
+                            perceivedEffort: s.perceivedEffort ?? undefined,
+                            dropIndex: s.dropIndex,
+                        }))
+                        .sort((a, b) => {
+                            if (a.setNumber !== b.setNumber) return a.setNumber - b.setNumber;
+                            return a.dropIndex - b.dropIndex;
+                        }),
                     bestWeight,
                     bestVolume,
                     bestEstimated1RM,

@@ -1,32 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
-import { useProgressData, ExerciseSession } from '../hooks/useProgressData';
+import { useProgressData } from '../hooks/useProgressData';
 import { ProgressChart } from './ProgressChart';
 
 function formatSessionDate(dateString: string): string {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function formatSetSummary(sets: ExerciseSession['sets']): string {
-    if (sets.length === 0) return '';
-
-    const weights = sets.map(s => s.weight);
-    const reps = sets.map(s => s.reps);
-    const minWeight = Math.min(...weights);
-    const maxWeight = Math.max(...weights);
-    const minReps = Math.min(...reps);
-    const maxReps = Math.max(...reps);
-
-    const weightStr = minWeight === maxWeight
-        ? `${minWeight} lbs`
-        : `${minWeight}-${maxWeight} lbs`;
-
-    const repStr = minReps === maxReps
-        ? `${minReps} reps`
-        : `${minReps}-${maxReps} reps`;
-
-    return `${sets.length} sets × ${repStr} @ ${weightStr}`;
 }
 
 
@@ -208,19 +187,35 @@ export function ExerciseProgressTab() {
                             <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-300">
                                 Session History
                             </h3>
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                                 {exerciseHistory.slice().reverse().map((session) => (
                                     <div
                                         key={session.sessionId}
-                                        className="flex justify-between items-center py-2 border-b 
-                               border-gray-100 dark:border-gray-700 last:border-0"
+                                        className="py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
                                     >
-                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                             {formatSessionDate(session.date)}
-                                        </span>
-                                        <span className="text-sm text-gray-500 dark:text-gray-400">
-                                            {formatSetSummary(session.sets)}
-                                        </span>
+                                        </div>
+                                        <div className="space-y-0.5">
+                                            {session.sets.map((set, idx) => (
+                                                <div
+                                                    key={idx}
+                                                    className={`text-xs flex items-center gap-2 ${
+                                                        set.dropIndex > 0
+                                                            ? 'ml-4 text-orange-600 dark:text-orange-400'
+                                                            : 'text-gray-600 dark:text-gray-400'
+                                                    }`}
+                                                >
+                                                    <span className="w-12">
+                                                        {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
+                                                    </span>
+                                                    <span>{set.weight} lbs x {set.reps}</span>
+                                                    {set.perceivedEffort && (
+                                                        <span className="text-gray-400">RPE {set.perceivedEffort}</span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
