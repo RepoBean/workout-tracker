@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import type { Exercise, Set } from '../../../shared/api/types';
 
 /**
@@ -46,16 +46,28 @@ export interface UseExerciseNavigationResult {
 
 /**
  * Hook for focused exercise navigation with superset support
- * 
+ *
  * Consecutive exercises with the same non-null supersetGroup are grouped into one step.
  * Auto-advancing and superset rotation are handled via callback functions.
+ *
+ * Navigation state is persisted in sessionStorage to survive page refreshes.
  */
 export function useExerciseNavigation({
     exercises: initialExercises,
     sets,
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
-    const [currentStepIndex, setCurrentStepIndex] = useState(0);
-    const [supersetActiveIndex, setSupersetActiveIndex] = useState(0);
+    // Persist navigation state in sessionStorage to survive page refreshes/phone locks
+    const storageKey = 'workout-nav-step';
+    const supersetStorageKey = 'workout-nav-superset';
+
+    const [currentStepIndex, setCurrentStepIndex] = useState(() => {
+        const saved = sessionStorage.getItem(storageKey);
+        return saved ? parseInt(saved, 10) : 0;
+    });
+    const [supersetActiveIndex, setSupersetActiveIndex] = useState(() => {
+        const saved = sessionStorage.getItem(supersetStorageKey);
+        return saved ? parseInt(saved, 10) : 0;
+    });
 
     // Map exercise IDs to exercises for quick lookup
     const exerciseMap = useMemo(() => {
@@ -102,6 +114,22 @@ export function useExerciseNavigation({
 
         return result;
     }, [initialExercises]);
+
+    // Persist navigation state to sessionStorage when it changes
+    useEffect(() => {
+        sessionStorage.setItem(storageKey, String(currentStepIndex));
+    }, [currentStepIndex]);
+
+    useEffect(() => {
+        sessionStorage.setItem(supersetStorageKey, String(supersetActiveIndex));
+    }, [supersetActiveIndex]);
+
+    // Clamp currentStepIndex if it's out of bounds (e.g., exercises changed)
+    useEffect(() => {
+        if (steps.length > 0 && currentStepIndex >= steps.length) {
+            setCurrentStepIndex(steps.length - 1);
+        }
+    }, [steps.length, currentStepIndex]);
 
     // Get sets for a specific exercise (only standard sets, sorted)
     // For ad-hoc exercises (negative ID), look up by exerciseName

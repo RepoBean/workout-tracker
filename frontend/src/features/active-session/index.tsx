@@ -118,6 +118,9 @@ export default function ActiveSession() {
   const handleComplete = () => {
     completeSession(undefined, {
       onSuccess: () => {
+        // Clear navigation state so next session starts fresh
+        sessionStorage.removeItem('workout-nav-step');
+        sessionStorage.removeItem('workout-nav-superset');
         navigate('/');
       },
     });
@@ -378,7 +381,7 @@ export default function ActiveSession() {
       {exercises.length === 0 && (
         <div className="space-y-4">
           {allAdHocExercises.map((adHocEx) => {
-            const adHocSets = adHocSetsByName.get(adHocEx.name) || [];
+            const adHocSets = adHocSetsByName.get(adHocEx.name.toLowerCase()) || [];
             const standardSets = adHocSets.filter(s => (s.dropIndex || 0) === 0);
             const nextSetNumber = standardSets.length + 1;
             const lastSet = standardSets.length > 0

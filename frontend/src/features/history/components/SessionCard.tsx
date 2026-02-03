@@ -40,15 +40,23 @@ interface ExerciseGroup {
 
 export function SessionCard({ session, highlightId, onDelete }: SessionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const confirmTimeoutRef = useRef<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(
     highlightId ? session.id === Number(highlightId) : false
   );
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   useEffect(() => {
     if (highlightId && session.id === Number(highlightId) && cardRef.current) {
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [highlightId, session.id]);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimeoutRef.current) clearTimeout(confirmTimeoutRef.current);
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const sets = session.sets || [];
@@ -152,11 +160,22 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                onDelete();
+                if (isConfirmingDelete) {
+                  onDelete();
+                } else {
+                  setIsConfirmingDelete(true);
+                  confirmTimeoutRef.current = window.setTimeout(() => {
+                    setIsConfirmingDelete(false);
+                  }, 3000);
+                }
               }}
-              className="w-full mt-2 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+              className={`w-full mt-2 py-2 text-sm rounded-lg transition-colors ${
+                isConfirmingDelete
+                  ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 font-medium'
+                  : 'text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20'
+              }`}
             >
-              Delete Session
+              {isConfirmingDelete ? 'Tap again to confirm' : 'Delete Session'}
             </button>
           )}
         </div>

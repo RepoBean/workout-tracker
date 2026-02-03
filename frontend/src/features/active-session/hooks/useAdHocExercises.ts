@@ -54,13 +54,14 @@ export function useAdHocExercises({
         return map;
     }, [sets]);
 
-    // Group ad-hoc sets by exerciseName
+    // Group ad-hoc sets by exerciseName (case-insensitive keys)
     const adHocSetsByName = useMemo(() => {
         const map = new Map<string, SetType[]>();
         for (const set of sets) {
             if (!set.exerciseId) {
-                const existing = map.get(set.exerciseName) || [];
-                map.set(set.exerciseName, [...existing, set].sort(
+                const key = set.exerciseName.toLowerCase();
+                const existing = map.get(key) || [];
+                map.set(key, [...existing, set].sort(
                     (a, b) => a.setNumber - b.setNumber || (a.dropIndex || 0) - (b.dropIndex || 0)
                 ));
             }
@@ -75,17 +76,20 @@ export function useAdHocExercises({
         const programExerciseNames = new Set(exercises.map(e => e.name.toLowerCase()));
         const result: Exercise[] = [];
 
-        for (const [name] of adHocSetsByName.entries()) {
-            if (programExerciseNames.has(name.toLowerCase())) continue;
+        for (const [lowerName, setsForName] of adHocSetsByName.entries()) {
+            if (programExerciseNames.has(lowerName)) continue;
+
+            // Use original case from the first set for display
+            const displayName = setsForName[0]?.exerciseName ?? lowerName;
 
             const existingAdHoc = adHocProgramExercises.find(
-                e => e.name.toLowerCase() === name.toLowerCase()
+                e => e.name.toLowerCase() === lowerName
             );
 
             result.push({
-                id: existingAdHoc?.id ?? (-name.length - Date.now() % 1000),
+                id: existingAdHoc?.id ?? (-displayName.length - Date.now() % 1000),
                 workoutId: session?.workoutId || 0,
-                name,
+                name: displayName,
                 targetSets: existingAdHoc?.targetSets ?? 3,
                 targetReps: existingAdHoc?.targetReps ?? '10',
                 orderIndex: existingAdHoc?.orderIndex ?? (exercises.length + result.length),
@@ -107,27 +111,30 @@ export function useAdHocExercises({
         return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
     }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
 
-    // Get sets for an exercise
+    // Get sets for an exercise (case-insensitive for ad-hoc)
     const getSetsForExercise = (exercise: Exercise): SetType[] => {
         if (exercise.id < 0) {
-            return adHocSetsByName.get(exercise.name) || [];
+            return adHocSetsByName.get(exercise.name.toLowerCase()) || [];
         }
         return setsByExercise.get(exercise.id) || [];
     };
 
-    // All ad-hoc exercises for blank session UI
+    // All ad-hoc exercises for blank session UI (case-insensitive deduplication)
     const allAdHocExercises = useMemo(() => {
-        const names = new Set<string>();
+        const seenNames = new Set<string>(); // lowercase for deduplication
         const result: AdHocExercise[] = [];
-        for (const name of adHocSetsByName.keys()) {
-            if (!names.has(name)) {
-                names.add(name);
-                result.push({ tempId: `logged-${name}`, name });
+        for (const [lowerName, setsForName] of adHocSetsByName.entries()) {
+            if (!seenNames.has(lowerName)) {
+                seenNames.add(lowerName);
+                // Use original case from the first set for display
+                const displayName = setsForName[0]?.exerciseName ?? lowerName;
+                result.push({ tempId: `logged-${displayName}`, name: displayName });
             }
         }
         for (const ex of adHocExercises) {
-            if (!names.has(ex.name)) {
-                names.add(ex.name);
+            const lowerName = ex.name.toLowerCase();
+            if (!seenNames.has(lowerName)) {
+                seenNames.add(lowerName);
                 result.push(ex);
             }
         }

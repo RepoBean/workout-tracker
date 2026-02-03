@@ -62,21 +62,13 @@ export default function History() {
       {sessions.map(session => (
         <SwipeableRow
           key={session.id}
-          onSwipeLeft={() => {
-            if (confirm(`Delete "${session.workoutName}" session?`)) {
-              deleteSession.mutate(session.id);
-            }
-          }}
+          onSwipeLeft={() => deleteSession.mutate(session.id)}
           disabled={deleteSession.isPending}
         >
           <SessionCard
             session={session}
             highlightId={highlightSessionId}
-            onDelete={() => {
-              if (confirm(`Delete "${session.workoutName}" session?`)) {
-                deleteSession.mutate(session.id);
-              }
-            }}
+            onDelete={() => deleteSession.mutate(session.id)}
           />
         </SwipeableRow>
       ))}

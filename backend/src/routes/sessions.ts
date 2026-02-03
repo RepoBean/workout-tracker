@@ -8,6 +8,7 @@ import type {
   WorkoutWithExercises,
   WorkoutWithProgramAndExercises,
   SessionWithSets,
+  SetWithSession,
   VolumeQueryResult,
   MonthVolumeQueryResult,
   StreakQueryResult,
@@ -316,6 +317,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // GET /api/sessions/:id/previous - Get previous session data for hints
+// Looks up history by exercise NAME (not workoutId) so ad-hoc and cross-workout history is visible
 router.get('/:id/previous', async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
@@ -326,50 +328,70 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
       return;
     }
 
-    // Find the most recent completed session for the same workout
-    const previousSession = await Session.findOne({
-      where: {
-        workoutId: currentSession.workoutId,
-        completedAt: { [Op.ne]: null },
-        id: { [Op.ne]: sessionId },
-      },
-      include: [{ model: SetModel, as: 'sets' }],
-      order: [['completedAt', 'DESC']],
-    });
-
-    if (!previousSession) {
+    // Ad-hoc sessions without a workout have no pre-defined exercises to look up
+    if (!currentSession.workoutId) {
       res.json({ exerciseData: {} });
       return;
     }
 
-    // Build a map: exerciseId -> { sets: [...] } with all standard sets
+    // Get the workout's exercises
+    const workout = await Workout.findByPk(currentSession.workoutId, {
+      include: [{ model: Exercise, as: 'exercises' }],
+    }) as WorkoutWithExercises | null;
+
+    if (!workout || !workout.exercises?.length) {
+      res.json({ exerciseData: {} });
+      return;
+    }
+
+    // For each exercise, find the most recent sets by exerciseName
     const exerciseData: Record<number, { sets: Array<{ setNumber: number; weight: number; reps: number }> }> = {};
 
-    for (const set of (previousSession as SessionWithSets).sets || []) {
-      if (set.exerciseId) {
-        if (!exerciseData[set.exerciseId]) {
-          exerciseData[set.exerciseId] = { sets: [] };
-        }
-        // Only include standard sets (dropIndex = 0)
-        if ((set.dropIndex || 0) === 0) {
-          exerciseData[set.exerciseId].sets.push({
-            setNumber: set.setNumber,
-            weight: set.weight,
-            reps: set.reps,
-          });
-        }
+    for (const exercise of workout.exercises) {
+      // Find all standard sets with matching exerciseName from completed sessions
+      const matchingSets = await SetModel.findAll({
+        where: {
+          dropIndex: 0, // Only standard sets
+        },
+        include: [{
+          model: Session,
+          as: 'session',
+          where: {
+            completedAt: { [Op.ne]: null },
+          },
+          attributes: ['id', 'completedAt'],
+        }],
+        order: [
+          [{ model: Session, as: 'session' }, 'completedAt', 'DESC'],
+          ['setNumber', 'ASC'],
+        ],
+      });
+
+      // Filter by name (case-insensitive) since SQLite LOWER() in Sequelize is tricky
+      const filtered = matchingSets.filter(
+        set => set.exerciseName.toLowerCase() === exercise.name.toLowerCase()
+      );
+
+      if (filtered.length === 0) {
+        continue;
       }
+
+      // Get the most recent session's sets
+      const mostRecentSet = filtered[0] as SetWithSession;
+      const mostRecentSessionId = mostRecentSet.session.id;
+
+      const setsFromMostRecent = filtered
+        .filter(set => (set as SetWithSession).session.id === mostRecentSessionId)
+        .map(set => ({
+          setNumber: set.setNumber,
+          weight: set.weight,
+          reps: set.reps,
+        }));
+
+      exerciseData[exercise.id] = { sets: setsFromMostRecent };
     }
 
-    // Sort sets by setNumber
-    for (const data of Object.values(exerciseData)) {
-      data.sets.sort((a, b) => a.setNumber - b.setNumber);
-    }
-
-    res.json({
-      exerciseData,
-      previousSessionId: previousSession.id
-    });
+    res.json({ exerciseData });
   } catch (error) {
     console.error('Error fetching previous session:', error);
     res.status(500).json({ error: 'Failed to fetch previous session data' });

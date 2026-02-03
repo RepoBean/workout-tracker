@@ -146,6 +146,7 @@ export function SetInput({
             value={weightStr}
             onChange={(e) => handleWeightChange(e.target.value)}
             onBlur={handleWeightBlur}
+            onFocus={(e) => e.target.select()}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
                        dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />
@@ -184,6 +185,7 @@ export function SetInput({
             value={repsStr}
             onChange={(e) => handleRepsChange(e.target.value)}
             onBlur={handleRepsBlur}
+            onFocus={(e) => e.target.select()}
             className="w-20 text-center text-lg font-semibold border rounded-lg py-2
                        dark:bg-gray-700 dark:border-gray-600 dark:text-white"
           />

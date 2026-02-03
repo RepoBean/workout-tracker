@@ -82,6 +82,7 @@ export function useSession(id: number) {
       return data;
     },
     enabled: !!id,
+    staleTime: 30 * 1000, // 30 seconds - reduces refetches during active workout
   });
 }
 
