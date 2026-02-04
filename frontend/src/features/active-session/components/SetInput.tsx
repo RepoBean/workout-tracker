@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { PlateCalculator } from './PlateCalculator';
 
@@ -38,27 +38,38 @@ export function SetInput({
   const [reps, setReps] = useState(previousReps);
   const [repsStr, setRepsStr] = useState(String(previousReps));
 
+  // Track if user has made manual changes to prevent prop sync from overwriting
+  const isDirty = useRef(false);
+
   // Sync state when previousWeight/previousReps change (e.g., after async data loads)
   useEffect(() => {
-    setWeight(previousWeight);
-    setWeightStr(String(previousWeight));
+    // Only sync from props if user hasn't made manual changes
+    if (!isDirty.current) {
+      setWeight(previousWeight);
+      setWeightStr(String(previousWeight));
+    }
   }, [previousWeight]);
 
   useEffect(() => {
-    setReps(previousReps);
-    setRepsStr(String(previousReps));
+    // Only sync from props if user hasn't made manual changes
+    if (!isDirty.current) {
+      setReps(previousReps);
+      setRepsStr(String(previousReps));
+    }
   }, [previousReps]);
 
   const updateWeight = useCallback((value: number) => {
     const clamped = Math.max(0, value);
     setWeight(clamped);
     setWeightStr(String(clamped));
+    isDirty.current = true;
   }, []);
 
   const updateReps = useCallback((value: number) => {
     const clamped = Math.max(1, value);
     setReps(clamped);
     setRepsStr(String(clamped));
+    isDirty.current = true;
   }, []);
 
   const handleWeightChange = useCallback((raw: string) => {
@@ -66,6 +77,7 @@ export function SetInput({
     if (raw === '' || raw === '.') {
       setWeightStr(raw);
       setWeight(0);
+      isDirty.current = true;
       return;
     }
     // Strip leading zeros and parse
@@ -73,6 +85,7 @@ export function SetInput({
     if (!isNaN(parsed)) {
       setWeight(Math.max(0, parsed));
       setWeightStr(raw);
+      isDirty.current = true;
     }
   }, []);
 
@@ -86,12 +99,14 @@ export function SetInput({
     if (raw === '') {
       setRepsStr(raw);
       setReps(1);
+      isDirty.current = true;
       return;
     }
     const parsed = parseInt(raw, 10);
     if (!isNaN(parsed)) {
       setReps(Math.max(1, parsed));
       setRepsStr(raw);
+      isDirty.current = true;
     }
   }, []);
 
@@ -109,6 +124,8 @@ export function SetInput({
       setNumber,
       dropIndex: isDropSet ? dropIndex : undefined,
     });
+    // Reset dirty flag so next set can receive fresh hints
+    isDirty.current = false;
   };
 
   const label = isDropSet ? `Drop ${dropIndex}` : `Set ${setNumber}`;

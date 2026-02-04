@@ -64,11 +64,15 @@ export function ExerciseCard({
     return match ? parseInt(match[1], 10) : 10;
   }, [exercise.targetReps]);
 
-  // Get hint for current set input - use previous session's matching set
-  const currentSetPreviousData = getPreviousSet(nextSetNumber);
-  const hintWeight = currentSetPreviousData?.weight
-    || (standardSets.length > 0 ? standardSets[standardSets.length - 1].weight : previousHint?.lastWeight || 0);
-  const hintRepsForInput = currentSetPreviousData?.reps || hintReps;
+  // Priority: 1) Last set from THIS session, 2) Matching set from previous session, 3) Previous session's last weight, 4) 0
+  const lastCurrentSessionSet = standardSets.length > 0 ? standardSets[standardSets.length - 1] : null;
+  const matchingPreviousSet = getPreviousSet(nextSetNumber);
+  const hintWeight = lastCurrentSessionSet?.weight
+    ?? matchingPreviousSet?.weight
+    ?? previousHint?.lastWeight
+    ?? 0;
+  // For reps: Use previous session's matching set reps, or target reps from exercise
+  const hintRepsForInput = matchingPreviousSet?.reps ?? hintReps;
 
   // Get drop sets for display (grouped by setNumber)
   const dropSetsBySetNumber = useMemo(() => {
