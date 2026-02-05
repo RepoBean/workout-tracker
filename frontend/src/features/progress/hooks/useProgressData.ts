@@ -127,7 +127,7 @@ export function useProgressData(): UseProgressDataReturn {
                 const weights = exerciseSets.map(s => s.weight);
                 const bestWeight = Math.max(...weights);
 
-                // Calculate best volume and estimated 1RM
+                // Calculate best volume and estimated 1RM independently
                 let bestVolume = 0;
                 let bestEstimated1RM = 0;
 
@@ -135,8 +135,11 @@ export function useProgressData(): UseProgressDataReturn {
                     const volume = set.weight * set.reps;
                     if (volume > bestVolume) {
                         bestVolume = volume;
-                        // Epley formula based on the best volume set
-                        bestEstimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                    }
+                    // Epley formula: track highest 1RM across all sets
+                    const estimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                    if (estimated1RM > bestEstimated1RM) {
+                        bestEstimated1RM = estimated1RM;
                     }
                 });
 
@@ -276,11 +279,15 @@ export function useProgressData(): UseProgressDataReturn {
     const personalRecords = useMemo((): PersonalRecord[] => {
         if (!sessions) return [];
 
-        // Track best set per exercise
-        const bestByExercise = new Map<string, {
+        // Track best volume set and best 1RM per exercise independently
+        const bestVolumeByExercise = new Map<string, {
             volume: number;
             weight: number;
             reps: number;
+            date: string;
+        }>();
+        const best1RMByExercise = new Map<string, {
+            estimated1RM: number;
             date: string;
         }>();
 
@@ -290,14 +297,24 @@ export function useProgressData(): UseProgressDataReturn {
             session.sets?.forEach((set: Set) => {
                 if (!set.exerciseName) return;
 
+                // Track best volume set
                 const volume = set.weight * set.reps;
-                const existing = bestByExercise.get(set.exerciseName);
-
-                if (!existing || volume > existing.volume) {
-                    bestByExercise.set(set.exerciseName, {
+                const existingVolume = bestVolumeByExercise.get(set.exerciseName);
+                if (!existingVolume || volume > existingVolume.volume) {
+                    bestVolumeByExercise.set(set.exerciseName, {
                         volume,
                         weight: set.weight,
                         reps: set.reps,
+                        date: session.completedAt!,
+                    });
+                }
+
+                // Track best estimated 1RM independently
+                const estimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                const existing1RM = best1RMByExercise.get(set.exerciseName);
+                if (!existing1RM || estimated1RM > existing1RM.estimated1RM) {
+                    best1RMByExercise.set(set.exerciseName, {
+                        estimated1RM,
                         date: session.completedAt!,
                     });
                 }
@@ -309,9 +326,9 @@ export function useProgressData(): UseProgressDataReturn {
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
         const records: PersonalRecord[] = [];
-        bestByExercise.forEach((best, exerciseName) => {
-            // Epley formula: weight × (1 + reps / 30)
-            const estimated1RM = Math.round(best.weight * (1 + best.reps / 30));
+        bestVolumeByExercise.forEach((best, exerciseName) => {
+            const best1RM = best1RMByExercise.get(exerciseName);
+            const estimated1RM = best1RM?.estimated1RM ?? Math.round(best.weight * (1 + best.reps / 30));
             const prDate = new Date(best.date);
             const isRecentPR = prDate >= thirtyDaysAgo;
 

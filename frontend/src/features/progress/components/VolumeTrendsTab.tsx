@@ -64,6 +64,7 @@ function ComparisonCard({
 export function VolumeTrendsTab() {
     const {
         isLoading,
+        error,
         weeklyVolumes,
         thisWeekVolume,
         lastWeekVolume,
@@ -78,6 +79,16 @@ export function VolumeTrendsTab() {
             </div>
         );
     }
+
+    if (error) {
+        return (
+            <div className="card text-center py-8">
+                <p className="text-red-500">Failed to load progress data</p>
+            </div>
+        );
+    }
+
+    const isDark = document.documentElement.classList.contains('dark');
 
     // Check if there's any workout data
     const hasData = weeklyVolumes.some(w => w.totalVolume > 0);
@@ -138,9 +149,10 @@ export function VolumeTrendsTab() {
                                 }}
                                 labelFormatter={(label) => `Week of ${label}`}
                                 contentStyle={{
-                                    backgroundColor: 'var(--tooltip-bg, #fff)',
-                                    border: '1px solid #e5e7eb',
+                                    backgroundColor: isDark ? '#1f2937' : '#fff',
+                                    border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
                                     borderRadius: '8px',
+                                    color: isDark ? '#f3f4f6' : '#111827',
                                     fontSize: '14px',
                                 }}
                             />

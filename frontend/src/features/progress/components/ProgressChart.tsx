@@ -30,6 +30,8 @@ function formatShortDate(dateString: string): string {
 }
 
 export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps) {
+    const isDark = document.documentElement.classList.contains('dark');
+
     if (data.length === 0) {
         return (
             <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
@@ -75,9 +77,10 @@ export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps
                             return label;
                         }}
                         contentStyle={{
-                            backgroundColor: 'var(--tooltip-bg, #fff)',
-                            border: '1px solid #e5e7eb',
+                            backgroundColor: isDark ? '#1f2937' : '#fff',
+                            border: `1px solid ${isDark ? '#374151' : '#e5e7eb'}`,
                             borderRadius: '8px',
+                            color: isDark ? '#f3f4f6' : '#111827',
                             fontSize: '14px',
                         }}
                     />

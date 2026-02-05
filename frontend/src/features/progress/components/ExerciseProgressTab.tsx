@@ -17,10 +17,12 @@ export function ExerciseProgressTab() {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [chartMetric, setChartMetric] = useState<ChartMetric>('1rm');
     const inputRef = useRef<HTMLInputElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
 
     const { data: suggestions } = useExerciseSuggestions(searchQuery);
     const {
         isLoading,
+        error,
         mostTrainedExercises,
         activeExercises,
         getExerciseHistory
@@ -33,6 +35,24 @@ export function ExerciseProgressTab() {
             setShowSuggestions(false);
         }
     }, [suggestions, searchQuery]);
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+        if (!showSuggestions) return;
+
+        const handleClickOutside = (e: MouseEvent | TouchEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('touchstart', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('touchstart', handleClickOutside);
+        };
+    }, [showSuggestions]);
 
     const handleSelectExercise = (name: string) => {
         setSelectedExercise(name);
@@ -56,11 +76,19 @@ export function ExerciseProgressTab() {
         );
     }
 
+    if (error) {
+        return (
+            <div className="card text-center py-8">
+                <p className="text-red-500">Failed to load progress data</p>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-4">
             {/* Search box */}
             <div className="card">
-                <div className="relative">
+                <div className="relative" ref={dropdownRef}>
                     <input
                         ref={inputRef}
                         type="text"

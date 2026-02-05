@@ -48,7 +48,7 @@ function PRCard({ record }: PRCardProps) {
 }
 
 export function PersonalRecordsTab() {
-    const { isLoading, personalRecords } = useProgressData();
+    const { isLoading, error, personalRecords } = useProgressData();
     const [sortMode, setSortMode] = useState<SortMode>('1rm');
 
     // Sort records based on current mode
@@ -76,6 +76,14 @@ export function PersonalRecordsTab() {
         return (
             <div className="card text-center py-8 text-gray-500 dark:text-gray-400">
                 Loading...
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="card text-center py-8">
+                <p className="text-red-500">Failed to load progress data</p>
             </div>
         );
     }
