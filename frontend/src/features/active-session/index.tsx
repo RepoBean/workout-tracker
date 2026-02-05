@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
@@ -12,6 +12,7 @@ import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
 import { AddExercise } from './components/AddExercise';
 import { RpePrompt } from './components/RpePrompt';
+import { CompletionCelebration } from './components/CompletionCelebration';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
 import type { Exercise } from '../../shared/api/types';
 
@@ -34,6 +35,14 @@ export default function ActiveSession() {
   } = useActiveSession(sessionId);
 
   const { exerciseHints } = usePreviousData(sessionId);
+
+  // Celebration state
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [celebrationData, setCelebrationData] = useState<{
+    totalSets: number;
+    totalVolume: number;
+    duration: number;
+  } | null>(null);
 
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
@@ -115,12 +124,26 @@ export default function ActiveSession() {
   }, [sets, exercises]);
 
   const handleComplete = () => {
+    // Calculate stats before completing
+    const totalSetsCount = sets.filter(s => (s.dropIndex || 0) === 0).length;
+    const totalVolumeCalc = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+    const durationMins = session?.createdAt
+      ? Math.round((Date.now() - new Date(session.createdAt).getTime()) / 60000)
+      : 0;
+
     completeSession(undefined, {
       onSuccess: () => {
-        // Clear navigation state so next session starts fresh
+        // Clear navigation state
         sessionStorage.removeItem('workout-nav-step');
         sessionStorage.removeItem('workout-nav-superset');
-        navigate('/');
+
+        // Show celebration instead of navigating immediately
+        setCelebrationData({
+          totalSets: totalSetsCount,
+          totalVolume: totalVolumeCalc,
+          duration: durationMins,
+        });
+        setShowCelebration(true);
       },
     });
   };
@@ -474,6 +497,19 @@ export default function ActiveSession() {
         exerciseName={rpePromptExercise?.name || ''}
         onSubmit={handleRpeSubmit}
         onSkip={handleRpeSkip}
+      />
+
+      {/* Completion Celebration */}
+      <CompletionCelebration
+        isOpen={showCelebration}
+        workoutName={session?.workoutName || 'Workout'}
+        totalSets={celebrationData?.totalSets || 0}
+        totalVolume={celebrationData?.totalVolume || 0}
+        duration={celebrationData?.duration || 0}
+        onDismiss={() => {
+          setShowCelebration(false);
+          navigate('/');
+        }}
       />
     </div>
   );

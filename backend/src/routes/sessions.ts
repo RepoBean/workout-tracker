@@ -229,34 +229,50 @@ router.get('/stats', async (req: Request, res: Response) => {
     const monthRows = monthVolumeResult as MonthVolumeQueryResult[];
     const monthVolume = Number(monthRows[0]?.monthVolume) || 0;
 
-    // Current streak: consecutive days with sessions counting back from today
-    // Convert UTC timestamps to user's local date using timezone offset
+    // Week streak: consecutive weeks with 3+ sessions
+    // Week = Sunday (0) to Saturday (6)
     // tzOffset from getTimezoneOffset() is positive for west of UTC, negative for east
-    // To convert UTC to local: subtract tzOffset (since east = negative = add hours)
     const offsetSeconds = -tzOffset * 60; // Convert minutes to seconds, flip sign
 
-    const [streakResult] = await sequelize.query(`
-      SELECT DISTINCT date(datetime(completedAt, '${offsetSeconds >= 0 ? '+' : ''}${offsetSeconds} seconds')) as sessionDate
+    const [weeklySessionsResult] = await sequelize.query(`
+      SELECT
+        strftime('%Y-%W', datetime(completedAt, '${offsetSeconds >= 0 ? '+' : ''}${offsetSeconds} seconds')) as yearWeek,
+        COUNT(*) as sessionCount
       FROM Sessions
       WHERE completedAt IS NOT NULL
-      ORDER BY sessionDate DESC
+      GROUP BY yearWeek
+      ORDER BY yearWeek DESC
     `);
-    const streakRows = streakResult as StreakQueryResult[];
 
-    let currentStreak = 0;
-    // Calculate "today" from the user's timezone perspective
-    // Subtract tzOffset from UTC to get user's local time
+    interface WeeklyCount { yearWeek: string; sessionCount: number }
+    const weeklyCounts = weeklySessionsResult as WeeklyCount[];
+
+    // Calculate current week string for comparison (ISO week)
+    const getYearWeek = (date: Date): string => {
+      const d = new Date(date);
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() + 4 - (d.getDay() || 7)); // Thursday of current week
+      const yearStart = new Date(d.getFullYear(), 0, 1);
+      const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+      return `${d.getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+    };
+
+    let weekStreak = 0;
     const userNow = new Date(now.getTime() - tzOffset * 60 * 1000);
-    const todayStr = userNow.toISOString().split('T')[0];
+    let checkWeek = getYearWeek(userNow);
 
-    for (let i = 0; i < streakRows.length; i++) {
-      const expectedDate = new Date(todayStr);
-      expectedDate.setDate(expectedDate.getDate() - i);
-      const expectedStr = expectedDate.toISOString().split('T')[0];
-
-      if (streakRows[i].sessionDate === expectedStr) {
-        currentStreak++;
+    for (const week of weeklyCounts) {
+      if (week.yearWeek === checkWeek && week.sessionCount >= 3) {
+        weekStreak++;
+        // Move to previous week
+        const d = new Date(userNow);
+        d.setDate(d.getDate() - (7 * weekStreak));
+        checkWeek = getYearWeek(d);
+      } else if (week.yearWeek === checkWeek) {
+        // This week exists but < 3 sessions, streak broken
+        break;
       } else {
+        // Week doesn't exist in results, check if it's current week (incomplete) or past (broken)
         break;
       }
     }
@@ -268,7 +284,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       sessionsLast7Days,
       sessionsLast30Days,
       monthVolume,
-      currentStreak,
+      weekStreak,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);

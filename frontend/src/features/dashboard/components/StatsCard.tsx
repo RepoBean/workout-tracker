@@ -23,10 +23,10 @@ export function StatsCard() {
         </div>
         <div className="text-center">
           <p className="text-2xl font-bold text-primary-600">
-            {stats.currentStreak}
+            {stats.weekStreak}
           </p>
           <p className="text-xs text-gray-500 dark:text-gray-400">
-            Day Streak
+            Week Streak
           </p>
         </div>
         <div className="text-center">

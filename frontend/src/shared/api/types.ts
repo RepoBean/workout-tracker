@@ -184,7 +184,7 @@ export interface StatsResponse {
   sessionsLast7Days: number;
   sessionsLast30Days: number;
   monthVolume: number;
-  currentStreak: number;
+  weekStreak: number;
 }
 
 // ============================================
