@@ -272,10 +272,8 @@ backend/
 - Persist preference in localStorage
 
 ### 6. PWA
-- Manifest for "Add to Home Screen"
-- Service worker caches app shell
-- Works offline for viewing cached data
-- Clear indicator when offline
+- Manifest for "Add to Home Screen" icon
+- No service worker (removed — stable VPN, no true offline need)
 
 ### 7. Program Export/Import
 - Export any program as a portable JSON file (version 1 format)
