@@ -11,6 +11,7 @@ export type NavigationStep =
 interface UseExerciseNavigationOptions {
     exercises: Exercise[];
     sets: Set[];
+    sessionId: number;
 }
 
 export interface UseExerciseNavigationResult {
@@ -52,13 +53,21 @@ export interface UseExerciseNavigationResult {
  *
  * Navigation state is persisted in sessionStorage to survive page refreshes.
  */
+/** Get session-specific storage keys for navigation state */
+export function getNavStorageKeys(sessionId: number) {
+    return {
+        step: `workout-nav-step-${sessionId}`,
+        superset: `workout-nav-superset-${sessionId}`,
+    };
+}
+
 export function useExerciseNavigation({
     exercises: initialExercises,
     sets,
+    sessionId,
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
     // Persist navigation state in sessionStorage to survive page refreshes/phone locks
-    const storageKey = 'workout-nav-step';
-    const supersetStorageKey = 'workout-nav-superset';
+    const { step: storageKey, superset: supersetStorageKey } = getNavStorageKeys(sessionId);
 
     const [currentStepIndex, setCurrentStepIndex] = useState(() => {
         const saved = sessionStorage.getItem(storageKey);

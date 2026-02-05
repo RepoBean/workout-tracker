@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
-import { useExerciseNavigation } from './hooks/useExerciseNavigation';
+import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
 import { useAdHocExercises } from './hooks/useAdHocExercises';
 import { useExerciseOrdering } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
@@ -72,6 +72,7 @@ export default function ActiveSession() {
   const navigation = useExerciseNavigation({
     exercises: orderedExercises,
     sets,
+    sessionId,
   });
 
   // RPE flow management
@@ -124,6 +125,8 @@ export default function ActiveSession() {
   }, [sets, exercises]);
 
   const handleComplete = () => {
+    if (!confirm('Finish this workout?')) return;
+
     // Calculate stats before completing
     const totalSetsCount = sets.filter(s => (s.dropIndex || 0) === 0).length;
     const totalVolumeCalc = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
@@ -134,8 +137,9 @@ export default function ActiveSession() {
     completeSession(undefined, {
       onSuccess: () => {
         // Clear navigation state
-        sessionStorage.removeItem('workout-nav-step');
-        sessionStorage.removeItem('workout-nav-superset');
+        const navKeys = getNavStorageKeys(sessionId);
+        sessionStorage.removeItem(navKeys.step);
+        sessionStorage.removeItem(navKeys.superset);
 
         // Show celebration instead of navigating immediately
         setCelebrationData({
