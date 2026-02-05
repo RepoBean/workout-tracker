@@ -5,10 +5,12 @@ import { useActiveSessionCheck, queryKeys } from '../../../shared/api/queries';
 import { api } from '../../../shared/api/client';
 import { Button } from '../../../shared/ui/Button';
 import { Modal } from '../../../shared/ui/Modal';
+import { useToast } from '../../../shared/ui/Toast';
 
 export function ResumeWorkout() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const toast = useToast();
   const { data: activeSession, isLoading } = useActiveSessionCheck();
   const [showDiscard, setShowDiscard] = useState(false);
 
@@ -17,8 +19,12 @@ export function ResumeWorkout() {
       await api.delete(`/sessions/${sessionId}`);
     },
     onSuccess: () => {
+      toast.success('Workout discarded');
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
       setShowDiscard(false);
+    },
+    onError: () => {
+      toast.error('Failed to discard workout');
     },
   });
 

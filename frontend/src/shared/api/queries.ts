@@ -180,6 +180,7 @@ export function useActiveSessionCheck() {
       const { data } = await api.get<ActiveSession | null>('/sessions/active');
       return data;
     },
+    staleTime: 30 * 1000, // 30 seconds — reduce unnecessary refetches on window focus
   });
 }
 
