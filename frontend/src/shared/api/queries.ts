@@ -98,6 +98,7 @@ export function useHistory(limit = 50, offset = 0) {
       });
       return data;
     },
+    staleTime: 2 * 60 * 1000, // 2 minutes — history data doesn't change frequently
   });
 }
 

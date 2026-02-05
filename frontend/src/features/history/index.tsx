@@ -7,7 +7,9 @@ import { SessionCard } from './components/SessionCard';
 export default function History() {
   const [searchParams] = useSearchParams();
   const highlightSessionId = searchParams.get('sessionId');
-  const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory();
+  const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory(
+    highlightSessionId ? Number(highlightSessionId) : undefined
+  );
   const deleteSession = useDeleteSession();
 
   const handleExport = () => {
@@ -62,7 +64,11 @@ export default function History() {
       {sessions.map(session => (
         <SwipeableRow
           key={session.id}
-          onSwipeLeft={() => deleteSession.mutate(session.id)}
+          onSwipeLeft={() => {
+            if (confirm('Delete this session?')) {
+              deleteSession.mutate(session.id);
+            }
+          }}
           disabled={deleteSession.isPending}
         >
           <SessionCard

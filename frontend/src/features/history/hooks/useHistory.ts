@@ -6,8 +6,11 @@ import { useToast } from '../../../shared/ui/Toast';
 
 const PAGE_SIZE = 10;
 
-export function useSessionHistory() {
-  const [offset, setOffset] = useState(0);
+export function useSessionHistory(highlightSessionId?: number) {
+  const [offset, setOffset] = useState(() =>
+    // When highlighting a session from calendar, load more initially to find it
+    highlightSessionId ? 40 : 0
+  );
 
   const limit = offset + PAGE_SIZE;
   // Fetch one extra to detect if there are more
