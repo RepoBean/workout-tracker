@@ -114,6 +114,7 @@ export function useExerciseSuggestions(query: string) {
       return data;
     },
     enabled: query.length >= 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes — suggestions rarely change
   });
 }
 

@@ -45,6 +45,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Program updated');
     },
     onError: () => {
       toast.error('Failed to update program');
@@ -99,6 +100,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Workout created');
     },
     onError: () => {
       toast.error('Failed to create workout');
@@ -112,6 +114,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Workout updated');
     },
     onError: () => {
       toast.error('Failed to update workout');
@@ -162,6 +165,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Exercise added');
     },
     onError: () => {
       toast.error('Failed to create exercise');
@@ -175,6 +179,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Exercise updated');
     },
     onError: () => {
       toast.error('Failed to update exercise');
@@ -187,6 +192,7 @@ export function useProgramMutations() {
     },
     onSuccess: () => {
       invalidatePrograms();
+      toast.success('Exercise deleted');
     },
     onError: () => {
       toast.error('Failed to delete exercise');
