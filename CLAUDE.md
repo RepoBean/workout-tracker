@@ -94,7 +94,7 @@ src/
 │   │   ├── components/
 │   │   │   ├── SetInput.tsx       # Weight/reps/RPE input
 │   │   │   ├── ExerciseCard.tsx   # Single exercise with all its sets
-│   │   │   ├── RestTimer.tsx      # Timer display + controls
+│   │   │   ├── CompletionCelebration.tsx  # Session complete animation
 │   │   │   ├── PlateCalculator.tsx
 │   │   │   ├── SessionHeader.tsx
 │   │   │   ├── AddExercise.tsx
@@ -122,20 +122,32 @@ src/
 │   │   │   └── usePrograms.ts
 │   │   └── index.tsx              # Programs page entry
 │   │
-│   ├── history/                   # Past sessions, analytics
+│   ├── history/                   # Past sessions
 │   │   ├── components/
-│   │   │   ├── SessionCard.tsx
-│   │   │   └── ProgressChart.tsx
+│   │   │   └── SessionCard.tsx
 │   │   ├── hooks/
 │   │   │   └── useHistory.ts
 │   │   └── index.tsx              # History page entry
+│   │
+│   ├── progress/                  # Analytics & trends
+│   │   ├── components/
+│   │   │   ├── ExerciseProgressTab.tsx   # Per-exercise weight/volume over time
+│   │   │   ├── VolumeTrendsTab.tsx       # Total volume trends with metric toggle
+│   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
+│   │   │   └── ProgressChart.tsx         # Reusable chart component
+│   │   ├── hooks/
+│   │   │   └── useProgressData.ts
+│   │   └── index.tsx              # Tabbed progress page entry
 │   │
 │   └── dashboard/                 # Home/landing page
 │       ├── components/
 │       │   ├── NextWorkout.tsx    # "What's Next?" display
 │       │   ├── Calendar.tsx       # Month view with workout dots
 │       │   ├── ResumeWorkout.tsx
+│       │   ├── AdHocWorkoutPicker.tsx  # Quick workout modal
 │       │   └── StatsCard.tsx
+│       ├── hooks/
+│       │   └── useNextWorkoutLocal.ts  # Client-side next workout calc
 │       └── index.tsx              # Home page entry
 │
 ├── shared/
@@ -222,7 +234,8 @@ backend/
 | POST | /api/programs/:programId/workouts | Create workout |
 | PUT | /api/workouts/:id | Update workout |
 | DELETE | /api/workouts/:id | Delete workout (cascade) |
-| PUT | /api/programs/:programId/workouts/reorder | Reorder workouts |
+| POST | /api/workouts/reorder | Reorder workouts |
+| POST | /api/workouts/:id/reorder-exercises | Reorder exercises within a workout |
 | POST | /api/workouts/:workoutId/exercises | Create exercise |
 | PUT | /api/exercises/:id | Update exercise |
 | DELETE | /api/exercises/:id | Delete exercise |
@@ -310,7 +323,18 @@ backend/
 - Option for blank workout or select from existing programs/workouts
 - Starts session with `isAdHoc: true`
 
-### 13. Add Exercise Mid-Workout
+### 13. Progress Page
+- Tabbed interface: Exercise Progress, Volume Trends, Personal Records
+- Exercise Progress: per-exercise weight/volume chart over time with metric toggle (Volume, 1RM, Weight)
+- Volume Trends: total volume trends across all workouts
+- Personal Records: all-time PRs by exercise with detailed set history
+- Dark mode support with accessible tooltips
+
+### 14. Completion Celebration
+- Animated celebration when a session is completed
+- Week streak display showing consecutive workout weeks
+
+### 15. Add Exercise Mid-Workout
 - During a program workout, "Add Exercise" button below exercise list
 - Autocomplete suggestions from all exercise names (programs + history)
 - Inserts at current navigation position and becomes active
@@ -393,6 +417,26 @@ cd frontend && npm run dev   # localhost:5174
 | 273bbb7 | Cleanup: Remove deprecated /next-workout endpoint, fix UpdateProgramRequest type |
 | 397903e | Resilience: Add ErrorBoundary, backend param validation |
 | bb0d4a5 | Refactor: Extract focused hooks from ActiveSession (useAdHocExercises, useExerciseOrdering, useRpeFlow) |
+| 519a323 | Docs: Update CLAUDE.md with new hooks, components, and patterns |
+| 543ddfe | Fix: Stale state in RPE flow / auto-advance |
+| bf2d797 | Feature: Calendar day click navigates to session in History |
+| eda400b | Feature: Progress Page Phase 1 (Exercise Progress Tab) |
+| d07757a | Feature: Progress Page Volume Trends Tab (Phase 2) |
+| 040c7b2 | Feature: Personal Records Tab (Phase 3) |
+| b36ae52 | Feature: Metric toggle (Volume, 1RM, Weight) on Progress Chart |
+| 3127227 | Fix: RPE prompt now works for ad-hoc exercises |
+| 58f775f | UX: Replace prompt() with Modal for adding workouts |
+| cb992d2 | Feature: Show detailed set history in Progress tab |
+| e1ffff7 | Fix: Exercise history lookup by name, case-insensitive matching |
+| 327ec72 | Fix: Weight hints prioritize current session, preserve manual input changes |
+| 865ebd9 | Remove service worker (stable VPN, no offline need) |
+| bb1427a | UX: Tappable Up Next + remove inline timer |
+| 1d0c5cd | Feature: Week Streak stats + Completion Celebration |
+| 9d9afea | Fix: Add toast notifications to discardMutation + staleTime |
+| 8ab5d53 | Fix: Add missing toast notifications to program mutations + staleTime |
+| 29239f9 | Fix: SessionHeader shows workout name, Complete confirmation, session-scoped nav state |
+| 4a4c1e0 | Fix: History staleTime, swipe confirmation, calendar highlight pagination |
+| 9c148f1 | Fix: Progress page dark mode tooltips, 1RM calculation, dropdown, error states |
 
 ---
 

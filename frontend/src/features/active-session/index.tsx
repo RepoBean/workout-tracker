@@ -220,8 +220,21 @@ export default function ActiveSession() {
 
   // Check if session is already completed
   if (session.completedAt) {
+    // Calculate session stats
+    const completedSets = sets.filter(s => (s.dropIndex || 0) === 0);
+    const completedTotalSets = completedSets.length;
+    const completedTotalVolume = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+    const completedDuration = session.createdAt
+      ? Math.round((new Date(session.completedAt).getTime() - new Date(session.createdAt).getTime()) / 60000)
+      : 0;
+
+    const formatVolume = (v: number) => {
+      if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+      return String(v);
+    };
+
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 px-4">
         <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full
                        flex items-center justify-center mx-auto mb-4">
           <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none"
@@ -230,10 +243,27 @@ export default function ActiveSession() {
               d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h2 className="text-xl font-semibold mb-2">Session Completed</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-4">
-          This workout was completed on {new Date(session.completedAt).toLocaleDateString()}
+        <h2 className="text-xl font-semibold mb-1">{session.workoutName}</h2>
+        <p className="text-gray-600 dark:text-gray-400 mb-6">
+          Completed on {new Date(session.completedAt).toLocaleDateString()}
         </p>
+
+        {/* Stats grid */}
+        <div className="grid grid-cols-3 gap-4 mb-6 max-w-xs mx-auto">
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+            <p className="text-2xl font-bold">{completedTotalSets}</p>
+            <p className="text-xs text-gray-500">Sets</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+            <p className="text-2xl font-bold">{formatVolume(completedTotalVolume)}</p>
+            <p className="text-xs text-gray-500">lbs</p>
+          </div>
+          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+            <p className="text-2xl font-bold">{completedDuration}</p>
+            <p className="text-xs text-gray-500">min</p>
+          </div>
+        </div>
+
         <div className="space-x-4">
           <Link to="/history" className="text-primary-600 hover:underline">
             View History
