@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
-import { useAdHocExercises } from './hooks/useAdHocExercises';
+import { useAdHocExercises, getAdHocStorageKey } from './hooks/useAdHocExercises';
 import { useExerciseOrdering } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
@@ -56,6 +56,7 @@ export default function ActiveSession() {
     getSetsForExercise,
     allAdHocExercises,
   } = useAdHocExercises({
+    sessionId,
     session: session ?? null,
     exercises,
     sets,
@@ -140,6 +141,9 @@ export default function ActiveSession() {
         const navKeys = getNavStorageKeys(sessionId);
         sessionStorage.removeItem(navKeys.step);
         sessionStorage.removeItem(navKeys.superset);
+
+        // Clear ad-hoc exercise persistence
+        localStorage.removeItem(getAdHocStorageKey(sessionId));
 
         // Show celebration instead of navigating immediately
         setCelebrationData({

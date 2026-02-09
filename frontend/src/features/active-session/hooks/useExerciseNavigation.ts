@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Exercise, Set } from '../../../shared/api/types';
 
 /**
@@ -68,6 +68,10 @@ export function useExerciseNavigation({
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
     // Persist navigation state in sessionStorage to survive page refreshes/phone locks
     const { step: storageKey, superset: supersetStorageKey } = getNavStorageKeys(sessionId);
+
+    // Track whether sessionStorage had a saved value (for smart resume)
+    const hadSavedStepIndex = useRef(sessionStorage.getItem(storageKey) !== null);
+    const hasResumedRef = useRef(false);
 
     const [currentStepIndex, setCurrentStepIndex] = useState(() => {
         const saved = sessionStorage.getItem(storageKey);
@@ -139,6 +143,49 @@ export function useExerciseNavigation({
             setCurrentStepIndex(steps.length - 1);
         }
     }, [steps.length, currentStepIndex]);
+
+    // On resume: if no saved navigation state, jump to first incomplete exercise
+    useEffect(() => {
+        if (hasResumedRef.current) return;
+        if (hadSavedStepIndex.current) return;
+        if (steps.length === 0) return;
+        if (sets.length === 0) return; // Fresh session, step 0 is correct
+
+        hasResumedRef.current = true;
+
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            if (step.type === 'single') {
+                const exerciseSets = sets.filter(
+                    s => (step.exercise.id < 0
+                        ? (s.exerciseId === null && s.exerciseName === step.exercise.name)
+                        : s.exerciseId === step.exercise.id
+                    ) && (s.dropIndex || 0) === 0
+                );
+                if (exerciseSets.length < step.exercise.targetSets) {
+                    setCurrentStepIndex(i);
+                    return;
+                }
+            } else {
+                const anyIncomplete = step.exercises.some(ex => {
+                    const exSets = sets.filter(
+                        s => (ex.id < 0
+                            ? (s.exerciseId === null && s.exerciseName === ex.name)
+                            : s.exerciseId === ex.id
+                        ) && (s.dropIndex || 0) === 0
+                    );
+                    return exSets.length < ex.targetSets;
+                });
+                if (anyIncomplete) {
+                    setCurrentStepIndex(i);
+                    return;
+                }
+            }
+        }
+
+        // All complete — go to last step
+        setCurrentStepIndex(steps.length - 1);
+    }, [steps, sets]);
 
     // Get sets for a specific exercise (only standard sets, sorted)
     // For ad-hoc exercises (negative ID), look up by exerciseName
@@ -254,13 +301,35 @@ export function useExerciseNavigation({
         return index;
     }, [currentStepIndex, steps]);
 
-    // Rotate superset active index (called after logging a set)
+    // Rotate superset active index — prefers the incomplete exercise with fewest logged sets (round-robin fairness)
     const rotateSupersetActive = useCallback(() => {
         if (!currentStep || currentStep.type !== 'superset') return;
 
-        const nextIndex = (supersetActiveIndex + 1) % currentStep.exercises.length;
-        setSupersetActiveIndex(nextIndex);
-    }, [currentStep, supersetActiveIndex]);
+        const len = currentStep.exercises.length;
+
+        // Find the minimum set count among incomplete exercises (excluding current)
+        let minSets = Infinity;
+        for (let offset = 1; offset < len; offset++) {
+            const candidate = (supersetActiveIndex + offset) % len;
+            const ex = currentStep.exercises[candidate];
+            if (!isExerciseComplete(ex.id)) {
+                const { logged } = getExerciseProgress(ex.id);
+                if (logged < minSets) minSets = logged;
+            }
+        }
+
+        // Among those with fewest sets, pick the next one in rotation order
+        for (let offset = 1; offset < len; offset++) {
+            const candidate = (supersetActiveIndex + offset) % len;
+            const ex = currentStep.exercises[candidate];
+            if (!isExerciseComplete(ex.id) && getExerciseProgress(ex.id).logged === minSets) {
+                setSupersetActiveIndex(candidate);
+                return;
+            }
+        }
+
+        // All others complete — stay on current exercise (do NOT advance to a completed one)
+    }, [currentStep, supersetActiveIndex, isExerciseComplete, getExerciseProgress]);
 
     return {
         steps,

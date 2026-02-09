@@ -1,8 +1,35 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import type { Set as SetType, Exercise } from '../../../shared/api/types';
 import type { AdHocExercise } from '../components/AddExercise';
 
+export function getAdHocStorageKey(sessionId: number): string {
+    return `adhoc-exercises-${sessionId}`;
+}
+
+function loadAdHocExercises(sessionId: number): Exercise[] {
+    try {
+        const stored = localStorage.getItem(getAdHocStorageKey(sessionId));
+        if (!stored) return [];
+        return JSON.parse(stored);
+    } catch {
+        return [];
+    }
+}
+
+function saveAdHocExercises(sessionId: number, exercises: Exercise[]): void {
+    try {
+        if (exercises.length === 0) {
+            localStorage.removeItem(getAdHocStorageKey(sessionId));
+        } else {
+            localStorage.setItem(getAdHocStorageKey(sessionId), JSON.stringify(exercises));
+        }
+    } catch {
+        // silently fail
+    }
+}
+
 interface UseAdHocExercisesParams {
+    sessionId: number;
     session: { workoutId?: number | null } | null;
     exercises: Exercise[];  // Program exercises from session
     sets: SetType[];
@@ -30,6 +57,7 @@ interface UseAdHocExercisesResult {
 }
 
 export function useAdHocExercises({
+    sessionId,
     session,
     exercises,
     sets,
@@ -37,8 +65,15 @@ export function useAdHocExercises({
     // State for blank ad-hoc sessions
     const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>([]);
 
-    // State for ad-hoc exercises added to program workouts
-    const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>([]);
+    // State for ad-hoc exercises added to program workouts (initialized from localStorage)
+    const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>(
+        () => loadAdHocExercises(sessionId)
+    );
+
+    // Persist ad-hoc exercises to localStorage when they change
+    useEffect(() => {
+        saveAdHocExercises(sessionId, adHocProgramExercises);
+    }, [sessionId, adHocProgramExercises]);
 
     // Group sets by exercise ID
     const setsByExercise = useMemo(() => {
