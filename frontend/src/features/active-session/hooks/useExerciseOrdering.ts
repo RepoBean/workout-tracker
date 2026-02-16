@@ -16,23 +16,24 @@ export function useExerciseOrdering({
 }: UseExerciseOrderingParams): UseExerciseOrderingResult {
     const [orderedExercises, setOrderedExercises] = useState<Exercise[]>([]);
 
-    // Initialize from mergedExercises (sorted by orderIndex) on first load
+    // Sync orderedExercises with mergedExercises (single effect to avoid race conditions)
     useEffect(() => {
-        if (orderedExercises.length === 0 && mergedExercises.length > 0) {
-            setOrderedExercises(
-                [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex)
-            );
-        }
-    }, [mergedExercises, orderedExercises.length]);
+        if (mergedExercises.length === 0) return;
 
-    // Sync: add new exercises that appear in mergedExercises but not in orderedExercises
-    useEffect(() => {
-        const orderedIds = new Set(orderedExercises.map(e => e.id));
-        const newExercises = mergedExercises.filter(e => !orderedIds.has(e.id));
-        if (newExercises.length > 0) {
-            setOrderedExercises(prev => [...prev, ...newExercises]);
-        }
-    }, [mergedExercises, orderedExercises]);
+        setOrderedExercises(prev => {
+            if (prev.length === 0) {
+                // Initialize: sort by orderIndex on first load
+                return [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex);
+            }
+            // Sync: append any new exercises not yet in the ordered list
+            const existingIds = new Set(prev.map(e => e.id));
+            const newExercises = mergedExercises.filter(e => !existingIds.has(e.id));
+            if (newExercises.length > 0) {
+                return [...prev, ...newExercises];
+            }
+            return prev;
+        });
+    }, [mergedExercises]);
 
     const handleMoveExercise = useCallback((fromIndex: number, toIndex: number) => {
         setOrderedExercises(prev => {

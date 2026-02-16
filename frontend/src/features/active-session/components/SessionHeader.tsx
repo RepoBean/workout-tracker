@@ -1,4 +1,5 @@
 import { Button } from '../../../shared/ui/Button';
+import { TimerIndicator } from '../../../shared/ui/TimerIndicator';
 import type { ActiveSession } from '../../../shared/api/types';
 
 interface SessionHeaderProps {
@@ -23,13 +24,15 @@ export function SessionHeader({
   return (
     <div className="bg-white dark:bg-gray-800 shadow-sm sticky top-0 z-10 -mx-4 px-4 py-2 mb-4">
       {/* Workout name + Complete button */}
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex items-center justify-between gap-2 mb-1">
         <div className="flex-1 min-w-0">
           <h1 className="text-lg font-semibold truncate">{session.workoutName}</h1>
           {session.programName && session.programName !== 'Ad-hoc' && (
             <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{session.programName}</p>
           )}
         </div>
+
+        <TimerIndicator />
 
         {/* Complete button */}
         <Button

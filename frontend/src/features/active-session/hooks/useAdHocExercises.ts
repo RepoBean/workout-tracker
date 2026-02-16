@@ -140,8 +140,9 @@ export function useAdHocExercises({
     // Merge all exercises
     const mergedExercises = useMemo(() => {
         const reconstructedNames = new Set(reconstructedAdHocExercises.map(e => e.name.toLowerCase()));
+        const programNames = new Set(exercises.map(e => e.name.toLowerCase()));
         const newAdHoc = adHocProgramExercises.filter(
-            e => !reconstructedNames.has(e.name.toLowerCase())
+            e => !reconstructedNames.has(e.name.toLowerCase()) && !programNames.has(e.name.toLowerCase())
         );
         return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
     }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
