@@ -90,7 +90,7 @@ This starts:
 - **Frontend** at `http://localhost:5173`
 - **Backend** at `http://localhost:3001`
 
-### Option 3: Shell Script
+Alternatively, you can use the provided shell script:
 
 ```bash
 # Make the start script executable
