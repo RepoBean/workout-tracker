@@ -14,6 +14,8 @@ interface UseExerciseOrderingResult {
     orderedExercises: Exercise[];
     handleMoveExercise: (fromIndex: number, toIndex: number) => void;
     insertExerciseAt: (exercise: Exercise, position: number) => void;
+    swapExercise: (oldExerciseId: number, newExercise: Exercise) => void;
+    updateExerciseInOrder: (exerciseId: number, updates: Partial<Exercise>) => void;
 }
 
 export function useExerciseOrdering({
@@ -90,9 +92,31 @@ export function useExerciseOrdering({
         });
     }, []);
 
+    const swapExercise = useCallback((oldExerciseId: number, newExercise: Exercise) => {
+        setOrderedExercises(prev => {
+            const idx = prev.findIndex(e => e.id === oldExerciseId);
+            if (idx === -1) return prev;
+            const oldExercise = prev[idx];
+            const newList = [...prev];
+            newList[idx] = {
+                ...newExercise,
+                supersetGroup: oldExercise.supersetGroup,
+            };
+            return newList;
+        });
+    }, []);
+
+    const updateExerciseInOrder = useCallback((exerciseId: number, updates: Partial<Exercise>) => {
+        setOrderedExercises(prev =>
+            prev.map(e => e.id === exerciseId ? { ...e, ...updates } : e)
+        );
+    }, []);
+
     return {
         orderedExercises,
         handleMoveExercise,
         insertExerciseAt,
+        swapExercise,
+        updateExerciseInOrder,
     };
 }

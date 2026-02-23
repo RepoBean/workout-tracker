@@ -11,6 +11,7 @@ import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
 import { AddExercise } from './components/AddExercise';
+import { SwapExercise } from './components/SwapExercise';
 import { RpePrompt } from './components/RpePrompt';
 import { CompletionCelebration } from './components/CompletionCelebration';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
@@ -44,6 +45,9 @@ export default function ActiveSession() {
     duration: number;
   } | null>(null);
 
+  // Swap exercise state
+  const [swapTarget, setSwapTarget] = useState<Exercise | null>(null);
+
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
 
@@ -67,6 +71,8 @@ export default function ActiveSession() {
     orderedExercises,
     handleMoveExercise,
     insertExerciseAt,
+    swapExercise,
+    updateExerciseInOrder,
   } = useExerciseOrdering({ mergedExercises, sessionId });
 
   // Exercise navigation hook for focused view
@@ -184,6 +190,38 @@ export default function ActiveSession() {
       : 0;
     const insertPos = currentFlatIndex + currentStepSize;
     insertExerciseAt(virtualExercise, insertPos);
+  };
+
+  // Handler for swapping an exercise mid-workout
+  const handleSwapExercise = (exercise: Exercise, newName: string) => {
+    const existingSets = getSetsForExercise(exercise);
+    const replacementExercise: Exercise = {
+      id: -Date.now(),
+      workoutId: 0,
+      name: newName,
+      targetSets: exercise.targetSets,
+      targetReps: exercise.targetReps,
+      orderIndex: 0,
+      supersetGroup: exercise.supersetGroup,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (existingSets.length > 0) {
+      // Original has logged sets — keep it as standalone completed exercise,
+      // remove its superset group so it doesn't interfere
+      updateExerciseInOrder(exercise.id, { supersetGroup: null });
+      // Insert replacement right after the original
+      const originalIdx = orderedExercises.findIndex(e => e.id === exercise.id);
+      insertExerciseAt(replacementExercise, originalIdx + 1);
+    } else {
+      // No sets logged — simple in-place replacement
+      swapExercise(exercise.id, replacementExercise);
+    }
+
+    // Persist the replacement as ad-hoc
+    setAdHocProgramExercises(prev => [...prev, replacementExercise]);
+    setSwapTarget(null);
   };
 
   // Find exercise index in flat list for dropdown navigation
@@ -318,6 +356,7 @@ export default function ActiveSession() {
                   }}
                   onDeleteSet={deleteSet}
                   onUpdateSet={updateSet}
+                  onSwapExercise={() => setSwapTarget(exercise)}
                   isLogging={isLoggingSet}
                 />
               );
@@ -366,6 +405,7 @@ export default function ActiveSession() {
                               }}
                               onDeleteSet={deleteSet}
                               onUpdateSet={updateSet}
+                              onSwapExercise={() => setSwapTarget(exercise)}
                               isLogging={isLoggingSet}
                             />
                           );
@@ -536,6 +576,16 @@ export default function ActiveSession() {
       )}
 
 
+
+      {/* Swap Exercise Modal */}
+      <SwapExercise
+        isOpen={swapTarget !== null}
+        currentExerciseName={swapTarget?.name || ''}
+        onSwap={(newName) => {
+          if (swapTarget) handleSwapExercise(swapTarget, newName);
+        }}
+        onCancel={() => setSwapTarget(null)}
+      />
 
       {/* RPE Prompt Modal */}
       <RpePrompt

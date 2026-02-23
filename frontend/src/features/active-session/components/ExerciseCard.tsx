@@ -20,6 +20,7 @@ interface ExerciseCardProps {
   }) => void;
   onDeleteSet: (setId: number) => void;
   onUpdateSet?: (setId: number, updates: { weight?: number; reps?: number }) => void;
+  onSwapExercise?: () => void;
   isLogging: boolean;
 }
 
@@ -36,6 +37,7 @@ export function ExerciseCard({
   onLogSet,
   onDeleteSet,
   onUpdateSet,
+  onSwapExercise,
   isLogging,
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
@@ -118,7 +120,25 @@ export function ExerciseCard({
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-lg truncate">{exercise.name}</h3>
+          <div className="flex items-center">
+            <h3 className="font-semibold text-lg truncate">{exercise.name}</h3>
+            {onSwapExercise && (
+              <button
+                onClick={onSwapExercise}
+                className="ml-2 p-1.5 text-gray-400 hover:text-primary-600
+                           dark:hover:text-primary-400 rounded-lg
+                           hover:bg-gray-100 dark:hover:bg-gray-700
+                           transition-colors shrink-0"
+                aria-label="Swap exercise"
+                title="Replace exercise"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                </svg>
+              </button>
+            )}
+          </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {exercise.targetSets} sets × {exercise.targetReps} reps
             {exercise.supersetGroup && (
