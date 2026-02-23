@@ -51,7 +51,7 @@ export interface UseExerciseNavigationResult {
  * Consecutive exercises with the same non-null supersetGroup are grouped into one step.
  * Auto-advancing and superset rotation are handled via callback functions.
  *
- * Navigation state is persisted in sessionStorage to survive page refreshes.
+ * Navigation state is persisted in localStorage to survive mobile tab eviction.
  */
 /** Get session-specific storage keys for navigation state */
 export function getNavStorageKeys(sessionId: number) {
@@ -66,19 +66,19 @@ export function useExerciseNavigation({
     sets,
     sessionId,
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
-    // Persist navigation state in sessionStorage to survive page refreshes/phone locks
+    // Persist navigation state in localStorage to survive mobile tab eviction
     const { step: storageKey, superset: supersetStorageKey } = getNavStorageKeys(sessionId);
 
-    // Track whether sessionStorage had a saved value (for smart resume)
-    const hadSavedStepIndex = useRef(sessionStorage.getItem(storageKey) !== null);
+    // Track whether localStorage had a saved value (for smart resume)
+    const hadSavedStepIndex = useRef(localStorage.getItem(storageKey) !== null);
     const hasResumedRef = useRef(false);
 
     const [currentStepIndex, setCurrentStepIndex] = useState(() => {
-        const saved = sessionStorage.getItem(storageKey);
+        const saved = localStorage.getItem(storageKey);
         return saved ? parseInt(saved, 10) : 0;
     });
     const [supersetActiveIndex, setSupersetActiveIndex] = useState(() => {
-        const saved = sessionStorage.getItem(supersetStorageKey);
+        const saved = localStorage.getItem(supersetStorageKey);
         return saved ? parseInt(saved, 10) : 0;
     });
 
@@ -130,11 +130,11 @@ export function useExerciseNavigation({
 
     // Persist navigation state to sessionStorage when it changes
     useEffect(() => {
-        sessionStorage.setItem(storageKey, String(currentStepIndex));
+        localStorage.setItem(storageKey, String(currentStepIndex));
     }, [currentStepIndex]);
 
     useEffect(() => {
-        sessionStorage.setItem(supersetStorageKey, String(supersetActiveIndex));
+        localStorage.setItem(supersetStorageKey, String(supersetActiveIndex));
     }, [supersetActiveIndex]);
 
     // Clamp currentStepIndex if it's out of bounds (e.g., exercises changed)

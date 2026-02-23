@@ -32,14 +32,29 @@ export function SetInput({
   dropIndex,
   isDropSet = false,
 }: SetInputProps) {
+  const weightOverrideKey = `set-weight-${exerciseName}-${setNumber}`;
+  const repsOverrideKey = `set-reps-${exerciseName}-${setNumber}`;
+
   // Use string state for display to prevent leading zeros issue
-  const [weight, setWeight] = useState(previousWeight);
-  const [weightStr, setWeightStr] = useState(String(previousWeight));
-  const [reps, setReps] = useState(previousReps);
-  const [repsStr, setRepsStr] = useState(String(previousReps));
+  const [weight, setWeight] = useState(() => {
+    const saved = localStorage.getItem(weightOverrideKey);
+    return saved ? parseFloat(saved) : previousWeight;
+  });
+  const [weightStr, setWeightStr] = useState(() => {
+    const saved = localStorage.getItem(weightOverrideKey);
+    return saved ?? String(previousWeight);
+  });
+  const [reps, setReps] = useState(() => {
+    const saved = localStorage.getItem(repsOverrideKey);
+    return saved ? parseInt(saved, 10) : previousReps;
+  });
+  const [repsStr, setRepsStr] = useState(() => {
+    const saved = localStorage.getItem(repsOverrideKey);
+    return saved ?? String(previousReps);
+  });
 
   // Track if user has made manual changes to prevent prop sync from overwriting
-  const isDirty = useRef(false);
+  const isDirty = useRef(localStorage.getItem(weightOverrideKey) !== null || localStorage.getItem(repsOverrideKey) !== null);
 
   // Sync state when previousWeight/previousReps change (e.g., after async data loads)
   useEffect(() => {
@@ -47,6 +62,7 @@ export function SetInput({
     if (!isDirty.current) {
       setWeight(previousWeight);
       setWeightStr(String(previousWeight));
+      localStorage.removeItem(weightOverrideKey);
     }
   }, [previousWeight]);
 
@@ -55,6 +71,7 @@ export function SetInput({
     if (!isDirty.current) {
       setReps(previousReps);
       setRepsStr(String(previousReps));
+      localStorage.removeItem(repsOverrideKey);
     }
   }, [previousReps]);
 
@@ -63,14 +80,16 @@ export function SetInput({
     setWeight(clamped);
     setWeightStr(String(clamped));
     isDirty.current = true;
-  }, []);
+    localStorage.setItem(weightOverrideKey, String(clamped));
+  }, [weightOverrideKey]);
 
   const updateReps = useCallback((value: number) => {
     const clamped = Math.max(1, value);
     setReps(clamped);
     setRepsStr(String(clamped));
     isDirty.current = true;
-  }, []);
+    localStorage.setItem(repsOverrideKey, String(clamped));
+  }, [repsOverrideKey]);
 
   const handleWeightChange = useCallback((raw: string) => {
     // Allow empty input while typing
@@ -78,16 +97,19 @@ export function SetInput({
       setWeightStr(raw);
       setWeight(0);
       isDirty.current = true;
+      localStorage.setItem(weightOverrideKey, '0');
       return;
     }
     // Strip leading zeros and parse
     const parsed = parseFloat(raw);
     if (!isNaN(parsed)) {
-      setWeight(Math.max(0, parsed));
+      const clamped = Math.max(0, parsed);
+      setWeight(clamped);
       setWeightStr(raw);
       isDirty.current = true;
+      localStorage.setItem(weightOverrideKey, String(clamped));
     }
-  }, []);
+  }, [weightOverrideKey]);
 
   const handleWeightBlur = useCallback(() => {
     // On blur, normalize the display value
@@ -100,15 +122,18 @@ export function SetInput({
       setRepsStr(raw);
       setReps(1);
       isDirty.current = true;
+      localStorage.setItem(repsOverrideKey, '1');
       return;
     }
     const parsed = parseInt(raw, 10);
     if (!isNaN(parsed)) {
-      setReps(Math.max(1, parsed));
+      const clamped = Math.max(1, parsed);
+      setReps(clamped);
       setRepsStr(raw);
       isDirty.current = true;
+      localStorage.setItem(repsOverrideKey, String(clamped));
     }
-  }, []);
+  }, [repsOverrideKey]);
 
   const handleRepsBlur = useCallback(() => {
     // On blur, normalize the display value
@@ -124,8 +149,10 @@ export function SetInput({
       setNumber,
       dropIndex: isDropSet ? dropIndex : undefined,
     });
-    // Reset dirty flag so next set can receive fresh hints
+    // Reset dirty flag and clear overrides so next set can receive fresh hints
     isDirty.current = false;
+    localStorage.removeItem(weightOverrideKey);
+    localStorage.removeItem(repsOverrideKey);
   };
 
   const label = isDropSet ? `Drop ${dropIndex}` : `Set ${setNumber}`;

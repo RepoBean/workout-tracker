@@ -4,7 +4,7 @@ import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
 import { useAdHocExercises, getAdHocStorageKey } from './hooks/useAdHocExercises';
-import { useExerciseOrdering } from './hooks/useExerciseOrdering';
+import { useExerciseOrdering, getOrderStorageKey } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
@@ -67,7 +67,7 @@ export default function ActiveSession() {
     orderedExercises,
     handleMoveExercise,
     insertExerciseAt,
-  } = useExerciseOrdering({ mergedExercises });
+  } = useExerciseOrdering({ mergedExercises, sessionId });
 
   // Exercise navigation hook for focused view
   const navigation = useExerciseNavigation({
@@ -139,11 +139,14 @@ export default function ActiveSession() {
       onSuccess: () => {
         // Clear navigation state
         const navKeys = getNavStorageKeys(sessionId);
-        sessionStorage.removeItem(navKeys.step);
-        sessionStorage.removeItem(navKeys.superset);
+        localStorage.removeItem(navKeys.step);
+        localStorage.removeItem(navKeys.superset);
 
         // Clear ad-hoc exercise persistence
         localStorage.removeItem(getAdHocStorageKey(sessionId));
+
+        // Clear exercise ordering
+        localStorage.removeItem(getOrderStorageKey(sessionId));
 
         // Show celebration instead of navigating immediately
         setCelebrationData({
@@ -173,8 +176,13 @@ export default function ActiveSession() {
     // Add to adHocProgramExercises (for reconstruction on session resume)
     setAdHocProgramExercises(prev => [...prev, virtualExercise]);
 
-    // Insert directly into orderedExercises at current position
-    const insertPos = navigation.getCurrentFlatIndex();
+    // Insert AFTER the current step so user stays on current exercise
+    const currentFlatIndex = navigation.getCurrentFlatIndex();
+    const currentStep = navigation.currentStep;
+    const currentStepSize = currentStep
+      ? (currentStep.type === 'single' ? 1 : currentStep.exercises.length)
+      : 0;
+    const insertPos = currentFlatIndex + currentStepSize;
     insertExerciseAt(virtualExercise, insertPos);
   };
 
