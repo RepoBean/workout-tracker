@@ -1,0 +1,60 @@
+# Backend Dockerfile - TypeScript + Express + SQLite
+# Multi-stage build: compile TS → run compiled JS
+
+# Stage 1: Builder (compile TypeScript + native modules)
+FROM node:20-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies for sqlite3 native module
+RUN apt-get update && \
+    apt-get install -y python3 make g++ && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy package files
+COPY backend/package*.json ./
+
+# Install all dependencies (including dev for TypeScript compilation)
+RUN npm ci
+
+# Copy backend source code
+COPY backend/ ./
+
+# Compile TypeScript to JavaScript
+RUN npx tsc
+
+# Stage 2: Production
+FROM node:20-slim
+
+WORKDIR /app
+
+# Set production environment
+ENV NODE_ENV=production
+
+# Copy compiled node_modules from builder (includes sqlite3 native module)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy compiled JavaScript output
+COPY --from=builder /app/dist ./dist
+
+# Copy package.json for metadata
+COPY backend/package.json ./
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 appuser && \
+    mkdir -p /data && \
+    chown -R appuser:nodejs /data
+
+# Switch to non-root user
+USER appuser
+
+# Expose backend port
+EXPOSE 3001
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3001/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+
+# Start server
+CMD ["node", "dist/index.js"]

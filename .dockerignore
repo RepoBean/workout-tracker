@@ -1,0 +1,47 @@
+# Dependencies (installed in container)
+node_modules/
+*/node_modules/
+
+# Git
+.git/
+.gitignore
+
+# Build outputs (rebuilt in container)
+frontend/dist/
+backend/dist/
+
+# Database files (use Docker volumes)
+*.sqlite
+*.sqlite3
+*.db
+
+# Logs
+*.log
+logs/
+
+# Environment files (use docker-compose environment)
+.env
+.env.*
+!.env.example
+
+# IDE and editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Temporary and cache
+.tmp/
+.temp/
+.cache/
+
+# Claude/AI config
+.claude/

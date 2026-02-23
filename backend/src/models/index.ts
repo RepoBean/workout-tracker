@@ -8,7 +8,7 @@ import { Set } from './Set.js';
 // Create Sequelize instance with SQLite
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: './database.sqlite',
+  storage: process.env.DB_PATH || './database.sqlite',
   logging: false, // Set to console.log for debugging
 });
 
