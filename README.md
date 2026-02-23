@@ -76,8 +76,8 @@ The app will be available at **http://localhost:8035**.
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/workout-tracker-v2.git
-cd workout-tracker-v2
+git clone https://github.com/RepoBean/workout-tracker.git
+cd workout-tracker
 
 # Install all dependencies (root + backend + frontend)
 npm run install:all
