@@ -24,11 +24,22 @@ export function useExerciseOrdering({
 }: UseExerciseOrderingParams): UseExerciseOrderingResult {
     const [orderedExercises, setOrderedExercises] = useState<Exercise[]>([]);
 
-    // Sync orderedExercises with mergedExercises, restoring from localStorage if available
+    // Sync orderedExercises with mergedExercises, restoring from localStorage on initialization
     useEffect(() => {
         if (mergedExercises.length === 0) return;
 
         setOrderedExercises(prev => {
+            if (prev.length > 0) {
+                // Already initialized: preserve local modifications (like supersetGroup nulling or swaps)
+                // Just append any new exercises not yet in the ordered list
+                const existingIds = new Set(prev.map(e => e.id));
+                const newExercises = mergedExercises.filter(e => !existingIds.has(e.id));
+                if (newExercises.length > 0) {
+                    return [...prev, ...newExercises];
+                }
+                return prev;
+            }
+
             // Check localStorage for saved order
             const savedOrderJson = localStorage.getItem(getOrderStorageKey(sessionId));
             const savedOrder: number[] | null = savedOrderJson ? JSON.parse(savedOrderJson) : null;
@@ -51,17 +62,8 @@ export function useExerciseOrdering({
                 return ordered;
             }
 
-            if (prev.length === 0) {
-                // Initialize: sort by orderIndex on first load
-                return [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex);
-            }
-            // Sync: append any new exercises not yet in the ordered list
-            const existingIds = new Set(prev.map(e => e.id));
-            const newExercises = mergedExercises.filter(e => !existingIds.has(e.id));
-            if (newExercises.length > 0) {
-                return [...prev, ...newExercises];
-            }
-            return prev;
+            // Initialize: sort by orderIndex on first load
+            return [...mergedExercises].sort((a, b) => a.orderIndex - b.orderIndex);
         });
     }, [mergedExercises, sessionId]);
 

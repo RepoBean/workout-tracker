@@ -128,7 +128,7 @@ export function useAdHocExercises({
                 targetSets: existingAdHoc?.targetSets ?? 3,
                 targetReps: existingAdHoc?.targetReps ?? '10',
                 orderIndex: existingAdHoc?.orderIndex ?? (exercises.length + result.length),
-                supersetGroup: null,
+                supersetGroup: existingAdHoc?.supersetGroup ?? null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });
