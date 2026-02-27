@@ -72,7 +72,6 @@ export default function ActiveSession() {
     handleMoveExercise,
     insertExerciseAt,
     swapExercise,
-    updateExerciseInOrder,
   } = useExerciseOrdering({ mergedExercises, sessionId });
 
   // Exercise navigation hook for focused view
@@ -194,7 +193,6 @@ export default function ActiveSession() {
 
   // Handler for swapping an exercise mid-workout
   const handleSwapExercise = (exercise: Exercise, newName: string) => {
-    const existingSets = getSetsForExercise(exercise);
     const replacementExercise: Exercise = {
       id: -Date.now(),
       workoutId: 0,
@@ -207,17 +205,9 @@ export default function ActiveSession() {
       updatedAt: new Date().toISOString(),
     };
 
-    if (existingSets.length > 0) {
-      // Original has logged sets — keep it as standalone completed exercise,
-      // remove its superset group so it doesn't interfere
-      updateExerciseInOrder(exercise.id, { supersetGroup: null });
-      // Insert replacement right after the original
-      const originalIdx = orderedExercises.findIndex(e => e.id === exercise.id);
-      insertExerciseAt(replacementExercise, originalIdx + 1);
-    } else {
-      // No sets logged — simple in-place replacement
-      swapExercise(exercise.id, replacementExercise);
-    }
+    // Always in-place replacement — original's logged sets are preserved
+    // in the database (history-independent via exerciseName on Set rows)
+    swapExercise(exercise.id, replacementExercise);
 
     // Persist the replacement as ad-hoc
     setAdHocProgramExercises(prev => [...prev, replacementExercise]);
