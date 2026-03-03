@@ -47,19 +47,3 @@ export interface SetWithSession extends Set {
 }
 
 // ============================================
-// Raw SQL Query Result Types
-// ============================================
-// SQLite may return numbers as strings, so we accept both.
-
-export interface VolumeQueryResult {
-    totalSets: string | number;
-    totalVolume: string | number;
-}
-
-export interface MonthVolumeQueryResult {
-    monthVolume: string | number;
-}
-
-export interface StreakQueryResult {
-    sessionDate: string;
-}

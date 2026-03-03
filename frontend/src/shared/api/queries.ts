@@ -188,16 +188,12 @@ export function useActiveSessionCheck() {
 
 /**
  * Fetch workout statistics
- * Passes timezone offset so streak calculation uses user's local date
  */
 export function useStats() {
   return useQuery({
     queryKey: queryKeys.stats,
     queryFn: async () => {
-      const tzOffset = new Date().getTimezoneOffset();
-      const { data } = await api.get<StatsResponse>('/sessions/stats', {
-        params: { tzOffset },
-      });
+      const { data } = await api.get<StatsResponse>('/sessions/stats');
       return data;
     },
     staleTime: 5 * 60 * 1000, // Stats don't change frequently

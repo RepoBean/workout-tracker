@@ -37,9 +37,10 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
       const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
 
       // Optimistically add the new set
+      const tempId = -Date.now();
       if (previousSession) {
         const optimisticSet: Set = {
-          id: -Date.now(), // Temporary negative ID to identify optimistic updates
+          id: tempId,
           sessionId,
           exerciseId: newSet.exerciseId || null,
           exerciseName: newSet.exerciseName,
@@ -58,7 +59,7 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
         });
       }
 
-      return { previousSession };
+      return { previousSession, tempId };
     },
     onError: (_err, _newSet, context) => {
       // Revert on error
@@ -67,13 +68,19 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
       }
       toast.error('Failed to log set. Please try again.');
     },
-    onSuccess: (savedSet, variables) => {
-      // Replace optimistic set with real one
+    onSuccess: (savedSet, variables, context) => {
+      // Replace the exact optimistic set with the real one from the server
       const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
       if (currentSession) {
-        // Remove the optimistic set (negative ID) and add the real one
-        const updatedSets = currentSession.sets?.filter(s => s.id > 0) || [];
-        updatedSets.push(savedSet);
+        let replaced = false;
+        const updatedSets = (currentSession.sets || []).map(s => {
+          if (s.id === context?.tempId) {
+            replaced = true;
+            return savedSet;
+          }
+          return s;
+        });
+        if (!replaced) updatedSets.push(savedSet);
 
         queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
           ...currentSession,

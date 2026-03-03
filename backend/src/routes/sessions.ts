@@ -9,9 +9,6 @@ import type {
   WorkoutWithProgramAndExercises,
   SessionWithSets,
   SetWithSession,
-  VolumeQueryResult,
-  MonthVolumeQueryResult,
-  StreakQueryResult,
 } from '../types/associations.js';
 
 const router = Router();
@@ -176,114 +173,80 @@ router.get('/export-csv', async (req: Request, res: Response) => {
 // GET /api/sessions/stats - Summary statistics
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    // Timezone offset in minutes (e.g., -600 for UTC+10, 300 for UTC-5)
-    // Matches JavaScript's getTimezoneOffset() which returns minutes
-    // Positive = west of UTC, negative = east of UTC
-    const tzOffset = parseInt(req.query.tzOffset as string) || 0;
-
-    const now = new Date();
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    // Total completed sessions
-    const totalSessions = await Session.count({
+    // Fetch all completed session dates and compute everything in JS
+    // This avoids the SQLite strftime week-boundary bug
+    const sessions = await Session.findAll({
       where: { completedAt: { [Op.ne]: null } },
+      attributes: ['completedAt'],
     });
 
-    // Sessions last 7 days
-    const sessionsLast7Days = await Session.count({
-      where: {
-        completedAt: { [Op.ne]: null, [Op.gte]: sevenDaysAgo },
-      },
-    });
+    const totalSessions = sessions.length;
 
     // Sessions last 30 days
-    const sessionsLast30Days = await Session.count({
-      where: {
-        completedAt: { [Op.ne]: null, [Op.gte]: thirtyDaysAgo },
-      },
-    });
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const sessionsLast30Days = sessions.filter(
+      (s) => new Date(s.completedAt as unknown as string) >= thirtyDaysAgo
+    ).length;
 
-    // Total sets and volume
-    const [volumeResult] = await sequelize.query(`
-      SELECT
-        COUNT(*) as totalSets,
-        COALESCE(SUM(weight * reps), 0) as totalVolume
-      FROM Sets
-      WHERE sessionId IN (
-        SELECT id FROM Sessions WHERE completedAt IS NOT NULL
-      )
-    `);
-    const volumeRows = volumeResult as VolumeQueryResult[];
-    const totalSets = Number(volumeRows[0]?.totalSets) || 0;
-    const totalVolume = Number(volumeRows[0]?.totalVolume) || 0;
-
-    // Volume last 30 days
-    const [monthVolumeResult] = await sequelize.query(`
-      SELECT COALESCE(SUM(s.weight * s.reps), 0) as monthVolume
-      FROM Sets s
-      JOIN Sessions sess ON s.sessionId = sess.id
-      WHERE sess.completedAt IS NOT NULL
-        AND sess.completedAt >= :thirtyDaysAgo
-    `, { replacements: { thirtyDaysAgo: thirtyDaysAgo.toISOString() } });
-    const monthRows = monthVolumeResult as MonthVolumeQueryResult[];
-    const monthVolume = Number(monthRows[0]?.monthVolume) || 0;
-
-    // Week streak: consecutive weeks with 3+ sessions
-    // Week = Sunday (0) to Saturday (6)
-    // tzOffset from getTimezoneOffset() is positive for west of UTC, negative for east
-    const offsetSeconds = -tzOffset * 60; // Convert minutes to seconds, flip sign
-
-    const [weeklySessionsResult] = await sequelize.query(`
-      SELECT
-        strftime('%Y-%W', datetime(completedAt, '${offsetSeconds >= 0 ? '+' : ''}${offsetSeconds} seconds')) as yearWeek,
-        COUNT(*) as sessionCount
-      FROM Sessions
-      WHERE completedAt IS NOT NULL
-      GROUP BY yearWeek
-      ORDER BY yearWeek DESC
-    `);
-
-    interface WeeklyCount { yearWeek: string; sessionCount: number }
-    const weeklyCounts = weeklySessionsResult as WeeklyCount[];
-
-    // Calculate current week string for comparison (ISO week)
-    const getYearWeek = (date: Date): string => {
+    // Week streak: consecutive calendar weeks (Sun-Sat) with >= 1 workout
+    // Uses Sunday-based weeks to match JS getDay() where Sunday = 0
+    const getSundayWeekKey = (date: Date): string => {
       const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      d.setDate(d.getDate() + 4 - (d.getDay() || 7)); // Thursday of current week
-      const yearStart = new Date(d.getFullYear(), 0, 1);
-      const weekNum = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-      return `${d.getFullYear()}-${String(weekNum).padStart(2, '0')}`;
+      // Roll back to Sunday of this week
+      d.setDate(d.getDate() - d.getDay());
+      const year = d.getFullYear();
+      const jan1 = new Date(year, 0, 1);
+      const dayOfYear = Math.floor((d.getTime() - jan1.getTime()) / 86400000);
+      const weekNum = Math.floor(dayOfYear / 7);
+      return `${year}-${weekNum}`;
     };
 
-    let weekStreak = 0;
-    const userNow = new Date(now.getTime() - tzOffset * 60 * 1000);
-    let checkWeek = getYearWeek(userNow);
+    // Collect distinct weeks that have at least one session
+    const activeWeeks = new Set<string>();
+    for (const s of sessions) {
+      activeWeeks.add(getSundayWeekKey(new Date(s.completedAt as unknown as string)));
+    }
 
-    for (const week of weeklyCounts) {
-      if (week.yearWeek === checkWeek && week.sessionCount >= 3) {
+    // Walk backwards from the current week
+    let weekStreak = 0;
+    const cursor = new Date(now);
+
+    // Check current week first
+    let currentWeekKey = getSundayWeekKey(cursor);
+    if (activeWeeks.has(currentWeekKey)) {
+      weekStreak = 1;
+    } else {
+      // Current week has no workouts yet — check last week
+      cursor.setDate(cursor.getDate() - 7);
+      currentWeekKey = getSundayWeekKey(cursor);
+      if (activeWeeks.has(currentWeekKey)) {
+        weekStreak = 1;
+      }
+      // If last week also empty, streak is 0
+    }
+
+    // Continue backwards from the week before the one that started the streak
+    if (weekStreak > 0) {
+      cursor.setTime(now.getTime());
+      // Move to the Sunday of the week that started our streak
+      // If current week counted, start from current week's Sunday
+      // If last week counted, start from last week's Sunday
+      const startKey = getSundayWeekKey(cursor);
+      if (!activeWeeks.has(startKey)) {
+        cursor.setDate(cursor.getDate() - 7);
+      }
+      // Now walk backwards
+      cursor.setDate(cursor.getDate() - 7);
+      while (activeWeeks.has(getSundayWeekKey(cursor))) {
         weekStreak++;
-        // Move to previous week
-        const d = new Date(userNow);
-        d.setDate(d.getDate() - (7 * weekStreak));
-        checkWeek = getYearWeek(d);
-      } else if (week.yearWeek === checkWeek) {
-        // This week exists but < 3 sessions, streak broken
-        break;
-      } else {
-        // Week doesn't exist in results, check if it's current week (incomplete) or past (broken)
-        break;
+        cursor.setDate(cursor.getDate() - 7);
       }
     }
 
     res.json({
       totalSessions,
-      totalSets,
-      totalVolume,
-      sessionsLast7Days,
       sessionsLast30Days,
-      monthVolume,
       weekStreak,
     });
   } catch (error) {

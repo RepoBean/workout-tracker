@@ -179,11 +179,7 @@ export interface UpdateExerciseRequest {
 
 export interface StatsResponse {
   totalSessions: number;
-  totalSets: number;
-  totalVolume: number;
-  sessionsLast7Days: number;
   sessionsLast30Days: number;
-  monthVolume: number;
   weekStreak: number;
 }
 

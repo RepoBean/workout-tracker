@@ -4,7 +4,7 @@ import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
 import { useAdHocExercises, getAdHocStorageKey } from './hooks/useAdHocExercises';
-import { useExerciseOrdering, getOrderStorageKey } from './hooks/useExerciseOrdering';
+import { useExerciseOrdering, getOrderStorageKey, getHiddenStorageKey } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
@@ -152,6 +152,9 @@ export default function ActiveSession() {
 
         // Clear exercise ordering
         localStorage.removeItem(getOrderStorageKey(sessionId));
+
+        // Clear hidden exercises (from swaps)
+        localStorage.removeItem(getHiddenStorageKey(sessionId));
 
         // Show celebration instead of navigating immediately
         setCelebrationData({
