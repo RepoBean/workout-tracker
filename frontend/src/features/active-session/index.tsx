@@ -72,7 +72,7 @@ export default function ActiveSession() {
     handleMoveExercise,
     insertExerciseAt,
     swapExercise,
-  } = useExerciseOrdering({ mergedExercises, sessionId });
+  } = useExerciseOrdering({ mergedExercises, sessionId, isReady: !isLoading && !!session });
 
   // Exercise navigation hook for focused view
   const navigation = useExerciseNavigation({
@@ -202,7 +202,7 @@ export default function ActiveSession() {
       name: newName,
       targetSets: exercise.targetSets,
       targetReps: exercise.targetReps,
-      orderIndex: 0,
+      orderIndex: exercise.orderIndex,
       supersetGroup: exercise.supersetGroup,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

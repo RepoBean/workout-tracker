@@ -12,6 +12,7 @@ export function getHiddenStorageKey(sessionId: number): string {
 interface UseExerciseOrderingParams {
     mergedExercises: Exercise[];
     sessionId: number;
+    isReady: boolean;
 }
 
 interface UseExerciseOrderingResult {
@@ -25,6 +26,7 @@ interface UseExerciseOrderingResult {
 export function useExerciseOrdering({
     mergedExercises,
     sessionId,
+    isReady,
 }: UseExerciseOrderingParams): UseExerciseOrderingResult {
     const [orderedExercises, setOrderedExercises] = useState<Exercise[]>([]);
     const [hiddenExerciseIds, setHiddenExerciseIds] = useState<Set<number>>(() => {
@@ -47,6 +49,7 @@ export function useExerciseOrdering({
 
     // Sync orderedExercises with mergedExercises, restoring from localStorage on initialization
     useEffect(() => {
+        if (!isReady) return;
         if (mergedExercises.length === 0) return;
 
         // Filter out exercises that were swapped out / hidden
@@ -89,17 +92,18 @@ export function useExerciseOrdering({
             // Initialize: sort by orderIndex on first load
             return [...visibleExercises].sort((a, b) => a.orderIndex - b.orderIndex);
         });
-    }, [mergedExercises, sessionId, hiddenExerciseIds]);
+    }, [mergedExercises, sessionId, hiddenExerciseIds, isReady]);
 
     // Persist ordering to localStorage when it changes
     useEffect(() => {
+        if (!isReady) return;
         if (orderedExercises.length > 0) {
             localStorage.setItem(
                 getOrderStorageKey(sessionId),
                 JSON.stringify(orderedExercises.map(e => e.id))
             );
         }
-    }, [orderedExercises, sessionId]);
+    }, [orderedExercises, sessionId, isReady]);
 
     const handleMoveExercise = useCallback((fromIndex: number, toIndex: number) => {
         setOrderedExercises(prev => {
