@@ -195,11 +195,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       const d = new Date(date);
       // Roll back to Sunday of this week
       d.setDate(d.getDate() - d.getDay());
-      const year = d.getFullYear();
-      const jan1 = new Date(year, 0, 1);
-      const dayOfYear = Math.floor((d.getTime() - jan1.getTime()) / 86400000);
-      const weekNum = Math.floor(dayOfYear / 7);
-      return `${year}-${weekNum}`;
+      return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     };
 
     // Collect distinct weeks that have at least one session

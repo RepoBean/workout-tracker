@@ -56,6 +56,14 @@ interface UseAdHocExercisesResult {
     allAdHocExercises: AdHocExercise[];
 }
 
+function hashName(name: string): number {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = Math.imul(31, hash) + name.charCodeAt(i);
+    }
+    return -(Math.abs(hash) + 1);
+}
+
 export function useAdHocExercises({
     sessionId,
     session,
@@ -122,7 +130,7 @@ export function useAdHocExercises({
             );
 
             result.push({
-                id: existingAdHoc?.id ?? (-displayName.length - Date.now() % 1000),
+                id: existingAdHoc?.id ?? hashName(displayName),
                 workoutId: session?.workoutId || 0,
                 name: displayName,
                 targetSets: existingAdHoc?.targetSets ?? 3,
