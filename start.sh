@@ -1,24 +1,17 @@
 #!/bin/bash
 
-# Start Workout App (frontend + backend)
+# Start Workout App (production mode)
 # Usage: ./start.sh
 
+set -e
 cd "$(dirname "$0")"
 
-echo "Starting backend on http://localhost:3002..."
-(cd backend && npm run dev) &
-BACKEND_PID=$!
+echo "Building frontend..."
+(cd frontend && npm run build)
 
-echo "Starting frontend on http://localhost:5174..."
-(cd frontend && npm run dev) &
-FRONTEND_PID=$!
+echo "Building backend..."
+(cd backend && npm run build)
 
 echo ""
-echo "✓ App running:"
-echo "  Frontend: http://localhost:5174"
-echo "  Backend:  http://localhost:3002"
-echo ""
-echo "Press Ctrl+C to stop both servers"
-
-trap "kill $BACKEND_PID $FRONTEND_PID 2>/dev/null" EXIT
-wait
+echo "Starting server on http://localhost:3002..."
+cd backend && npm start
