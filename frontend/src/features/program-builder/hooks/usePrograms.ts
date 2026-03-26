@@ -199,12 +199,42 @@ export function useProgramMutations() {
     },
   });
 
+  const duplicateProgram = useMutation({
+    mutationFn: async (id: number) => {
+      const { data: program } = await api.post<Program>(`/programs/${id}/duplicate`);
+      return program;
+    },
+    onSuccess: () => {
+      invalidatePrograms();
+      toast.success('Program duplicated');
+    },
+    onError: () => {
+      toast.error('Failed to duplicate program');
+    },
+  });
+
+  const duplicateWorkout = useMutation({
+    mutationFn: async (id: number) => {
+      const { data: workout } = await api.post<Workout>(`/workouts/${id}/duplicate`);
+      return workout;
+    },
+    onSuccess: () => {
+      invalidatePrograms();
+      toast.success('Workout duplicated');
+    },
+    onError: () => {
+      toast.error('Failed to duplicate workout');
+    },
+  });
+
   return {
     createProgram,
     updateProgram,
     deleteProgram,
     activateProgram,
     importProgram,
+    duplicateProgram,
+    duplicateWorkout,
     createWorkout,
     updateWorkout,
     deleteWorkout,

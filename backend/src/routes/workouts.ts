@@ -116,6 +116,66 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/workouts/:id/duplicate - Duplicate workout with exercises
+router.post('/:id/duplicate', async (req: Request, res: Response) => {
+  try {
+    const original = await Workout.findByPk(Number(req.params.id), {
+      include: [{
+        model: Exercise,
+        as: 'exercises'
+      }],
+      order: [
+        [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    if (!original) {
+      res.status(404).json({ error: 'Workout not found' });
+      return;
+    }
+
+    const workoutCount = await Workout.count({ where: { programId: original.programId } });
+    const originalJSON = original.toJSON() as unknown as Record<string, unknown>;
+    const exercises = (originalJSON.exercises as Array<Record<string, unknown>>) || [];
+
+    const newWorkout = await sequelize.transaction(async (t) => {
+      const workout = await Workout.create({
+        programId: original.programId,
+        name: `${original.name} (Copy)`,
+        orderIndex: workoutCount,
+      }, { transaction: t });
+
+      for (const e of exercises) {
+        await Exercise.create({
+          workoutId: workout.id,
+          name: e.name as string,
+          targetSets: e.targetSets as number,
+          targetReps: e.targetReps as string,
+          orderIndex: e.orderIndex as number,
+          supersetGroup: (e.supersetGroup as string) || null,
+        }, { transaction: t });
+      }
+
+      return workout;
+    });
+
+    const fullWorkout = await Workout.findByPk(newWorkout.id, {
+      include: [{
+        model: Exercise,
+        as: 'exercises'
+      }],
+      order: [
+        [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    res.status(201).json(fullWorkout);
+  } catch (error) {
+    console.error('Error duplicating workout:', error);
+    res.status(500).json({ error: 'Failed to duplicate workout' });
+  }
+});
+
 // POST /api/workouts/reorder - Reorder workouts within a program
 router.post('/reorder', validate(reorderWorkoutsSchema), async (req: Request, res: Response) => {
   try {

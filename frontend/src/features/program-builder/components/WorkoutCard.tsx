@@ -25,7 +25,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
     exercise?: Exercise;
   }>({ open: false });
 
-  const { updateWorkout, deleteWorkout, deleteExercise, reorderExercises } = useProgramMutations();
+  const { updateWorkout, deleteWorkout, duplicateWorkout, deleteExercise, reorderExercises } = useProgramMutations();
   const exercises = workout.exercises || [];
 
   const handleSaveName = () => {
@@ -109,7 +109,19 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
         </div>
 
         <button
-          className="p-1 text-red-500 hover:text-red-700 flex-shrink-0"
+          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600 flex-shrink-0"
+          onClick={(e) => {
+            e.stopPropagation();
+            duplicateWorkout.mutate(workout.id);
+          }}
+          title="Duplicate workout"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <button
+          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-red-500 hover:text-red-700 flex-shrink-0"
           onClick={(e) => {
             e.stopPropagation();
             handleDelete();
@@ -137,20 +149,20 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
               {/* Reorder buttons */}
               <div className="flex flex-col flex-shrink-0">
                 <button
-                  className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
                   disabled={index === 0}
                   onClick={() => handleMoveExercise(index, 'up')}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                   </svg>
                 </button>
                 <button
-                  className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
                   disabled={index === exercises.length - 1}
                   onClick={() => handleMoveExercise(index, 'down')}
                 >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                 </button>
@@ -173,7 +185,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
 
               {/* Edit / Delete */}
               <button
-                className="p-1 text-gray-400 hover:text-primary-600"
+                className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600"
                 onClick={() => setExerciseFormState({ open: true, exercise })}
                 title="Edit exercise"
               >
@@ -182,7 +194,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
                 </svg>
               </button>
               <button
-                className="p-1 text-gray-400 hover:text-red-600"
+                className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-red-600"
                 onClick={() => handleDeleteExercise(exercise)}
                 title="Delete exercise"
               >
@@ -211,6 +223,9 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
           exercise={exerciseFormState.exercise}
           orderIndex={exercises.length}
           onClose={() => setExerciseFormState({ open: false })}
+          existingSupersetGroups={exercises
+            .map(e => e.supersetGroup)
+            .filter((g): g is string => g !== null)}
         />
       )}
     </div>

@@ -302,6 +302,82 @@ router.put('/:id/set-active', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/programs/:id/duplicate - Duplicate program with workouts and exercises
+router.post('/:id/duplicate', async (req: Request, res: Response) => {
+  try {
+    const original = await Program.findByPk(Number(req.params.id), {
+      include: [{
+        model: Workout,
+        as: 'workouts',
+        include: [{
+          model: Exercise,
+          as: 'exercises'
+        }]
+      }],
+      order: [
+        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
+        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    if (!original) {
+      res.status(404).json({ error: 'Program not found' });
+      return;
+    }
+
+    const originalJSON = original.toJSON() as unknown as Record<string, unknown>;
+    const workouts = (originalJSON.workouts as Array<Record<string, unknown>>) || [];
+
+    const newProgram = await sequelize.transaction(async (t) => {
+      const program = await Program.create({
+        name: `${original.name} (Copy)`,
+        isActive: false,
+        isArchived: false,
+        currentWorkoutIndex: 0,
+      }, { transaction: t });
+
+      for (const w of workouts) {
+        const newWorkout = await Workout.create({
+          programId: program.id,
+          name: w.name as string,
+          orderIndex: w.orderIndex as number,
+        }, { transaction: t });
+
+        const exercises = (w.exercises as Array<Record<string, unknown>>) || [];
+        for (const e of exercises) {
+          await Exercise.create({
+            workoutId: newWorkout.id,
+            name: e.name as string,
+            targetSets: e.targetSets as number,
+            targetReps: e.targetReps as string,
+            orderIndex: e.orderIndex as number,
+            supersetGroup: (e.supersetGroup as string) || null,
+          }, { transaction: t });
+        }
+      }
+
+      return program;
+    });
+
+    const fullProgram = await Program.findByPk(newProgram.id, {
+      include: [{
+        model: Workout,
+        as: 'workouts',
+        include: [{ model: Exercise, as: 'exercises' }]
+      }],
+      order: [
+        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
+        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
+      ]
+    });
+
+    res.status(201).json(fullProgram);
+  } catch (error) {
+    console.error('Error duplicating program:', error);
+    res.status(500).json({ error: 'Failed to duplicate program' });
+  }
+});
+
 // DELETE /api/programs/:id - Archive program (soft delete)
 router.delete('/:id', async (req: Request, res: Response) => {
   try {

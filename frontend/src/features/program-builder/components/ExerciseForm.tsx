@@ -6,19 +6,23 @@ import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { useProgramMutations } from '../hooks/usePrograms';
 import type { Exercise } from '../../../shared/api/types';
 
+const ALL_GROUPS = ['A', 'B', 'C', 'D', 'E'] as const;
+
 interface ExerciseFormProps {
   workoutId: number;
   exercise?: Exercise;
   orderIndex: number;
   onClose: () => void;
+  existingSupersetGroups: string[];
 }
 
-export function ExerciseForm({ workoutId, exercise, orderIndex, onClose }: ExerciseFormProps) {
+export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existingSupersetGroups }: ExerciseFormProps) {
   const [name, setName] = useState(exercise?.name || '');
   const [targetSets, setTargetSets] = useState(exercise?.targetSets?.toString() || '3');
   const [targetReps, setTargetReps] = useState(exercise?.targetReps || '10');
   const [supersetGroup, setSupersetGroup] = useState<string>(exercise?.supersetGroup || '');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [nextOrderIndex, setNextOrderIndex] = useState(orderIndex);
 
   const { createExercise, updateExercise } = useProgramMutations();
   const { data: suggestions } = useExerciseSuggestions(name);
@@ -26,7 +30,16 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose }: Exerc
   const isEditing = !!exercise;
   const isSubmitting = createExercise.isPending || updateExercise.isPending;
 
-  const handleSubmit = () => {
+  // Dynamic superset group logic
+  const usedGroups = [...new Set(existingSupersetGroups)].sort();
+  const nextAvailableGroup = ALL_GROUPS.find(g => !usedGroups.includes(g));
+  const displayGroups = [...usedGroups];
+  if (supersetGroup && !displayGroups.includes(supersetGroup)) {
+    displayGroups.push(supersetGroup);
+    displayGroups.sort();
+  }
+
+  const handleSubmit = (action: 'close' | 'next') => {
     const setsNum = parseInt(targetSets);
     if (!name.trim() || isNaN(setsNum) || setsNum < 1 || !targetReps.trim()) return;
 
@@ -46,9 +59,21 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose }: Exerc
         name: name.trim(),
         targetSets: setsNum,
         targetReps: targetReps.trim(),
-        orderIndex,
+        orderIndex: nextOrderIndex,
         supersetGroup: group,
-      }, { onSuccess: onClose });
+      }, {
+        onSuccess: () => {
+          if (action === 'close') {
+            onClose();
+          } else {
+            setName('');
+            setTargetSets('3');
+            setTargetReps('10');
+            setSupersetGroup('');
+            setNextOrderIndex(prev => prev + 1);
+          }
+        }
+      });
     }
   };
 
@@ -110,8 +135,19 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose }: Exerc
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Superset Group
           </label>
-          <div className="flex gap-2">
-            {['', 'A', 'B', 'C', 'D', 'E'].map((group) => (
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => setSupersetGroup('')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                supersetGroup === ''
+                  ? 'bg-primary-600 text-white'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              }`}
+            >
+              None
+            </button>
+
+            {displayGroups.map((group) => (
               <button
                 key={group}
                 onClick={() => setSupersetGroup(group)}
@@ -121,19 +157,44 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose }: Exerc
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
                 }`}
               >
-                {group || 'None'}
+                {group}
               </button>
             ))}
+
+            {nextAvailableGroup && (
+              <button
+                onClick={() => setSupersetGroup(nextAvailableGroup)}
+                className="px-3 py-1.5 rounded text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+              >
+                + New Group
+              </button>
+            )}
           </div>
         </div>
 
         <div className="flex gap-2 pt-2">
-          <Button onClick={handleSubmit} disabled={!name.trim() || isSubmitting}>
-            {isEditing ? 'Save' : 'Add Exercise'}
-          </Button>
-          <Button variant="secondary" onClick={onClose}>
-            Cancel
-          </Button>
+          {isEditing ? (
+            <>
+              <Button onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting}>
+                Save
+              </Button>
+              <Button variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={() => handleSubmit('next')} disabled={!name.trim() || isSubmitting}>
+                Add & Next
+              </Button>
+              <Button variant="secondary" onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting}>
+                Add & Close
+              </Button>
+              <Button variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </Modal>

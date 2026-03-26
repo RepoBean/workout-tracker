@@ -19,7 +19,7 @@ export function ProgramCard({ program }: ProgramCardProps) {
   const [showAddWorkout, setShowAddWorkout] = useState(false);
   const [newWorkoutName, setNewWorkoutName] = useState('');
 
-  const { updateProgram, deleteProgram, activateProgram, createWorkout, reorderWorkouts } = useProgramMutations();
+  const { updateProgram, deleteProgram, activateProgram, duplicateProgram, createWorkout, reorderWorkouts } = useProgramMutations();
   const toast = useToast();
   const workouts = program.workouts || [];
 
@@ -183,6 +183,14 @@ export function ProgramCard({ program }: ProgramCardProps) {
             >
               Export
             </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => duplicateProgram.mutate(program.id)}
+              disabled={duplicateProgram.isPending}
+            >
+              Duplicate
+            </Button>
           </div>
 
           {/* Workouts List */}
@@ -191,20 +199,20 @@ export function ProgramCard({ program }: ProgramCardProps) {
               <div key={workout.id} className="flex items-start gap-1">
                 <div className="flex flex-col flex-shrink-0 pt-2">
                   <button
-                    className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
                     disabled={index === 0}
                     onClick={() => handleMoveWorkout(index, 'up')}
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                     </svg>
                   </button>
                   <button
-                    className="p-0.5 text-gray-400 hover:text-gray-600 disabled:opacity-30"
+                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
                     disabled={index === workouts.length - 1}
                     onClick={() => handleMoveWorkout(index, 'down')}
                   >
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
                   </button>
