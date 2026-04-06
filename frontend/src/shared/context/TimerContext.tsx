@@ -128,6 +128,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       const remaining = Math.max(0, Math.ceil((state.endTime! - Date.now()) / 1000));
 
       if (remaining <= 0) {
+        if (intervalRef.current) {
+          clearInterval(intervalRef.current);
+          intervalRef.current = null;
+        }
         triggerCompletion();
         setState(initialState);
         localStorage.removeItem(STORAGE_KEY);
