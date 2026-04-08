@@ -13,7 +13,8 @@ A **self-hosted workout tracker** that's designed to be flexible — just type i
 - **Workout history** — browse past sessions, view details, and export to CSV
 - **Workout calendar** — monthly view with workout frequency at a glance
 - **Ad-hoc workouts** — jump into a quick session without a program
-- **Dark mode UI** 
+- **Modern UI system** — brand new typography (DM Sans + Outfit), warm dark surfaces, and slick gradient hero cards
+- **Bottom navigation** — easy one-handed gym usage with an intuitive mobile-friendly fixed tab bar
 - **Offline support** — cached data available if connectivity drops
 
 ## 🤖 LLM-Friendly Workflow
