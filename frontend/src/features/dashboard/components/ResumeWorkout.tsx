@@ -47,7 +47,7 @@ export function ResumeWorkout() {
           </h2>
         </div>
         <div className="mb-3">
-          <p className="text-xl font-bold">{activeSession.workoutName}</p>
+          <p className="text-xl font-display font-bold">{activeSession.workoutName}</p>
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {activeSession.programName} &middot; Started {timeLabel}
           </p>

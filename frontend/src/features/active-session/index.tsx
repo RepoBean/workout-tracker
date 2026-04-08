@@ -293,16 +293,16 @@ export default function ActiveSession() {
 
         {/* Stats grid */}
         <div className="grid grid-cols-3 gap-4 mb-6 max-w-xs mx-auto">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <p className="text-2xl font-bold">{completedTotalSets}</p>
+          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
+            <p className="text-2xl font-display font-bold">{completedTotalSets}</p>
             <p className="text-xs text-gray-500">Sets</p>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <p className="text-2xl font-bold">{formatVolume(completedTotalVolume)}</p>
+          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
+            <p className="text-2xl font-display font-bold">{formatVolume(completedTotalVolume)}</p>
             <p className="text-xs text-gray-500">lbs</p>
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-            <p className="text-2xl font-bold">{completedDuration}</p>
+          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
+            <p className="text-2xl font-display font-bold">{completedDuration}</p>
             <p className="text-xs text-gray-500">min</p>
           </div>
         </div>
@@ -443,7 +443,7 @@ export default function ActiveSession() {
           {nextExercise && (
             <div
               onClick={() => navigation.goToNext()}
-              className="text-sm text-gray-500 dark:text-gray-400 py-3 px-4 mt-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+              className="text-sm text-gray-500 dark:text-gray-400 py-3 px-4 mt-4 bg-gray-50 dark:bg-surface-800/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
             >
               Up next: <span className="font-medium text-gray-700 dark:text-gray-300">{nextExercise.name}</span>
               <span className="float-right text-primary-500">→</span>
@@ -535,7 +535,7 @@ export default function ActiveSession() {
                 )}
 
                 {/* Set input for next set - import SetInput for ad-hoc */}
-                <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4">
+                <div className="bg-gray-50 dark:bg-surface-800/50 rounded-lg p-4">
                   <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
                     Set {nextSetNumber}
                   </div>

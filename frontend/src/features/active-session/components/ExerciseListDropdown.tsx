@@ -94,7 +94,7 @@ export function ExerciseListDropdown({
             {/* Header */}
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-800 
+                className="w-full flex items-center justify-between p-3 bg-gray-100 dark:bg-surface-800 
                    rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
             >
                 <span className="font-medium">
@@ -113,7 +113,7 @@ export function ExerciseListDropdown({
             {/* Dropdown List */}
             {isOpen && (
                 <div
-                    className="mt-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+                    className="mt-2 bg-white dark:bg-surface-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                 >

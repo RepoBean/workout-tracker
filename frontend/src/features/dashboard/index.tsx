@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useTheme } from '../../shared/context/ThemeContext';
-import { Link } from 'react-router-dom';
 import { NextWorkout } from './components/NextWorkout';
 import { Calendar } from './components/Calendar';
 import { ResumeWorkout } from './components/ResumeWorkout';
@@ -12,14 +11,36 @@ export default function Dashboard() {
   const { theme, setTheme } = useTheme();
   const [showWorkoutPicker, setShowWorkoutPicker] = useState(false);
 
+  const cycleTheme = () => {
+    setTheme(theme === 'dark' ? 'light' : 'dark');
+  };
+
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Workout Tracker V2</h1>
+    <div className="space-y-5">
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-display font-bold">Workout Tracker</h1>
+        <button
+          onClick={cycleTheme}
+          className="p-2.5 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-surface-800 transition-colors"
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {theme === 'dark' ? (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+          )}
+        </button>
+      </div>
 
       {/* Resume In-Progress Workout */}
       <ResumeWorkout />
 
-      {/* Next Workout Card */}
+      {/* Next Workout Card (Hero) */}
       <NextWorkout />
 
       {/* Quick Workout */}
@@ -32,59 +53,11 @@ export default function Dashboard() {
         Quick Workout (Ad-hoc)
       </Button>
 
-      {/* Calendar */}
-      <Calendar />
-
       {/* Stats */}
       <StatsCard />
 
-      {/* Quick Links */}
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Quick Links</h2>
-        <div className="grid grid-cols-2 gap-3">
-          <Link
-            to="/programs"
-            className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg text-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-          >
-            <div className="text-2xl mb-1">
-              <svg className="w-8 h-8 mx-auto text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-            <div className="font-medium">Programs</div>
-          </Link>
-          <Link
-            to="/history"
-            className="p-4 bg-gray-100 dark:bg-gray-700 rounded-lg text-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-          >
-            <div className="text-2xl mb-1">
-              <svg className="w-8 h-8 mx-auto text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-            </div>
-            <div className="font-medium">History</div>
-          </Link>
-        </div>
-      </div>
-
-      {/* Theme Settings Card */}
-      <div className="card">
-        <h2 className="text-lg font-semibold mb-4">Theme Settings</h2>
-        <div className="flex gap-2 flex-wrap">
-          {(['light', 'dark'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTheme(t)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${theme === t
-                ? 'bg-primary-600 text-white'
-                : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
-                }`}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
+      {/* Calendar */}
+      <Calendar />
 
       {/* Ad-hoc Workout Picker Modal */}
       <AdHocWorkoutPicker

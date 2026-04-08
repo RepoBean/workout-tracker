@@ -98,18 +98,18 @@ export function Calendar() {
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={goToPrevMonth}
-          className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-800 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h3 className="font-semibold">
+        <h3 className="font-display font-bold">
           {MONTH_NAMES[month]} {year}
         </h3>
         <button
           onClick={goToNextMonth}
-          className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-800 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -120,7 +120,7 @@ export function Calendar() {
       {/* Day Headers */}
       <div className="grid grid-cols-7 gap-0 mb-1">
         {DAYS_OF_WEEK.map(day => (
-          <div key={day} className="text-center text-xs font-medium text-gray-500 dark:text-gray-400 py-1">
+          <div key={day} className="text-center text-xs font-medium text-gray-400 dark:text-gray-500 py-1">
             {day}
           </div>
         ))}
@@ -146,15 +146,20 @@ export function Calendar() {
               onClick={handleDayClick}
             >
               <span
-                className={`w-7 h-7 flex items-center justify-center rounded-full ${today
-                  ? 'ring-2 ring-primary-600 font-bold'
-                  : ''
+                className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${today
+                  ? 'bg-primary-600 text-white font-bold'
+                  : hasWorkout
+                    ? 'hover:bg-primary-50 dark:hover:bg-primary-900/30'
+                    : ''
                   }`}
               >
                 {day}
               </span>
-              {hasWorkout && (
-                <div className="w-1.5 h-1.5 rounded-full bg-primary-600 mt-0.5" />
+              {hasWorkout && !today && (
+                <div className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-0.5" />
+              )}
+              {hasWorkout && today && (
+                <div className="w-1.5 h-1.5 rounded-full bg-primary-300 mt-0.5" />
               )}
             </div>
           );

@@ -116,12 +116,12 @@ export function ExerciseCard({
   };
 
   return (
-    <div className={`card transition-all ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''}`}>
+    <div className={`card transition-all ${isComplete ? 'ring-2 ring-green-500/50 dark:ring-green-400/50 bg-green-50/30 dark:bg-green-900/10' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center">
-            <h3 className="font-semibold text-lg truncate">{exercise.name}</h3>
+            <h3 className="font-display font-bold text-xl truncate">{exercise.name}</h3>
             {onSwapExercise && (
               <button
                 onClick={onSwapExercise}
@@ -184,7 +184,7 @@ export function ExerciseCard({
                            ${showBetterHighlight ? 'bg-green-50 dark:bg-green-900/10' : ''}`}
               >
                 {/* Last time (left - 1/3 width) */}
-                <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2">
+                <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2 tabular-nums">
                   {previousSet ? `${previousSet.weight}×${previousSet.reps}` : '—'}
                 </div>
 

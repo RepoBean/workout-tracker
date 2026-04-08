@@ -11,18 +11,36 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'workout-tracker-theme';
 
+function getSystemTheme(): Theme {
+  if (typeof window === 'undefined') return 'dark';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(() => {
     if (typeof window === 'undefined') return 'dark';
     const stored = localStorage.getItem(STORAGE_KEY);
-    // Map legacy 'system' value to 'dark'
-    if (!stored || stored === 'system') return 'dark';
+    // If no stored preference, follow system
+    if (!stored || stored === 'system') return getSystemTheme();
     return stored as Theme;
   });
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
+
+  // Listen for system theme changes when no explicit preference is stored
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && stored !== 'system') return;
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      setThemeState(e.matches ? 'dark' : 'light');
+    };
+    mediaQuery.addEventListener('change', handler);
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
 
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);

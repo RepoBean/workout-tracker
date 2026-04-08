@@ -5,24 +5,25 @@ export function StatsCard() {
 
   if (isLoading || !stats) return null;
 
+  const statItems = [
+    { value: stats.weekStreak, label: 'Week Streak', highlight: stats.weekStreak > 0 },
+    { value: stats.sessionsLast30Days, label: '30-Day', highlight: false },
+    { value: stats.totalSessions, label: 'Total', highlight: false },
+  ];
+
   return (
     <div className="card">
-      <h2 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3">
-        Your Stats
-      </h2>
       <div className="grid grid-cols-3 gap-3">
-        <div className="text-center">
-          <p className="text-2xl font-bold text-primary-600">{stats.weekStreak}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Active Weeks</p>
-        </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold text-primary-600">{stats.sessionsLast30Days}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">30-Day Workouts</p>
-        </div>
-        <div className="text-center">
-          <p className="text-2xl font-bold text-primary-600">{stats.totalSessions}</p>
-          <p className="text-xs text-gray-500 dark:text-gray-400">Total Workouts</p>
-        </div>
+        {statItems.map(({ value, label, highlight }) => (
+          <div key={label} className="text-center py-2">
+            <p className={`text-3xl font-display font-bold tabular-nums ${
+              highlight ? 'text-accent-500' : 'text-primary-600 dark:text-primary-400'
+            }`}>
+              {value}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{label}</p>
+          </div>
+        ))}
       </div>
     </div>
   );

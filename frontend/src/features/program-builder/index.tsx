@@ -82,7 +82,7 @@ export default function ProgramBuilder() {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Programs</h1>
+          <h1 className="text-2xl font-display font-bold">Programs</h1>
         </div>
         {[1, 2, 3].map(i => (
           <div key={i} className="card animate-pulse">
@@ -96,7 +96,7 @@ export default function ProgramBuilder() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Programs</h1>
+        <h1 className="text-2xl font-display font-bold">Programs</h1>
         <div className="card text-red-600 dark:text-red-400">
           Failed to load programs. Make sure the backend is running.
         </div>
@@ -107,7 +107,7 @@ export default function ProgramBuilder() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Programs</h1>
+        <h1 className="text-2xl font-display font-bold">Programs</h1>
         <div className="flex gap-2">
           <Button variant="secondary" onClick={handleImportClick}>
             Import

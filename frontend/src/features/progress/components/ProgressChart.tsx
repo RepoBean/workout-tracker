@@ -87,10 +87,10 @@ export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps
                     <Line
                         type="monotone"
                         dataKey="value"
-                        stroke="#4f46e5"
+                        stroke="#0d9488"
                         strokeWidth={2}
-                        dot={{ fill: '#4f46e5', strokeWidth: 0, r: 4 }}
-                        activeDot={{ r: 6, fill: '#4f46e5' }}
+                        dot={{ fill: '#0d9488', strokeWidth: 0, r: 4 }}
+                        activeDot={{ r: 6, fill: '#0d9488' }}
                     />
                 </LineChart>
             </ResponsiveContainer>

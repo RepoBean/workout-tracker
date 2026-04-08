@@ -1,5 +1,4 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Button } from '../../../shared/ui/Button';
 import { PlateCalculator } from './PlateCalculator';
 
 interface SetInputProps {
@@ -159,11 +158,11 @@ export function SetInput({
   const buttonLabel = isDropSet ? `Log Drop ${dropIndex}` : `Log Set ${setNumber}`;
 
   return (
-    <div className={`rounded-lg p-4 space-y-4 ${isDropSet
+    <div className={`rounded-card p-4 space-y-4 ${isDropSet
       ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
-      : 'bg-gray-50 dark:bg-gray-800/50'
+      : 'bg-surface-100 dark:bg-surface-850'
       }`}>
-      <div className={`text-sm font-medium ${isDropSet
+      <div className={`text-sm font-display font-bold ${isDropSet
         ? 'text-orange-600 dark:text-orange-400'
         : 'text-gray-500 dark:text-gray-400'
         }`}>
@@ -173,15 +172,13 @@ export function SetInput({
       {/* Weight Input */}
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium w-14 shrink-0">Weight</span>
-        <div className="flex items-center gap-1 flex-1 justify-center">
-          <Button
-            variant="secondary"
-            size="sm"
+        <div className="flex items-center gap-1.5 flex-1 justify-center">
+          <button
             onClick={() => updateWeight(weight - 2.5)}
-            className="w-14 h-11 text-sm font-medium"
+            className="w-14 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             -2.5
-          </Button>
+          </button>
           <input
             type="text"
             inputMode="decimal"
@@ -191,19 +188,17 @@ export function SetInput({
             onChange={(e) => handleWeightChange(e.target.value)}
             onBlur={handleWeightBlur}
             onFocus={(e) => e.target.select()}
-            className="w-20 text-center text-lg font-semibold border rounded-lg py-2
-                       dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-24 text-center text-2xl font-display font-bold border-2 border-gray-200 dark:border-surface-800 rounded-lg py-2 tabular-nums
+                       bg-white dark:bg-surface-900 dark:text-white focus:border-primary-500 focus:ring-0 transition-colors"
           />
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
             onClick={() => updateWeight(weight + 2.5)}
-            className="w-14 h-11 text-sm font-medium"
+            className="w-14 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             +2.5
-          </Button>
+          </button>
         </div>
-        <span className="text-sm text-gray-500 dark:text-gray-400 w-8 shrink-0">lbs</span>
+        <span className="text-sm text-gray-400 dark:text-gray-500 w-8 shrink-0">lbs</span>
       </div>
 
       {/* Plate Calculator */}
@@ -213,14 +208,12 @@ export function SetInput({
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium w-14 shrink-0">Reps</span>
         <div className="flex items-center gap-2 flex-1 justify-center">
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
             onClick={() => updateReps(reps - 1)}
-            className="w-12 h-11 text-lg font-semibold"
+            className="w-12 h-12 rounded-lg text-lg font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             -1
-          </Button>
+          </button>
           <input
             type="text"
             inputMode="numeric"
@@ -230,31 +223,30 @@ export function SetInput({
             onChange={(e) => handleRepsChange(e.target.value)}
             onBlur={handleRepsBlur}
             onFocus={(e) => e.target.select()}
-            className="w-20 text-center text-lg font-semibold border rounded-lg py-2
-                       dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-24 text-center text-2xl font-display font-bold border-2 border-gray-200 dark:border-surface-800 rounded-lg py-2 tabular-nums
+                       bg-white dark:bg-surface-900 dark:text-white focus:border-primary-500 focus:ring-0 transition-colors"
           />
-          <Button
-            variant="secondary"
-            size="sm"
+          <button
             onClick={() => updateReps(reps + 1)}
-            className="w-12 h-11 text-lg font-semibold"
+            className="w-12 h-12 rounded-lg text-lg font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             +1
-          </Button>
+          </button>
         </div>
         <span className="w-8 shrink-0"></span>
       </div>
 
       {/* Log Button */}
-      <Button
-        variant="primary"
-        size="lg"
+      <button
         onClick={handleLog}
         disabled={isLogging}
-        className="w-full"
+        className="w-full py-4 min-h-[56px] rounded-lg font-display font-bold text-lg text-white
+                   bg-gradient-to-b from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700
+                   active:scale-[0.97] transition-all shadow-sm
+                   disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {isLogging ? 'Logging...' : buttonLabel}
-      </Button>
+      </button>
     </div>
   );
 }

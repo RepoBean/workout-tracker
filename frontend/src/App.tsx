@@ -8,38 +8,75 @@ import { useOffline } from './shared/context/OfflineContext';
 import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
 
-function NavLink({ to, children }: { to: string; children: React.ReactNode }) {
-  const location = useLocation();
-  const isActive = location.pathname === to;
+function TabIcon({ name, active }: { name: string; active: boolean }) {
+  const color = active ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500';
+  const cls = `w-6 h-6 ${color}`;
 
-  return (
-    <Link
-      to={to}
-      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${isActive
-        ? 'bg-primary-600 text-white'
-        : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800'
-        }`}
-    >
-      {children}
-    </Link>
-  );
+  switch (name) {
+    case 'home':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1h-2z" />
+        </svg>
+      );
+    case 'programs':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+      );
+    case 'progress':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        </svg>
+      );
+    case 'history':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      );
+    default:
+      return null;
+  }
 }
 
-function Navigation() {
+function BottomTabBar() {
+  const location = useLocation();
+
+  // Hide tab bar during active workout session
+  if (location.pathname.startsWith('/workout/')) return null;
+
+  const tabs = [
+    { to: '/', label: 'Home', icon: 'home' },
+    { to: '/programs', label: 'Programs', icon: 'programs' },
+    { to: '/progress', label: 'Progress', icon: 'progress' },
+    { to: '/history', label: 'History', icon: 'history' },
+  ];
+
   return (
-    <nav className="bg-white dark:bg-gray-800 shadow-sm">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-14">
-          <Link to="/" className="font-bold text-lg text-primary-600">
-            Workout V2
-          </Link>
-          <div className="flex gap-1">
-            <NavLink to="/">Home</NavLink>
-            <NavLink to="/programs">Programs</NavLink>
-            <NavLink to="/progress">Progress</NavLink>
-            <NavLink to="/history">History</NavLink>
-          </div>
-        </div>
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white dark:bg-surface-850 border-t border-gray-200 dark:border-white/[0.06] pb-[env(safe-area-inset-bottom)]">
+      <div className="flex">
+        {tabs.map(({ to, label, icon }) => {
+          const isActive = location.pathname === to;
+          return (
+            <Link
+              key={to}
+              to={to}
+              className={`flex-1 flex flex-col items-center justify-center py-2 min-h-[56px] transition-colors ${
+                isActive
+                  ? 'text-primary-600 dark:text-primary-400'
+                  : 'text-gray-400 dark:text-gray-500'
+              }`}
+            >
+              <TabIcon name={icon} active={isActive} />
+              <span className={`text-[10px] mt-0.5 font-medium ${isActive ? 'font-semibold' : ''}`}>
+                {label}
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </nav>
   );
@@ -76,31 +113,40 @@ function WorkoutErrorFallback() {
   );
 }
 
+function AppContent() {
+  const location = useLocation();
+  const isWorkout = location.pathname.startsWith('/workout/');
+
+  return (
+    <div className="min-h-screen bg-surface-50 dark:bg-surface-900 transition-colors">
+      <OfflineBanner />
+      <main className={`container mx-auto px-4 py-6 ${isWorkout ? '' : 'pb-24'}`}>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/programs" element={<ProgramBuilder />} />
+            <Route path="/progress" element={<Progress />} />
+            <Route
+              path="/workout/:id"
+              element={
+                <ErrorBoundary fallback={<WorkoutErrorFallback />}>
+                  <ActiveSession />
+                </ErrorBoundary>
+              }
+            />
+            <Route path="/history" element={<History />} />
+          </Routes>
+        </ErrorBoundary>
+      </main>
+      <BottomTabBar />
+    </div>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
-        <Navigation />
-        <OfflineBanner />
-        <main className="container mx-auto px-4 py-6">
-          <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/programs" element={<ProgramBuilder />} />
-              <Route path="/progress" element={<Progress />} />
-              <Route
-                path="/workout/:id"
-                element={
-                  <ErrorBoundary fallback={<WorkoutErrorFallback />}>
-                    <ActiveSession />
-                  </ErrorBoundary>
-                }
-              />
-              <Route path="/history" element={<History />} />
-            </Routes>
-          </ErrorBoundary>
-        </main>
-      </div>
+      <AppContent />
     </BrowserRouter>
   );
 }

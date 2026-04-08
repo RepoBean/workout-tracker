@@ -19,7 +19,7 @@ export default function History() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Workout History</h1>
+        <h1 className="text-2xl font-display font-bold">Workout History</h1>
         {[1, 2, 3].map(i => (
           <div key={i} className="card animate-pulse">
             <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-40 mb-2" />
@@ -33,7 +33,7 @@ export default function History() {
   if (error) {
     return (
       <div className="space-y-4">
-        <h1 className="text-2xl font-bold">Workout History</h1>
+        <h1 className="text-2xl font-display font-bold">Workout History</h1>
         <div className="card text-red-600 dark:text-red-400">
           Failed to load history. Make sure the backend is running.
         </div>
@@ -44,7 +44,7 @@ export default function History() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Workout History</h1>
+        <h1 className="text-2xl font-display font-bold">Workout History</h1>
         {sessions.length > 0 && (
           <Button variant="secondary" size="sm" onClick={handleExport}>
             Export CSV

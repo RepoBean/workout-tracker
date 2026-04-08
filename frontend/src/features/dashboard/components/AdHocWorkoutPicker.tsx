@@ -94,7 +94,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
 
                                 {/* Workouts list (expanded) */}
                                 {expandedProgramId === program.id && program.workouts && (
-                                    <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                                    <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-surface-800/50">
                                         {program.workouts.length > 0 ? (
                                             program.workouts.map((workout: Workout) => (
                                                 <button

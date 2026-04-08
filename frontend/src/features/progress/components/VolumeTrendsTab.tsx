@@ -158,7 +158,7 @@ export function VolumeTrendsTab() {
                             />
                             <Bar
                                 dataKey="totalVolume"
-                                fill="#4f46e5"
+                                fill="#0d9488"
                                 radius={[4, 4, 0, 0]}
                             />
                         </BarChart>

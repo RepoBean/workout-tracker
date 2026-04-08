@@ -63,7 +63,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
     <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
       {/* Workout Header */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800 cursor-pointer"
+        className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-surface-800 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">

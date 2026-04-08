@@ -16,12 +16,12 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <input
           ref={ref}
-          className={`w-full px-3 py-2 border rounded-lg transition-colors
-            focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
-            ${error ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}
-            bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100
+          className={`w-full px-3 py-2.5 border-2 rounded-lg transition-all duration-200
+            focus:outline-none focus:border-primary-500 focus:shadow-input-focus focus:ring-0
+            ${error ? 'border-red-500' : 'border-gray-200 dark:border-surface-800'}
+            bg-white dark:bg-surface-900 text-gray-900 dark:text-gray-100
             placeholder-gray-400 dark:placeholder-gray-500
-            disabled:bg-gray-100 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
+            disabled:bg-gray-100 dark:disabled:bg-surface-850 disabled:cursor-not-allowed
             ${className}`}
           {...props}
         />

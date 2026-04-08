@@ -82,12 +82,12 @@ function ToastContainer({ toasts, onDismiss }: ToastContainerProps) {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 z-50 flex flex-col gap-2 sm:left-auto sm:right-4 sm:w-80 pointer-events-none">
+    <div className="fixed bottom-20 left-4 right-4 z-50 flex flex-col items-center gap-2 pointer-events-none">
       {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`${colors[toast.type]} text-white px-4 py-3 rounded-lg shadow-lg
-                     flex items-center gap-3 pointer-events-auto animate-slide-up`}
+          className={`${colors[toast.type]} text-white px-4 py-3 rounded-xl shadow-lg backdrop-blur-sm
+                     flex items-center gap-3 pointer-events-auto animate-slide-up max-w-sm w-full`}
           onClick={() => onDismiss(toast.id)}
         >
           {icons[toast.type]}
