@@ -15,6 +15,7 @@ import { SwapExercise } from './components/SwapExercise';
 import { RpePrompt } from './components/RpePrompt';
 import { CompletionCelebration } from './components/CompletionCelebration';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
+import { useTimer } from '../../shared/context/TimerContext';
 import type { Exercise } from '../../shared/api/types';
 
 export default function ActiveSession() {
@@ -36,6 +37,8 @@ export default function ActiveSession() {
   } = useActiveSession(sessionId);
 
   const { exerciseHints } = usePreviousData(sessionId);
+
+  const { stopTimer } = useTimer();
 
   // Celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -142,6 +145,8 @@ export default function ActiveSession() {
 
     completeSession(undefined, {
       onSuccess: () => {
+        stopTimer();
+
         // Clear navigation state
         const navKeys = getNavStorageKeys(sessionId);
         localStorage.removeItem(navKeys.step);
@@ -231,11 +236,19 @@ export default function ActiveSession() {
     return idx;
   };
 
-  // Get next exercise for "Up next" preview
+  // Get next exercise for "Up next" preview — skip already-completed steps
+  // so the label matches where goToNext() will actually land.
   const getNextExercise = (): Exercise | null => {
-    const nextStep = navigation.steps[navigation.currentStepIndex + 1];
-    if (!nextStep) return null;
-    return nextStep.type === 'single' ? nextStep.exercise : nextStep.exercises[0];
+    for (let i = navigation.currentStepIndex + 1; i < navigation.steps.length; i++) {
+      const step = navigation.steps[i];
+      const complete = step.type === 'single'
+        ? navigation.isExerciseComplete(step.exercise.id)
+        : step.exercises.every(ex => navigation.isExerciseComplete(ex.id));
+      if (!complete) {
+        return step.type === 'single' ? step.exercise : step.exercises[0];
+      }
+    }
+    return null;
   };
   const nextExercise = getNextExercise();
 

@@ -270,12 +270,22 @@ export function useExerciseNavigation({
     }, [currentStep, supersetActiveIndex]);
 
     // Navigation functions
+    // goToNext skips forward over already-complete steps so the user always
+    // lands on an incomplete exercise. Mirrors rotateSupersetActive's behavior
+    // across steps instead of within a superset.
     const goToNext = useCallback(() => {
-        if (currentStepIndex < steps.length - 1) {
-            setCurrentStepIndex(i => i + 1);
-            setSupersetActiveIndex(0);
+        for (let i = currentStepIndex + 1; i < steps.length; i++) {
+            const step = steps[i];
+            const complete = step.type === 'single'
+                ? isExerciseComplete(step.exercise.id)
+                : step.exercises.every(ex => isExerciseComplete(ex.id));
+            if (!complete) {
+                setCurrentStepIndex(i);
+                setSupersetActiveIndex(0);
+                return;
+            }
         }
-    }, [currentStepIndex, steps.length]);
+    }, [currentStepIndex, steps, isExerciseComplete]);
 
     const goToPrevious = useCallback(() => {
         if (currentStepIndex > 0) {
