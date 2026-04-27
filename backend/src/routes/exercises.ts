@@ -11,6 +11,9 @@ const router = Router();
 // Zod Schemas
 // ============================================
 
+const exerciseTypeSchema = z.enum(['strength', 'cardio']);
+const cardioModalitySchema = z.enum(['running', 'cycling', 'treadmill', 'rowing', 'other']);
+
 const createExerciseSchema = z.object({
   workoutId: z.number().int().positive(),
   name: z.string().min(1).max(255),
@@ -18,6 +21,22 @@ const createExerciseSchema = z.object({
   targetReps: z.string().min(1).max(50),
   orderIndex: z.number().int().min(0),
   supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional(),
+  exerciseType: exerciseTypeSchema.optional().default('strength'),
+  cardioModality: cardioModalitySchema.nullable().optional(),
+  targetDurationSec: z.number().int().min(1).nullable().optional(),
+  targetDistance: z.number().min(0).nullable().optional(),
+}).superRefine((data, ctx) => {
+  if (data.exerciseType === 'cardio') {
+    const hasDuration = (data.targetDurationSec ?? 0) > 0;
+    const hasDistance = (data.targetDistance ?? 0) > 0;
+    if (!hasDuration && !hasDistance) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['targetDurationSec'],
+        message: 'Cardio exercises require a target duration or distance',
+      });
+    }
+  }
 });
 
 const updateExerciseSchema = z.object({
@@ -26,6 +45,10 @@ const updateExerciseSchema = z.object({
   targetReps: z.string().min(1).max(50).optional(),
   orderIndex: z.number().int().min(0).optional(),
   supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional(),
+  exerciseType: exerciseTypeSchema.optional(),
+  cardioModality: cardioModalitySchema.nullable().optional(),
+  targetDurationSec: z.number().int().min(1).nullable().optional(),
+  targetDistance: z.number().min(0).nullable().optional(),
 }).refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
 });
@@ -164,7 +187,10 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/exercises - Create new exercise
 router.post('/', validate(createExerciseSchema), async (req: Request, res: Response) => {
   try {
-    const { workoutId, name, targetSets, targetReps, orderIndex, supersetGroup } = req.body;
+    const {
+      workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
+      exerciseType, cardioModality, targetDurationSec, targetDistance,
+    } = req.body;
 
     const workout = await Workout.findByPk(workoutId);
     if (!workout) {
@@ -179,6 +205,10 @@ router.post('/', validate(createExerciseSchema), async (req: Request, res: Respo
       targetReps,
       orderIndex,
       supersetGroup: supersetGroup || null,
+      exerciseType: exerciseType || 'strength',
+      cardioModality: cardioModality ?? null,
+      targetDurationSec: targetDurationSec ?? null,
+      targetDistance: targetDistance ?? null,
     });
 
     res.status(201).json(exercise);
@@ -197,12 +227,19 @@ router.put('/:id', validate(updateExerciseSchema), async (req: Request, res: Res
       return;
     }
 
-    const { name, targetSets, targetReps, orderIndex, supersetGroup } = req.body;
+    const {
+      name, targetSets, targetReps, orderIndex, supersetGroup,
+      exerciseType, cardioModality, targetDurationSec, targetDistance,
+    } = req.body;
     if (name !== undefined) exercise.name = name;
     if (targetSets !== undefined) exercise.targetSets = targetSets;
     if (targetReps !== undefined) exercise.targetReps = targetReps;
     if (orderIndex !== undefined) exercise.orderIndex = orderIndex;
     if (supersetGroup !== undefined) exercise.supersetGroup = supersetGroup;
+    if (exerciseType !== undefined) exercise.exerciseType = exerciseType;
+    if (cardioModality !== undefined) exercise.cardioModality = cardioModality;
+    if (targetDurationSec !== undefined) exercise.targetDurationSec = targetDurationSec;
+    if (targetDistance !== undefined) exercise.targetDistance = targetDistance;
 
     await exercise.save();
     res.json(exercise);

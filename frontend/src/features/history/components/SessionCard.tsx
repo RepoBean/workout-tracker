@@ -1,5 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Session, Set } from '../../../shared/api/types';
+import { isCardioSet } from '../../../shared/api/predicates';
+import { parseSeries } from '../../../shared/utils/heartRate';
+import { SessionHRChart } from './SessionHRChart';
 
 interface SessionCardProps {
   session: Session;
@@ -33,6 +36,12 @@ function formatDuration(createdAt: string, completedAt: string | null): string {
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
 }
 
+function formatSetSec(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 interface ExerciseGroup {
   name: string;
   sets: Set[];
@@ -61,11 +70,22 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
   const stats = useMemo(() => {
     const sets = session.sets || [];
     const exerciseNames = new globalThis.Set(sets.map(s => s.exerciseName));
-    const totalVolume = sets.reduce((sum, s) => sum + s.weight * s.reps, 0);
+    // Volume only includes strength sets (cardio has weight=reps=0)
+    const totalVolume = sets
+      .filter(s => !isCardioSet(s))
+      .reduce((sum, s) => sum + s.weight * s.reps, 0);
+    const cardioSeconds = sets
+      .filter(isCardioSet)
+      .reduce((sum, s) => sum + (s.durationSec ?? 0), 0);
+    const cardioDistance = sets
+      .filter(isCardioSet)
+      .reduce((sum, s) => sum + (s.distance ?? 0), 0);
     return {
       exerciseCount: exerciseNames.size,
       setCount: sets.length,
       totalVolume,
+      cardioSeconds,
+      cardioDistance,
     };
   }, [session.sets]);
 
@@ -125,34 +145,74 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
       </div>
 
       {/* Stats Row */}
-      <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+      <div className="flex gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
         <span>{stats.exerciseCount} exercise{stats.exerciseCount !== 1 ? 's' : ''}</span>
         <span>{stats.setCount} set{stats.setCount !== 1 ? 's' : ''}</span>
-        <span>{stats.totalVolume.toLocaleString()} lbs volume</span>
+        {stats.totalVolume > 0 && (
+          <span>{stats.totalVolume.toLocaleString()} lbs volume</span>
+        )}
+        {stats.cardioSeconds > 0 && (
+          <span>{Math.round(stats.cardioSeconds / 60)} min cardio</span>
+        )}
+        {stats.cardioDistance > 0 && (
+          <span>{stats.cardioDistance.toFixed(2)} mi</span>
+        )}
       </div>
 
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 pt-3 border-t dark:border-gray-700 space-y-3">
+          {(() => {
+            const parsed = parseSeries(session.heartRateSeries);
+            if (!parsed) return null;
+            const sessionStartMs = new Date(session.createdAt).getTime();
+            const setMarkers = (session.sets ?? []).map((s) => ({
+              t: Math.max(0, Math.round((new Date(s.createdAt).getTime() - sessionStartMs) / 1000)),
+              label: `Set ${s.setNumber}`,
+            }));
+            const hasCardio = (session.sets ?? []).some(isCardioSet);
+            return (
+              <SessionHRChart
+                series={parsed}
+                setMarkers={setMarkers}
+                mode={hasCardio ? 'continuous' : 'interval'}
+              />
+            );
+          })()}
           {exerciseGroups.map((group) => (
             <div key={group.name}>
               <div className="text-sm font-medium mb-1">{group.name}</div>
               <div className="space-y-0.5">
-                {group.sets.map((set) => (
-                  <div
-                    key={set.id}
-                    className={`text-xs flex items-center gap-2 ${set.dropIndex > 0 ? 'ml-4 text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'
-                      }`}
-                  >
-                    <span className="w-12">
-                      {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
-                    </span>
-                    <span>{set.weight} lbs x {set.reps}</span>
-                    {set.perceivedEffort && (
-                      <span className="text-gray-400">RPE {set.perceivedEffort}</span>
-                    )}
-                  </div>
-                ))}
+                {group.sets.map((set) => {
+                  const cardio = isCardioSet(set);
+                  return (
+                    <div
+                      key={set.id}
+                      className={`text-xs flex items-center gap-2 ${set.dropIndex > 0 ? 'ml-4 text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-400'
+                        }`}
+                    >
+                      <span className="w-12">
+                        {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
+                      </span>
+                      {cardio ? (
+                        <span>
+                          {set.durationSec ? formatSetSec(set.durationSec) : '—'}
+                          {set.distance != null && set.distance > 0 && (
+                            <span> · {set.distance} mi</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span>{set.weight} lbs x {set.reps}</span>
+                      )}
+                      {set.perceivedEffort && (
+                        <span className="text-gray-400">RPE {set.perceivedEffort}</span>
+                      )}
+                      {set.heartRateAvg != null && (
+                        <span className="text-red-500 dark:text-red-400">♥ {set.heartRateAvg}</span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           ))}

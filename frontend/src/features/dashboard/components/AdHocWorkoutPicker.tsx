@@ -1,9 +1,21 @@
 import { useState } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { Modal } from '../../../shared/ui/Modal';
 import { Button } from '../../../shared/ui/Button';
 import { usePrograms } from '../../../shared/api/queries';
 import { useStartSession } from '../../active-session/hooks/useStartSession';
-import type { Program, Workout } from '../../../shared/api/types';
+import { api } from '../../../shared/api/client';
+import { useToast } from '../../../shared/ui/Toast';
+import type { ActiveSession, CardioModality, Program, Workout } from '../../../shared/api/types';
+
+const CARDIO_OPTIONS: { value: CardioModality; label: string }[] = [
+  { value: 'running', label: 'Running' },
+  { value: 'cycling', label: 'Cycling' },
+  { value: 'treadmill', label: 'Treadmill' },
+  { value: 'rowing', label: 'Rowing' },
+  { value: 'other', label: 'Other' },
+];
 
 interface AdHocWorkoutPickerProps {
     isOpen: boolean;
@@ -13,10 +25,31 @@ interface AdHocWorkoutPickerProps {
 export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps) {
     const { data: programs, isLoading } = usePrograms();
     const startSession = useStartSession();
+    const navigate = useNavigate();
+    const toast = useToast();
     const [expandedProgramId, setExpandedProgramId] = useState<number | null>(null);
+    const [showCardioPicker, setShowCardioPicker] = useState(false);
+
+    const startCardioSession = useMutation({
+        mutationFn: async (modality: CardioModality) => {
+            const { data } = await api.post<ActiveSession>('/sessions/start', { isAdHoc: true });
+            return { session: data, modality };
+        },
+        onSuccess: ({ session, modality }) => {
+            navigate(`/workout/${session.id}?cardio=${modality}`);
+        },
+        onError: () => {
+            toast.error('Failed to start cardio. Please try again.');
+        },
+    });
 
     const handleBlankWorkout = () => {
         startSession.mutate({ isAdHoc: true });
+        onClose();
+    };
+
+    const handleStartCardio = (modality: CardioModality) => {
+        startCardioSession.mutate(modality);
         onClose();
     };
 
@@ -48,6 +81,50 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                         <span>Blank Workout</span>
                     </div>
                 </Button>
+
+                {/* Quick Cardio */}
+                {!showCardioPicker ? (
+                    <Button
+                        variant="secondary"
+                        size="lg"
+                        className="w-full"
+                        onClick={() => setShowCardioPicker(true)}
+                        disabled={startCardioSession.isPending}
+                    >
+                        <div className="flex items-center gap-3">
+                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                            </svg>
+                            <span>Quick Cardio</span>
+                        </div>
+                    </Button>
+                ) : (
+                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Pick a cardio type</div>
+                        <div className="grid grid-cols-2 gap-2">
+                            {CARDIO_OPTIONS.map(({ value, label }) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    onClick={() => handleStartCardio(value)}
+                                    disabled={startCardioSession.isPending}
+                                    className="px-3 py-2 rounded-lg text-sm font-medium bg-primary-600 text-white
+                                               hover:bg-primary-700 active:scale-[0.97] transition-all
+                                               disabled:opacity-50"
+                                >
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowCardioPicker(false)}
+                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                )}
 
                 {/* Divider */}
                 <div className="flex items-center gap-3">

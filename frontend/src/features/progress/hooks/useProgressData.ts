@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Session, Set } from '../../../shared/api/types';
+import { isCardioExercise, isCardioSet } from '../../../shared/api/predicates';
 
 export interface ExerciseSession {
     sessionId: number;
@@ -92,7 +93,7 @@ export function useProgressData(): UseProgressDataReturn {
             .map(([name]) => name);
     }, [sessions]);
 
-    // Derive exercises from active program
+    // Derive exercises from active program (strength only — cardio has no PRs/charts in V1)
     const activeExercises = useMemo(() => {
         if (!programs) return [];
         const activeProgram = programs.find(p => p.isActive);
@@ -101,6 +102,7 @@ export function useProgressData(): UseProgressDataReturn {
         const names = new Set<string>();
         activeProgram.workouts.forEach(workout => {
             workout.exercises?.forEach(exercise => {
+                if (isCardioExercise(exercise)) return;
                 names.add(exercise.name);
             });
         });
@@ -119,7 +121,7 @@ export function useProgressData(): UseProgressDataReturn {
                 if (!session.completedAt) return;
 
                 const exerciseSets = session.sets?.filter(
-                    (set: Set) => set.exerciseName === name
+                    (set: Set) => set.exerciseName === name && !isCardioSet(set)
                 ) || [];
 
                 if (exerciseSets.length === 0) return;
@@ -296,6 +298,8 @@ export function useProgressData(): UseProgressDataReturn {
 
             session.sets?.forEach((set: Set) => {
                 if (!set.exerciseName) return;
+                // Strength PRs only
+                if (isCardioSet(set)) return;
 
                 // Track best volume set
                 const volume = set.weight * set.reps;

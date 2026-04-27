@@ -1,5 +1,6 @@
 import { Button } from '../../../shared/ui/Button';
 import { TimerIndicator } from '../../../shared/ui/TimerIndicator';
+import { HeartRatePill } from '../../../shared/ui/HeartRatePill';
 import type { ActiveSession } from '../../../shared/api/types';
 
 interface SessionHeaderProps {
@@ -8,6 +9,7 @@ interface SessionHeaderProps {
   totalSetsTarget: number;
   onComplete: () => void;
   isCompleting: boolean;
+  onToggleHrChart?: () => void;
 }
 
 export function SessionHeader({
@@ -16,6 +18,7 @@ export function SessionHeader({
   totalSetsTarget,
   onComplete,
   isCompleting,
+  onToggleHrChart,
 }: SessionHeaderProps) {
   const progress = totalSetsTarget > 0
     ? Math.round((totalSetsLogged / totalSetsTarget) * 100)
@@ -32,6 +35,7 @@ export function SessionHeader({
           )}
         </div>
 
+        <HeartRatePill onTogglePanel={onToggleHrChart} />
         <TimerIndicator />
 
         {/* Complete button */}

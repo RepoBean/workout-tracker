@@ -28,6 +28,10 @@ const importExerciseSchema = z.object({
   targetReps: z.string().min(1).max(50),
   orderIndex: z.number().int().min(0),
   supersetGroup: z.enum(['A', 'B', 'C', 'D', 'E']).nullable().optional().default(null),
+  exerciseType: z.enum(['strength', 'cardio']).optional().default('strength'),
+  cardioModality: z.enum(['running', 'cycling', 'treadmill', 'rowing', 'other']).nullable().optional().default(null),
+  targetDurationSec: z.number().int().min(1).nullable().optional().default(null),
+  targetDistance: z.number().min(0).nullable().optional().default(null),
 });
 
 const importWorkoutSchema = z.object({
@@ -149,6 +153,10 @@ router.get('/:id/export', async (req: Request, res: Response) => {
             targetReps: e.targetReps as string,
             orderIndex: e.orderIndex as number,
             supersetGroup: (e.supersetGroup as string) || null,
+            exerciseType: (e.exerciseType as string) || 'strength',
+            cardioModality: (e.cardioModality as string) || null,
+            targetDurationSec: (e.targetDurationSec as number | null) ?? null,
+            targetDistance: (e.targetDistance as number | null) ?? null,
           })),
         })),
       },
@@ -204,6 +212,10 @@ router.post('/import', validate(importProgramSchema), async (req: Request, res: 
             targetReps: exerciseData.targetReps,
             orderIndex: exerciseData.orderIndex,
             supersetGroup: exerciseData.supersetGroup || null,
+            exerciseType: exerciseData.exerciseType || 'strength',
+            cardioModality: exerciseData.cardioModality ?? null,
+            targetDurationSec: exerciseData.targetDurationSec ?? null,
+            targetDistance: exerciseData.targetDistance ?? null,
           }, { transaction: t });
         }
       }
@@ -352,6 +364,10 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
             targetReps: e.targetReps as string,
             orderIndex: e.orderIndex as number,
             supersetGroup: (e.supersetGroup as string) || null,
+            exerciseType: (e.exerciseType as 'strength' | 'cardio') || 'strength',
+            cardioModality: (e.cardioModality as 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other' | null) || null,
+            targetDurationSec: (e.targetDurationSec as number | null) ?? null,
+            targetDistance: (e.targetDistance as number | null) ?? null,
           }, { transaction: t });
         }
       }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import type { Exercise, Set } from '../../../shared/api/types';
+import { getTargetSets } from '../../../shared/api/predicates';
 
 /**
  * A navigation "step" - either a single exercise or a superset group
@@ -162,7 +163,7 @@ export function useExerciseNavigation({
                         : s.exerciseId === step.exercise.id
                     ) && (s.dropIndex || 0) === 0
                 );
-                if (exerciseSets.length < step.exercise.targetSets) {
+                if (exerciseSets.length < getTargetSets(step.exercise)) {
                     setCurrentStepIndex(i);
                     return;
                 }
@@ -174,7 +175,7 @@ export function useExerciseNavigation({
                             : s.exerciseId === ex.id
                         ) && (s.dropIndex || 0) === 0
                     );
-                    return exSets.length < ex.targetSets;
+                    return exSets.length < getTargetSets(ex);
                 });
                 if (anyIncomplete) {
                     setCurrentStepIndex(i);
@@ -220,7 +221,7 @@ export function useExerciseNavigation({
             standardSets = sets.filter(s => s.exerciseId === exerciseId && (s.dropIndex || 0) === 0);
         }
 
-        return standardSets.length >= exercise.targetSets;
+        return standardSets.length >= getTargetSets(exercise);
     }, [sets, exerciseMap]);
 
     // Get progress for an exercise
@@ -239,7 +240,7 @@ export function useExerciseNavigation({
             standardSets = sets.filter(s => s.exerciseId === exerciseId && (s.dropIndex || 0) === 0);
         }
 
-        return { logged: standardSets.length, target: exercise.targetSets };
+        return { logged: standardSets.length, target: getTargetSets(exercise) };
     }, [sets, exerciseMap]);
 
     // Current step

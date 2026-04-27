@@ -23,6 +23,9 @@ export interface Workout {
   exercises?: Exercise[];
 }
 
+export type ExerciseType = 'strength' | 'cardio';
+export type CardioModality = 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other';
+
 export interface Exercise {
   id: number;
   workoutId: number;
@@ -31,6 +34,10 @@ export interface Exercise {
   targetReps: string; // String to allow ranges like "8-10"
   orderIndex: number;
   supersetGroup: string | null;
+  exerciseType: ExerciseType;
+  cardioModality: CardioModality | null;
+  targetDurationSec: number | null;
+  targetDistance: number | null; // miles
   createdAt: string;
   updatedAt: string;
 }
@@ -43,6 +50,10 @@ export interface Session {
   workoutName: string;
   completedAt: string | null;
   isAdHoc: boolean;
+  heartRateAvg: number | null;
+  heartRateMin: number | null;
+  heartRateMax: number | null;
+  heartRateSeries: string | null;
   createdAt: string;
   updatedAt: string;
   sets?: Set[];
@@ -53,11 +64,15 @@ export interface Set {
   sessionId: number;
   exerciseId: number | null;
   exerciseName: string;
-  weight: number;
-  reps: number;
+  weight: number; // 0 for cardio sets
+  reps: number; // 0 for cardio sets
   setNumber: number;
   perceivedEffort: number | null;
   dropIndex: number;
+  heartRateAvg: number | null;
+  heartRateMax: number | null;
+  durationSec: number | null;
+  distance: number | null; // miles
   createdAt: string;
   updatedAt: string;
 }
@@ -128,6 +143,17 @@ export interface LogSetRequest {
   setNumber: number;
   perceivedEffort?: number | null;
   dropIndex?: number;
+  heartRateAvg?: number | null;
+  heartRateMax?: number | null;
+  durationSec?: number | null;
+  distance?: number | null;
+}
+
+export interface CompleteSessionRequest {
+  heartRateAvg?: number | null;
+  heartRateMin?: number | null;
+  heartRateMax?: number | null;
+  heartRateSeries?: { t: number[]; b: number[] } | null;
 }
 
 // ============================================
@@ -163,6 +189,10 @@ export interface CreateExerciseRequest {
   targetReps: string;
   orderIndex: number;
   supersetGroup?: string | null;
+  exerciseType?: ExerciseType;
+  cardioModality?: CardioModality | null;
+  targetDurationSec?: number | null;
+  targetDistance?: number | null;
 }
 
 export interface UpdateExerciseRequest {
@@ -171,6 +201,10 @@ export interface UpdateExerciseRequest {
   targetReps?: string;
   orderIndex?: number;
   supersetGroup?: string | null;
+  exerciseType?: ExerciseType;
+  cardioModality?: CardioModality | null;
+  targetDurationSec?: number | null;
+  targetDistance?: number | null;
 }
 
 // ============================================
@@ -193,6 +227,10 @@ export interface ProgramExportExercise {
   targetReps: string;
   orderIndex: number;
   supersetGroup: string | null;
+  exerciseType?: ExerciseType;
+  cardioModality?: CardioModality | null;
+  targetDurationSec?: number | null;
+  targetDistance?: number | null;
 }
 
 export interface ProgramExportWorkout {

@@ -8,11 +8,15 @@ export interface SessionAttributes {
   workoutName: string;
   completedAt: Date | null;
   isAdHoc: boolean;
+  heartRateAvg: number | null;
+  heartRateMin: number | null;
+  heartRateMax: number | null;
+  heartRateSeries: string | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface SessionCreationAttributes extends Optional<SessionAttributes, 'id' | 'completedAt' | 'isAdHoc'> {}
+export interface SessionCreationAttributes extends Optional<SessionAttributes, 'id' | 'completedAt' | 'isAdHoc' | 'heartRateAvg' | 'heartRateMin' | 'heartRateMax' | 'heartRateSeries'> {}
 
 export class Session extends Model<SessionAttributes, SessionCreationAttributes> implements SessionAttributes {
   declare id: number;
@@ -22,6 +26,10 @@ export class Session extends Model<SessionAttributes, SessionCreationAttributes>
   declare workoutName: string;
   declare completedAt: Date | null;
   declare isAdHoc: boolean;
+  declare heartRateAvg: number | null;
+  declare heartRateMin: number | null;
+  declare heartRateMax: number | null;
+  declare heartRateSeries: string | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -63,6 +71,34 @@ export class Session extends Model<SessionAttributes, SessionCreationAttributes>
       isAdHoc: {
         type: DataTypes.BOOLEAN,
         defaultValue: false
+      },
+      heartRateAvg: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 20,
+          max: 250
+        }
+      },
+      heartRateMin: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 20,
+          max: 250
+        }
+      },
+      heartRateMax: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 20,
+          max: 250
+        }
+      },
+      heartRateSeries: {
+        type: DataTypes.TEXT,
+        allowNull: true
       }
     }, {
       sequelize,

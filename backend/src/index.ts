@@ -65,6 +65,48 @@ async function start() {
       // Column already exists, ignore
     }
 
+    // Safe migration: add heart rate columns (nullable)
+    const hrMigrations: Array<[string, string]> = [
+      ['Sets', 'heartRateAvg'],
+      ['Sets', 'heartRateMax'],
+      ['Sessions', 'heartRateAvg'],
+      ['Sessions', 'heartRateMin'],
+      ['Sessions', 'heartRateMax'],
+    ];
+    for (const [table, column] of hrMigrations) {
+      try {
+        await sequelize.query(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
+        console.log(`Added ${column} column to ${table} table`);
+      } catch {
+        // Column already exists, ignore
+      }
+    }
+
+    // Safe migration: add cardio columns
+    const cardioMigrations: Array<[string, string, string]> = [
+      ['Exercises', 'exerciseType', `VARCHAR(16) NOT NULL DEFAULT 'strength'`],
+      ['Exercises', 'cardioModality', 'VARCHAR(16)'],
+      ['Exercises', 'targetDurationSec', 'INTEGER'],
+      ['Exercises', 'targetDistance', 'DECIMAL(6,2)'],
+      ['Sets', 'durationSec', 'INTEGER'],
+      ['Sets', 'distance', 'DECIMAL(6,2)'],
+    ];
+    for (const [table, column, type] of cardioMigrations) {
+      try {
+        await sequelize.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+        console.log(`Added ${column} column to ${table} table`);
+      } catch {
+        // Column already exists, ignore
+      }
+    }
+
+    try {
+      await sequelize.query('ALTER TABLE Sessions ADD COLUMN heartRateSeries TEXT');
+      console.log('Added heartRateSeries column to Sessions table');
+    } catch {
+      // Column already exists, ignore
+    }
+
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/api/health`);

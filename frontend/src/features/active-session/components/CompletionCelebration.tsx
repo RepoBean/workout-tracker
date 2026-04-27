@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { Button } from '../../../shared/ui/Button';
+import { SessionHRChart } from '../../history/components/SessionHRChart';
 
 interface CompletionCelebrationProps {
   isOpen: boolean;
@@ -8,6 +9,7 @@ interface CompletionCelebrationProps {
   totalSets: number;
   totalVolume: number;
   duration: number; // in minutes
+  hrSeries?: { t: number[]; b: number[] } | null;
   onDismiss: () => void;
 }
 
@@ -17,6 +19,7 @@ export function CompletionCelebration({
   totalSets,
   totalVolume,
   duration,
+  hrSeries,
   onDismiss,
 }: CompletionCelebrationProps) {
   useEffect(() => {
@@ -66,9 +69,11 @@ export function CompletionCelebration({
   ];
   const message = messages[Math.floor(Math.random() * messages.length)];
 
+  const hasSeries = hrSeries && hrSeries.t.length > 0;
+
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-surface-800 rounded-2xl p-6 max-w-sm w-full text-center shadow-modal dark:border dark:border-white/[0.06]">
+      <div className={`bg-white dark:bg-surface-800 rounded-2xl p-6 ${hasSeries ? 'max-w-md' : 'max-w-sm'} w-full text-center shadow-modal dark:border dark:border-white/[0.06] max-h-[90vh] overflow-y-auto`}>
         {/* Checkmark */}
         <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
           <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -79,6 +84,13 @@ export function CompletionCelebration({
         <h2 className="text-2xl font-display font-bold mb-1">Workout Complete!</h2>
         <p className="text-gray-500 dark:text-gray-400 mb-2">{workoutName}</p>
         <p className="text-xl font-display font-bold text-primary-600 dark:text-primary-400 mb-6">{message}</p>
+
+        {hasSeries && (
+          <div className="mb-4 -mx-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Heart Rate</p>
+            <SessionHRChart series={hrSeries} mode="continuous" />
+          </div>
+        )}
 
         {/* Stats grid */}
         <div className="grid grid-cols-3 gap-3 mb-6">

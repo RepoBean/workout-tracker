@@ -13,6 +13,9 @@ import type {
 
 const router = Router();
 
+const isCardioSet = (s: { durationSec?: number | null; distance?: number | null }): boolean =>
+  (s.durationSec ?? 0) > 0 || (s.distance ?? 0) > 0;
+
 // ============================================
 // Zod Schemas
 // ============================================
@@ -23,13 +26,36 @@ const startSessionSchema = z.object({
 });
 
 const logSetSchema = z.object({
-  exerciseId: z.number().int().positive().nullable().optional(),
+  exerciseId: z.number().int().nullable().optional(), // negative IDs allowed for ad-hoc
   exerciseName: z.string().min(1).max(255),
   weight: z.number().min(0),
-  reps: z.number().int().min(1),
+  reps: z.number().int().min(0),
   setNumber: z.number().int().min(1),
   perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
   dropIndex: z.number().int().min(0).optional().default(0),
+  heartRateAvg: z.number().int().min(20).max(250).nullable().optional(),
+  heartRateMax: z.number().int().min(20).max(250).nullable().optional(),
+  durationSec: z.number().int().min(1).nullable().optional(),
+  distance: z.number().min(0).nullable().optional(),
+}).superRefine((data, ctx) => {
+  if (!isCardioSet(data) && data.reps < 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['reps'],
+      message: 'Strength sets require reps >= 1',
+    });
+  }
+});
+
+const completeSessionSchema = z.object({
+  heartRateAvg: z.number().int().min(20).max(250).nullable().optional(),
+  heartRateMin: z.number().int().min(20).max(250).nullable().optional(),
+  heartRateMax: z.number().int().min(20).max(250).nullable().optional(),
+  heartRateSeries: z.object({
+    t: z.array(z.number().int().min(0).max(14400)).max(2000),
+    b: z.array(z.number().int().min(20).max(250)).max(2000),
+  }).refine(s => s.t.length === s.b.length, 'series length mismatch')
+    .nullable().optional(),
 });
 
 // ============================================
@@ -135,7 +161,7 @@ router.get('/export-csv', async (req: Request, res: Response) => {
       return str;
     };
 
-    const header = 'Date,Program,Workout,Exercise,Set#,Weight(lbs),Reps,RPE,DropIndex';
+    const header = 'Date,Program,Workout,Exercise,Set#,Weight(lbs),Reps,RPE,DropIndex,Duration(sec),Distance(mi),HR_Avg,HR_Max';
     const rows: string[] = [];
 
     for (const session of sessions) {
@@ -145,16 +171,21 @@ router.get('/export-csv', async (req: Request, res: Response) => {
         : '';
 
       for (const set of sets) {
+        const isCardio = isCardioSet(set);
         rows.push([
           escapeCSV(date),
           escapeCSV(session.programName),
           escapeCSV(session.workoutName),
           escapeCSV(set.exerciseName),
           escapeCSV(set.setNumber),
-          escapeCSV(set.weight),
-          escapeCSV(set.reps),
+          escapeCSV(isCardio ? '' : set.weight),
+          escapeCSV(isCardio ? '' : set.reps),
           escapeCSV(set.perceivedEffort),
           escapeCSV(set.dropIndex),
+          escapeCSV(set.durationSec),
+          escapeCSV(set.distance),
+          escapeCSV(set.heartRateAvg),
+          escapeCSV(set.heartRateMax),
         ].join(','));
       }
     }
@@ -456,15 +487,25 @@ router.post('/:id/sets', validate(logSetSchema), async (req: Request, res: Respo
       return;
     }
 
+    // Ad-hoc exercises arrive with negative IDs (frontend convention) — store as null
+    const incomingExerciseId = req.body.exerciseId;
+    const exerciseId = typeof incomingExerciseId === 'number' && incomingExerciseId > 0
+      ? incomingExerciseId
+      : null;
+
     const set = await SetModel.create({
       sessionId,
-      exerciseId: req.body.exerciseId || null,
+      exerciseId,
       exerciseName: req.body.exerciseName,
       weight: req.body.weight,
       reps: req.body.reps,
       setNumber: req.body.setNumber,
       perceivedEffort: req.body.perceivedEffort || null,
       dropIndex: req.body.dropIndex || 0,
+      heartRateAvg: req.body.heartRateAvg ?? null,
+      heartRateMax: req.body.heartRateMax ?? null,
+      durationSec: req.body.durationSec ?? null,
+      distance: req.body.distance ?? null,
     });
 
     res.status(201).json(set);
@@ -477,8 +518,12 @@ router.post('/:id/sets', validate(logSetSchema), async (req: Request, res: Respo
 // Update set schema
 const updateSetSchema = z.object({
   weight: z.number().min(0).optional(),
-  reps: z.number().int().min(1).optional(),
+  reps: z.number().int().min(0).optional(),
   perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
+  heartRateAvg: z.number().int().min(20).max(250).nullable().optional(),
+  heartRateMax: z.number().int().min(20).max(250).nullable().optional(),
+  durationSec: z.number().int().min(1).nullable().optional(),
+  distance: z.number().min(0).nullable().optional(),
 });
 
 // PUT /api/sessions/:id/sets/:setId - Update a set (weight, reps, RPE)
@@ -486,7 +531,7 @@ router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, r
   try {
     const sessionId = Number(req.params.id);
     const setId = Number(req.params.setId);
-    const { weight, reps, perceivedEffort } = req.body;
+    const { weight, reps, perceivedEffort, heartRateAvg, heartRateMax, durationSec, distance } = req.body;
 
     const session = await Session.findByPk(sessionId);
     if (!session) {
@@ -514,6 +559,10 @@ router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, r
     if (weight !== undefined) set.weight = weight;
     if (reps !== undefined) set.reps = reps;
     if (perceivedEffort !== undefined) set.perceivedEffort = perceivedEffort;
+    if (heartRateAvg !== undefined) set.heartRateAvg = heartRateAvg;
+    if (heartRateMax !== undefined) set.heartRateMax = heartRateMax;
+    if (durationSec !== undefined) set.durationSec = durationSec;
+    if (distance !== undefined) set.distance = distance;
 
     await set.save();
 
@@ -525,9 +574,10 @@ router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, r
 });
 
 // POST /api/sessions/:id/complete - Complete session
-router.post('/:id/complete', async (req: Request, res: Response) => {
+router.post('/:id/complete', validate(completeSessionSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
+    const { heartRateAvg, heartRateMin, heartRateMax } = req.body;
 
     const session = await Session.findByPk(sessionId);
     if (!session) {
@@ -543,6 +593,14 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
     await sequelize.transaction(async (t) => {
       // Complete the session
       session.completedAt = new Date();
+      if (heartRateAvg !== undefined) session.heartRateAvg = heartRateAvg;
+      if (heartRateMin !== undefined) session.heartRateMin = heartRateMin;
+      if (heartRateMax !== undefined) session.heartRateMax = heartRateMax;
+      if (req.body.heartRateSeries !== undefined) {
+        session.heartRateSeries = req.body.heartRateSeries
+          ? JSON.stringify(req.body.heartRateSeries)
+          : null;
+      }
       await session.save({ transaction: t });
 
       // If not ad-hoc, advance program index

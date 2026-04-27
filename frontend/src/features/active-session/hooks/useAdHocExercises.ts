@@ -1,5 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import type { Set as SetType, Exercise } from '../../../shared/api/types';
+import { isCardioSet } from '../../../shared/api/predicates';
 import type { AdHocExercise } from '../components/AddExercise';
 
 export function getAdHocStorageKey(sessionId: number): string {
@@ -129,6 +130,8 @@ export function useAdHocExercises({
                 e => e.name.toLowerCase() === lowerName
             );
 
+            const inferredCardio = setsForName.some(isCardioSet);
+
             result.push({
                 id: existingAdHoc?.id ?? hashName(displayName),
                 workoutId: session?.workoutId || 0,
@@ -137,6 +140,10 @@ export function useAdHocExercises({
                 targetReps: existingAdHoc?.targetReps ?? '10',
                 orderIndex: existingAdHoc?.orderIndex ?? (exercises.length + result.length),
                 supersetGroup: existingAdHoc?.supersetGroup ?? null,
+                exerciseType: existingAdHoc?.exerciseType ?? (inferredCardio ? 'cardio' : 'strength'),
+                cardioModality: existingAdHoc?.cardioModality ?? null,
+                targetDurationSec: existingAdHoc?.targetDurationSec ?? null,
+                targetDistance: existingAdHoc?.targetDistance ?? null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });

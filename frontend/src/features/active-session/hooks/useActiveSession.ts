@@ -1,14 +1,20 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { api } from '../../../shared/api/client';
 import { queryKeys, useSession } from '../../../shared/api/queries';
-import type { Set, ActiveSession, LogSetRequest } from '../../../shared/api/types';
+import type { Set, ActiveSession, LogSetRequest, CompleteSessionRequest } from '../../../shared/api/types';
+import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
 import { useTimer } from '../../../shared/context/TimerContext';
+import { useHeartRate } from '../../../shared/context/HeartRateContext';
+import { downsampleHr } from '../../../shared/utils/heartRate';
 
 interface UpdateSetRequest {
   weight?: number;
   reps?: number;
   perceivedEffort?: number | null;
+  durationSec?: number | null;
+  distance?: number | null;
 }
 
 interface UseActiveSessionOptions {
@@ -19,6 +25,11 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
   const queryClient = useQueryClient();
   const toast = useToast();
   const { startTimer } = useTimer();
+  const heartRate = useHeartRate();
+
+  // HR tracking window — session-level uses sessionStartRef; per-set uses lastSetAtRef
+  const sessionStartRef = useRef<number>(Date.now());
+  const lastSetAtRef = useRef<number>(sessionStartRef.current);
 
   // Fetch session data
   const { data: session, isLoading, error } = useSession(sessionId);
@@ -26,7 +37,14 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
   // Log Set Mutation with Optimistic Update
   const logSetMutation = useMutation({
     mutationFn: async (setData: LogSetRequest) => {
-      const { data } = await api.post<Set>(`/sessions/${sessionId}/sets`, setData);
+      const hrStats = heartRate.statsSince(lastSetAtRef.current);
+      const payload: LogSetRequest = {
+        ...setData,
+        heartRateAvg: setData.heartRateAvg ?? hrStats?.avg ?? null,
+        heartRateMax: setData.heartRateMax ?? hrStats?.max ?? null,
+      };
+      const { data } = await api.post<Set>(`/sessions/${sessionId}/sets`, payload);
+      lastSetAtRef.current = Date.now();
       return data;
     },
     onMutate: async (newSet) => {
@@ -38,6 +56,7 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
 
       // Optimistically add the new set
       const tempId = -Date.now();
+      const hrStats = heartRate.statsSince(lastSetAtRef.current);
       if (previousSession) {
         const optimisticSet: Set = {
           id: tempId,
@@ -49,6 +68,10 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
           setNumber: newSet.setNumber,
           perceivedEffort: newSet.perceivedEffort || null,
           dropIndex: newSet.dropIndex || 0,
+          heartRateAvg: newSet.heartRateAvg ?? hrStats?.avg ?? null,
+          heartRateMax: newSet.heartRateMax ?? hrStats?.max ?? null,
+          durationSec: newSet.durationSec ?? null,
+          distance: newSet.distance ?? null,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -88,8 +111,10 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
         });
       }
 
-      // Auto-start rest timer (90s default)
-      startTimer(90);
+      // Auto-start rest timer (90s default) — skip for cardio sets
+      if (!isCardioSet(variables)) {
+        startTimer(90);
+      }
 
       // Call the callback if provided
       options?.onSetLogged?.(variables.exerciseId ?? null, variables.exerciseName);
@@ -219,7 +244,18 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
   // Complete Session Mutation
   const completeSessionMutation = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post(`/sessions/${sessionId}/complete`);
+      const hrStats = heartRate.statsSince(sessionStartRef.current);
+      const samples = heartRate.samplesSince(sessionStartRef.current);
+      const series = downsampleHr(samples, sessionStartRef.current);
+      const body: CompleteSessionRequest = {
+        ...(hrStats && {
+          heartRateAvg: hrStats.avg,
+          heartRateMin: hrStats.min,
+          heartRateMax: hrStats.max,
+        }),
+        ...(series && { heartRateSeries: series }),
+      };
+      const { data } = await api.post(`/sessions/${sessionId}/complete`, body);
       return data;
     },
     onSuccess: () => {

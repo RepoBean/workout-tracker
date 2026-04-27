@@ -2,9 +2,15 @@ import { useState, useRef, useEffect } from 'react';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { Button } from '../../../shared/ui/Button';
 
+import type { CardioModality, ExerciseType } from '../../../shared/api/types';
+
 interface AdHocExercise {
   tempId: string;
   name: string;
+  exerciseType?: ExerciseType;
+  cardioModality?: CardioModality | null;
+  targetDurationSec?: number | null;
+  targetDistance?: number | null;
 }
 
 interface AddExerciseProps {

@@ -10,11 +10,17 @@ export interface SetAttributes {
   setNumber: number;
   perceivedEffort: number | null;
   dropIndex: number;
+  heartRateAvg: number | null;
+  heartRateMax: number | null;
+  durationSec: number | null;
+  distance: number | null; // miles
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface SetCreationAttributes extends Optional<SetAttributes, 'id' | 'exerciseId' | 'perceivedEffort' | 'dropIndex'> {}
+export interface SetCreationAttributes extends Optional<SetAttributes,
+  'id' | 'exerciseId' | 'perceivedEffort' | 'dropIndex' | 'heartRateAvg' | 'heartRateMax' | 'durationSec' | 'distance'
+> {}
 
 export class Set extends Model<SetAttributes, SetCreationAttributes> implements SetAttributes {
   declare id: number;
@@ -26,6 +32,10 @@ export class Set extends Model<SetAttributes, SetCreationAttributes> implements 
   declare setNumber: number;
   declare perceivedEffort: number | null;
   declare dropIndex: number;
+  declare heartRateAvg: number | null;
+  declare heartRateMax: number | null;
+  declare durationSec: number | null;
+  declare distance: number | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -67,7 +77,8 @@ export class Set extends Model<SetAttributes, SetCreationAttributes> implements 
         type: DataTypes.INTEGER,
         allowNull: false,
         validate: {
-          min: 1
+          // Cardio sets store 0; strength sets enforce >=1 at the route schema layer
+          min: 0
         }
       },
       setNumber: {
@@ -89,6 +100,36 @@ export class Set extends Model<SetAttributes, SetCreationAttributes> implements 
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
+        validate: {
+          min: 0
+        }
+      },
+      heartRateAvg: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 20,
+          max: 250
+        }
+      },
+      heartRateMax: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 20,
+          max: 250
+        }
+      },
+      durationSec: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          min: 1
+        }
+      },
+      distance: {
+        type: DataTypes.DECIMAL(6, 2),
+        allowNull: true,
         validate: {
           min: 0
         }

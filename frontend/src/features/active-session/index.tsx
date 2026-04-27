@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
 import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
@@ -14,13 +14,35 @@ import { AddExercise } from './components/AddExercise';
 import { SwapExercise } from './components/SwapExercise';
 import { RpePrompt } from './components/RpePrompt';
 import { CompletionCelebration } from './components/CompletionCelebration';
-import { SwipeableRow } from '../../shared/ui/SwipeableRow';
+import { LiveHRChart } from './components/LiveHRChart';
 import { useTimer } from '../../shared/context/TimerContext';
-import type { Exercise } from '../../shared/api/types';
+import { useHeartRate } from '../../shared/context/HeartRateContext';
+import { downsampleHr } from '../../shared/utils/heartRate';
+import { getTargetSets, isCardioExercise, isCardioSet } from '../../shared/api/predicates';
+import type { CardioModality, Exercise } from '../../shared/api/types';
+
+const CARDIO_LABELS: Record<CardioModality, string> = {
+  running: 'Run',
+  cycling: 'Ride',
+  treadmill: 'Treadmill',
+  rowing: 'Row',
+  other: 'Cardio',
+};
+
+const getHrChartStorageKey = (sessionId: number) => `wt:livehr:visible:${sessionId}`;
+
+const readHrChartOverride = (sessionId: number): boolean | null => {
+  if (!Number.isFinite(sessionId)) return null;
+  const raw = localStorage.getItem(getHrChartStorageKey(sessionId));
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return null;
+};
 
 export default function ActiveSession() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const sessionId = Number(id);
 
   const {
@@ -39,6 +61,37 @@ export default function ActiveSession() {
   const { exerciseHints } = usePreviousData(sessionId);
 
   const { stopTimer } = useTimer();
+  const { clearSamples: clearHrSamples, samplesSince } = useHeartRate();
+
+  // Reset HR sample buffer once per session mount so per-set/session windows
+  // are scoped to this workout.
+  useEffect(() => {
+    clearHrSamples();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  // Seed an ad-hoc cardio exercise when the picker passed ?cardio=<modality>.
+  // Strip the param after seeding so refresh doesn't re-add.
+  const seededCardioRef = sessionId; // re-key the effect when session changes
+  useEffect(() => {
+    const modality = searchParams.get('cardio') as CardioModality | null;
+    if (!modality || !CARDIO_LABELS[modality]) return;
+    setAdHocExercises(prev => {
+      if (prev.some(e => isCardioExercise(e))) return prev;
+      return [...prev, {
+        tempId: `adhoc-cardio-${Date.now()}`,
+        name: CARDIO_LABELS[modality],
+        exerciseType: 'cardio',
+        cardioModality: modality,
+        targetDurationSec: null,
+        targetDistance: null,
+      }];
+    });
+    const next = new URLSearchParams(searchParams);
+    next.delete('cardio');
+    setSearchParams(next, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seededCardioRef]);
 
   // Celebration state
   const [showCelebration, setShowCelebration] = useState(false);
@@ -46,6 +99,7 @@ export default function ActiveSession() {
     totalSets: number;
     totalVolume: number;
     duration: number;
+    hrSeries: { t: number[]; b: number[] } | null;
   } | null>(null);
 
   // Swap exercise state
@@ -68,6 +122,46 @@ export default function ActiveSession() {
     exercises,
     sets,
   });
+
+  // Detect whether this session has any cardio content. Reacts to ad-hoc
+  // cardio seeded mid-flow (e.g. via the dashboard cardio modality picker)
+  // and to cardio sets logged on otherwise-undeclared exercises.
+  const sessionHasCardio = useMemo(() => {
+    if (exercises.some(ex => isCardioExercise(ex))) return true;
+    if (allAdHocExercises.some(e => e.exerciseType === 'cardio')) return true;
+    if (sets.some(isCardioSet)) return true;
+    return false;
+  }, [exercises, allAdHocExercises, sets]);
+
+  // Live HR chart visibility — auto-show for cardio, hidden for strength,
+  // overridable by tapping the BPM pill. Override persists per session id.
+  const [hrChartVisible, setHrChartVisible] = useState<boolean>(() => {
+    const override = readHrChartOverride(sessionId);
+    return override ?? false; // sessionHasCardio fills in via the effect below
+  });
+
+  // Re-evaluate default when cardio detection flips (and the user hasn't set
+  // an explicit preference for this session).
+  useEffect(() => {
+    const override = readHrChartOverride(sessionId);
+    if (override === null) {
+      setHrChartVisible(sessionHasCardio);
+    } else {
+      setHrChartVisible(override);
+    }
+  }, [sessionId, sessionHasCardio]);
+
+  const toggleHrChart = useCallback(() => {
+    setHrChartVisible(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem(getHrChartStorageKey(sessionId), next ? '1' : '0');
+      } catch {
+        // ignore quota errors — toggle still works for the session
+      }
+      return next;
+    });
+  }, [sessionId]);
 
   // Exercise ordering
   const {
@@ -127,7 +221,7 @@ export default function ActiveSession() {
   const { totalSetsLogged, totalSetsTarget } = useMemo(() => {
     const logged = sets.filter(s => (s.dropIndex || 0) === 0).length;
     const target = exercises.reduce(
-      (sum: number, ex: Exercise) => sum + ex.targetSets,
+      (sum: number, ex: Exercise) => sum + getTargetSets(ex),
       0
     );
     return { totalSetsLogged: logged, totalSetsTarget: target };
@@ -139,9 +233,11 @@ export default function ActiveSession() {
     // Calculate stats before completing
     const totalSetsCount = sets.filter(s => (s.dropIndex || 0) === 0).length;
     const totalVolumeCalc = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-    const durationMins = session?.createdAt
-      ? Math.round((Date.now() - new Date(session.createdAt).getTime()) / 60000)
-      : 0;
+    const sessionStartMs = session?.createdAt
+      ? new Date(session.createdAt).getTime()
+      : Date.now();
+    const durationMins = Math.round((Date.now() - sessionStartMs) / 60000);
+    const hrSeries = downsampleHr(samplesSince(sessionStartMs), sessionStartMs);
 
     completeSession(undefined, {
       onSuccess: () => {
@@ -161,11 +257,15 @@ export default function ActiveSession() {
         // Clear hidden exercises (from swaps)
         localStorage.removeItem(getHiddenStorageKey(sessionId));
 
+        // Clear live HR chart visibility override
+        localStorage.removeItem(getHrChartStorageKey(sessionId));
+
         // Show celebration instead of navigating immediately
         setCelebrationData({
           totalSets: totalSetsCount,
           totalVolume: totalVolumeCalc,
           duration: durationMins,
+          hrSeries,
         });
         setShowCelebration(true);
       },
@@ -182,6 +282,10 @@ export default function ActiveSession() {
       targetReps: '10',
       orderIndex: 0,
       supersetGroup: null,
+      exerciseType: 'strength',
+      cardioModality: null,
+      targetDurationSec: null,
+      targetDistance: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -209,6 +313,10 @@ export default function ActiveSession() {
       targetReps: exercise.targetReps,
       orderIndex: exercise.orderIndex,
       supersetGroup: exercise.supersetGroup,
+      exerciseType: exercise.exerciseType,
+      cardioModality: exercise.cardioModality,
+      targetDurationSec: exercise.targetDurationSec,
+      targetDistance: exercise.targetDistance,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -340,8 +448,15 @@ export default function ActiveSession() {
         totalSetsTarget={totalSetsTarget}
         onComplete={handleComplete}
         isCompleting={isCompletingSession}
+        onToggleHrChart={toggleHrChart}
       />
 
+      {hrChartVisible && (
+        <LiveHRChart
+          sessionStartMs={new Date(session.createdAt).getTime()}
+          onClose={toggleHrChart}
+        />
+      )}
 
       {/* Focused exercise view (when session has workout exercises) */}
       {exercises.length > 0 && (
@@ -433,7 +548,11 @@ export default function ActiveSession() {
                               <div>
                                 <h3 className="font-medium">{exercise.name}</h3>
                                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  {navigation.getExerciseProgress(exercise.id).logged}/{exercise.targetSets} sets
+                                  {(() => {
+                                    const p = navigation.getExerciseProgress(exercise.id);
+                                    const unit = isCardioExercise(exercise) ? 'effort' : 'sets';
+                                    return `${p.logged}/${p.target} ${unit}`;
+                                  })()}
                                 </p>
                               </div>
                               {isComplete && (
@@ -499,78 +618,34 @@ export default function ActiveSession() {
         <div className="space-y-4">
           {allAdHocExercises.map((adHocEx) => {
             const adHocSets = adHocSetsByName.get(adHocEx.name.toLowerCase()) || [];
-            const standardSets = adHocSets.filter(s => (s.dropIndex || 0) === 0);
-            const nextSetNumber = standardSets.length + 1;
-            const lastSet = standardSets.length > 0
-              ? standardSets[standardSets.length - 1]
-              : undefined;
+            const isCardio = isCardioExercise(adHocEx, adHocSets);
+
+            const virtualExercise: Exercise = {
+              id: -Math.abs(adHocEx.tempId.split('').reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0), 0)) - 1,
+              workoutId: 0,
+              name: adHocEx.name,
+              targetSets: isCardio ? 1 : 3,
+              targetReps: '10',
+              orderIndex: 0,
+              supersetGroup: null,
+              exerciseType: isCardio ? 'cardio' : 'strength',
+              cardioModality: adHocEx.cardioModality ?? null,
+              targetDurationSec: adHocEx.targetDurationSec ?? null,
+              targetDistance: adHocEx.targetDistance ?? null,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
 
             return (
-              <div key={adHocEx.tempId} className="card">
-                <h3 className="font-semibold text-lg mb-3">{adHocEx.name}</h3>
-
-                {/* Logged sets */}
-                {adHocSets.length > 0 && (
-                  <div className="mb-4 space-y-1">
-                    {adHocSets.map((set) => (
-                      <SwipeableRow
-                        key={set.id}
-                        onSwipeLeft={() => deleteSet(set.id)}
-                        disabled={set.id < 0}
-                      >
-                        <div className={`flex items-center justify-between py-2 px-3 rounded-lg ${(set.dropIndex || 0) > 0
-                          ? 'bg-orange-50 dark:bg-orange-900/20 ml-4 mt-1'
-                          : 'bg-green-50 dark:bg-green-900/20'
-                          }`}>
-                          <span className={`text-sm font-medium ${(set.dropIndex || 0) > 0
-                            ? 'text-orange-700 dark:text-orange-300'
-                            : 'text-green-800 dark:text-green-300'
-                            }`}>
-                            {(set.dropIndex || 0) > 0
-                              ? `↳ Drop ${set.dropIndex}`
-                              : `Set ${set.setNumber}`}
-                          </span>
-                          <span className={`font-semibold ${(set.dropIndex || 0) > 0
-                            ? 'text-orange-800 dark:text-orange-200 text-sm'
-                            : 'text-green-900 dark:text-green-200'
-                            }`}>
-                            {set.weight} lbs x {set.reps}
-                            {set.perceivedEffort && (
-                              <span className="ml-2 text-sm text-gray-500">
-                                RPE {set.perceivedEffort}
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                      </SwipeableRow>
-                    ))}
-                  </div>
-                )}
-
-                {/* Set input for next set - import SetInput for ad-hoc */}
-                <div className="bg-gray-50 dark:bg-surface-800/50 rounded-lg p-4">
-                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                    Set {nextSetNumber}
-                  </div>
-                  <div className="text-sm text-gray-400 mb-2">
-                    Last: {lastSet ? `${lastSet.weight} lbs × ${lastSet.reps}` : '—'}
-                  </div>
-                  {/* Simplified inline logging for ad-hoc */}
-                  <button
-                    onClick={() => logSet({
-                      exerciseId: null,
-                      exerciseName: adHocEx.name,
-                      weight: lastSet?.weight || 0,
-                      reps: lastSet?.reps || 10,
-                      setNumber: nextSetNumber,
-                    })}
-                    className="w-full py-2 bg-primary-600 text-white rounded-lg font-medium"
-                    disabled={isLoggingSet}
-                  >
-                    Log Set {nextSetNumber}
-                  </button>
-                </div>
-              </div>
+              <ExerciseCard
+                key={adHocEx.tempId}
+                exercise={virtualExercise}
+                loggedSets={adHocSets}
+                onLogSet={(data) => handleLogSet({ ...data, exerciseId: null })}
+                onDeleteSet={deleteSet}
+                onUpdateSet={updateSet}
+                isLogging={isLoggingSet}
+              />
             );
           })}
 
@@ -608,6 +683,7 @@ export default function ActiveSession() {
         totalSets={celebrationData?.totalSets || 0}
         totalVolume={celebrationData?.totalVolume || 0}
         duration={celebrationData?.duration || 0}
+        hrSeries={celebrationData?.hrSeries || null}
         onDismiss={() => {
           setShowCelebration(false);
           navigate('/');

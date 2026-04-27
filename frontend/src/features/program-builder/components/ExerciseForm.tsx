@@ -4,9 +4,16 @@ import { Button } from '../../../shared/ui/Button';
 import { Input } from '../../../shared/ui/Input';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { useProgramMutations } from '../hooks/usePrograms';
-import type { Exercise } from '../../../shared/api/types';
+import type { CardioModality, Exercise, ExerciseType } from '../../../shared/api/types';
 
 const ALL_GROUPS = ['A', 'B', 'C', 'D', 'E'] as const;
+const CARDIO_MODALITIES: { value: CardioModality; label: string }[] = [
+  { value: 'running', label: 'Running' },
+  { value: 'cycling', label: 'Cycling' },
+  { value: 'treadmill', label: 'Treadmill' },
+  { value: 'rowing', label: 'Rowing' },
+  { value: 'other', label: 'Other' },
+];
 
 interface ExerciseFormProps {
   workoutId: number;
@@ -18,9 +25,17 @@ interface ExerciseFormProps {
 
 export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existingSupersetGroups }: ExerciseFormProps) {
   const [name, setName] = useState(exercise?.name || '');
+  const [exerciseType, setExerciseType] = useState<ExerciseType>(exercise?.exerciseType || 'strength');
   const [targetSets, setTargetSets] = useState(exercise?.targetSets?.toString() || '3');
   const [targetReps, setTargetReps] = useState(exercise?.targetReps || '10');
   const [supersetGroup, setSupersetGroup] = useState<string>(exercise?.supersetGroup || '');
+  const [cardioModality, setCardioModality] = useState<CardioModality>(exercise?.cardioModality || 'running');
+  const [targetDurationMin, setTargetDurationMin] = useState(
+    exercise?.targetDurationSec ? String(Math.round(exercise.targetDurationSec / 60)) : ''
+  );
+  const [targetDistance, setTargetDistance] = useState(
+    exercise?.targetDistance != null ? String(exercise.targetDistance) : ''
+  );
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [nextOrderIndex, setNextOrderIndex] = useState(orderIndex);
 
@@ -29,6 +44,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
 
   const isEditing = !!exercise;
   const isSubmitting = createExercise.isPending || updateExercise.isPending;
+  const isCardio = exerciseType === 'cardio';
 
   // Dynamic superset group logic
   const usedGroups = [...new Set(existingSupersetGroups)].sort();
@@ -40,8 +56,51 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
   }
 
   const handleSubmit = (action: 'close' | 'next') => {
+    if (!name.trim()) return;
+
+    if (isCardio) {
+      const durationMin = targetDurationMin ? parseFloat(targetDurationMin) : NaN;
+      const distance = targetDistance ? parseFloat(targetDistance) : NaN;
+      const hasDuration = !isNaN(durationMin) && durationMin > 0;
+      const hasDistance = !isNaN(distance) && distance > 0;
+      if (!hasDuration && !hasDistance) return;
+
+      const cardioPayload = {
+        name: name.trim(),
+        targetSets: 1,
+        targetReps: '1',
+        supersetGroup: null,
+        exerciseType: 'cardio' as const,
+        cardioModality,
+        targetDurationSec: hasDuration ? Math.round(durationMin * 60) : null,
+        targetDistance: hasDistance ? distance : null,
+      };
+
+      if (isEditing) {
+        updateExercise.mutate({ id: exercise.id, ...cardioPayload }, { onSuccess: onClose });
+      } else {
+        createExercise.mutate({
+          workoutId,
+          orderIndex: nextOrderIndex,
+          ...cardioPayload,
+        }, {
+          onSuccess: () => {
+            if (action === 'close') {
+              onClose();
+            } else {
+              setName('');
+              setTargetDurationMin('');
+              setTargetDistance('');
+              setNextOrderIndex(prev => prev + 1);
+            }
+          }
+        });
+      }
+      return;
+    }
+
     const setsNum = parseInt(targetSets);
-    if (!name.trim() || isNaN(setsNum) || setsNum < 1 || !targetReps.trim()) return;
+    if (isNaN(setsNum) || setsNum < 1 || !targetReps.trim()) return;
 
     const group = supersetGroup || null;
 
@@ -52,6 +111,10 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         targetSets: setsNum,
         targetReps: targetReps.trim(),
         supersetGroup: group,
+        exerciseType: 'strength',
+        cardioModality: null,
+        targetDurationSec: null,
+        targetDistance: null,
       }, { onSuccess: onClose });
     } else {
       createExercise.mutate({
@@ -61,6 +124,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         targetReps: targetReps.trim(),
         orderIndex: nextOrderIndex,
         supersetGroup: group,
+        exerciseType: 'strength',
       }, {
         onSuccess: () => {
           if (action === 'close') {
@@ -84,6 +148,30 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
   return (
     <Modal isOpen onClose={onClose} title={isEditing ? 'Edit Exercise' : 'Add Exercise'}>
       <div className="space-y-4">
+        {/* Type toggle */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setExerciseType('strength')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${exerciseType === 'strength'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+          >
+            Strength
+          </button>
+          <button
+            type="button"
+            onClick={() => setExerciseType('cardio')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${exerciseType === 'cardio'
+              ? 'bg-primary-600 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+              }`}
+          >
+            Cardio
+          </button>
+        </div>
+
         <div className="relative">
           <Input
             label="Exercise Name"
@@ -115,22 +203,73 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Input
-            label="Target Sets"
-            type="number"
-            value={targetSets}
-            onChange={(e) => setTargetSets(e.target.value)}
-            min={1}
-          />
-          <Input
-            label="Target Reps"
-            value={targetReps}
-            onChange={(e) => setTargetReps(e.target.value)}
-            placeholder="e.g. 8-10"
-          />
-        </div>
+        {!isCardio && (
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Target Sets"
+              type="number"
+              value={targetSets}
+              onChange={(e) => setTargetSets(e.target.value)}
+              min={1}
+            />
+            <Input
+              label="Target Reps"
+              value={targetReps}
+              onChange={(e) => setTargetReps(e.target.value)}
+              placeholder="e.g. 8-10"
+            />
+          </div>
+        )}
 
+        {isCardio && (
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Modality
+              </label>
+              <div className="flex gap-2 flex-wrap">
+                {CARDIO_MODALITIES.map(({ value, label }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setCardioModality(value)}
+                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                      cardioModality === value
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Target Duration (min)"
+                type="number"
+                value={targetDurationMin}
+                onChange={(e) => setTargetDurationMin(e.target.value)}
+                placeholder="e.g. 30"
+                min={1}
+              />
+              <Input
+                label="Target Distance (mi)"
+                type="number"
+                value={targetDistance}
+                onChange={(e) => setTargetDistance(e.target.value)}
+                placeholder="e.g. 3"
+                step="0.1"
+                min={0}
+              />
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              At least one of duration or distance is required.
+            </p>
+          </div>
+        )}
+
+        {!isCardio && (
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Superset Group
@@ -171,6 +310,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             )}
           </div>
         </div>
+        )}
 
         <div className="flex gap-2 pt-2">
           {isEditing ? (

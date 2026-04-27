@@ -1,8 +1,10 @@
 import { useMemo, useState } from 'react';
 import { SetInput } from './SetInput';
+import { CardioSetInput } from './CardioSetInput';
 import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
+import { isCardioExercise } from '../../../shared/api/predicates';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
 interface ExerciseCardProps {
@@ -17,12 +19,20 @@ interface ExerciseCardProps {
     setNumber: number;
     perceivedEffort?: number;
     dropIndex?: number;
+    durationSec?: number | null;
+    distance?: number | null;
   }) => void;
   onDeleteSet: (setId: number) => void;
   onUpdateSet?: (setId: number, updates: { weight?: number; reps?: number }) => void;
   onSwapExercise?: () => void;
   isLogging: boolean;
 }
+
+const formatDuration = (sec: number): string => {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 interface EditingSet {
   id: number;
@@ -41,6 +51,7 @@ export function ExerciseCard({
   isLogging,
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
+  const isCardio = isCardioExercise(exercise);
 
   // Only count standard sets (dropIndex=0) for completion
   const standardSets = useMemo(
@@ -48,7 +59,9 @@ export function ExerciseCard({
     [loggedSets]
   );
   const nextSetNumber = standardSets.length + 1;
-  const isComplete = standardSets.length >= exercise.targetSets;
+  const isComplete = isCardio
+    ? loggedSets.length >= 1
+    : standardSets.length >= exercise.targetSets;
 
   // Get current set by setNumber
   const getLoggedSet = (setNumber: number): Set | undefined => {
@@ -140,12 +153,31 @@ export function ExerciseCard({
             )}
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {exercise.targetSets} sets × {exercise.targetReps} reps
-            {exercise.supersetGroup && (
-              <span className="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900
-                             text-purple-700 dark:text-purple-300 rounded text-xs font-medium">
-                Superset {exercise.supersetGroup}
-              </span>
+            {isCardio ? (
+              <>
+                {exercise.cardioModality && (
+                  <span className="capitalize">{exercise.cardioModality}</span>
+                )}
+                {(exercise.targetDurationSec || exercise.targetDistance) && (
+                  <span>
+                    {exercise.cardioModality ? ' · ' : ''}
+                    {[
+                      exercise.targetDurationSec ? `${Math.round(exercise.targetDurationSec / 60)} min` : null,
+                      exercise.targetDistance ? `${exercise.targetDistance} mi` : null,
+                    ].filter(Boolean).join(' / ')}
+                  </span>
+                )}
+              </>
+            ) : (
+              <>
+                {exercise.targetSets} sets × {exercise.targetReps} reps
+                {exercise.supersetGroup && (
+                  <span className="ml-2 px-2 py-0.5 bg-purple-100 dark:bg-purple-900
+                                 text-purple-700 dark:text-purple-300 rounded text-xs font-medium">
+                    Superset {exercise.supersetGroup}
+                  </span>
+                )}
+              </>
             )}
           </p>
         </div>
@@ -157,7 +189,8 @@ export function ExerciseCard({
         )}
       </div>
 
-      {/* Side-by-side comparison grid */}
+      {/* Side-by-side comparison grid (strength only) */}
+      {!isCardio && (
       <div className="mb-4">
         {/* Column headers */}
         <div className="grid grid-cols-[1fr_auto_2fr] gap-2 items-center mb-2 text-xs text-gray-500 dark:text-gray-400">
@@ -268,18 +301,59 @@ export function ExerciseCard({
           );
         })}
       </div>
+      )}
 
-      {/* Set Input (if not complete) */}
+      {/* Cardio: render logged effort summary if present */}
+      {isCardio && loggedSets.length > 0 && (
+        <div className="mb-4 space-y-1">
+          {loggedSets.map((set) => (
+            <SwipeableRow
+              key={set.id}
+              onSwipeLeft={() => onDeleteSet(set.id)}
+              disabled={set.id < 0}
+            >
+              <div className="flex items-center justify-between py-2 px-3 rounded-lg
+                              bg-green-50 dark:bg-green-900/20">
+                <span className="text-green-700 dark:text-green-300 font-medium tabular-nums">
+                  ✓ {set.durationSec ? formatDuration(set.durationSec) : '—'}
+                  {set.distance != null && set.distance > 0 && (
+                    <span className="ml-2">• {set.distance} mi</span>
+                  )}
+                </span>
+                {set.heartRateAvg != null && (
+                  <span className="text-xs text-red-600 dark:text-red-400 tabular-nums">
+                    avg {set.heartRateAvg} BPM
+                  </span>
+                )}
+              </div>
+            </SwipeableRow>
+          ))}
+        </div>
+      )}
+
+      {/* Input (if not complete) */}
       {!isComplete && (
-        <SetInput
-          exerciseId={exercise.id}
-          exerciseName={exercise.name}
-          setNumber={nextSetNumber}
-          previousWeight={hintWeight}
-          previousReps={hintRepsForInput}
-          onLogSet={onLogSet}
-          isLogging={isLogging}
-        />
+        isCardio ? (
+          <CardioSetInput
+            exerciseId={exercise.id}
+            exerciseName={exercise.name}
+            setNumber={nextSetNumber}
+            targetDurationSec={exercise.targetDurationSec}
+            targetDistance={exercise.targetDistance}
+            onLogSet={onLogSet}
+            isLogging={isLogging}
+          />
+        ) : (
+          <SetInput
+            exerciseId={exercise.id}
+            exerciseName={exercise.name}
+            setNumber={nextSetNumber}
+            previousWeight={hintWeight}
+            previousReps={hintRepsForInput}
+            onLogSet={onLogSet}
+            isLogging={isLogging}
+          />
+        )
       )}
     </div>
   );
