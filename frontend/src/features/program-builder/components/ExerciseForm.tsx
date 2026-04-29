@@ -4,16 +4,10 @@ import { Button } from '../../../shared/ui/Button';
 import { Input } from '../../../shared/ui/Input';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { useProgramMutations } from '../hooks/usePrograms';
+import { CARDIO_MODALITY_OPTIONS } from '../../../shared/api/cardio';
 import type { CardioModality, Exercise, ExerciseType } from '../../../shared/api/types';
 
 const ALL_GROUPS = ['A', 'B', 'C', 'D', 'E'] as const;
-const CARDIO_MODALITIES: { value: CardioModality; label: string }[] = [
-  { value: 'running', label: 'Running' },
-  { value: 'cycling', label: 'Cycling' },
-  { value: 'treadmill', label: 'Treadmill' },
-  { value: 'rowing', label: 'Rowing' },
-  { value: 'other', label: 'Other' },
-];
 
 interface ExerciseFormProps {
   workoutId: number;
@@ -228,7 +222,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
                 Modality
               </label>
               <div className="flex gap-2 flex-wrap">
-                {CARDIO_MODALITIES.map(({ value, label }) => (
+                {CARDIO_MODALITY_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"

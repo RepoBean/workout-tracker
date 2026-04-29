@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { parseSeries } from '../../../shared/utils/heartRate';
+import { formatMMSS } from '../../../shared/utils/format';
 import { SessionHRChart } from './SessionHRChart';
 
 interface SessionCardProps {
@@ -34,12 +35,6 @@ function formatDuration(createdAt: string, completedAt: string | null): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-}
-
-function formatSetSec(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 interface ExerciseGroup {
@@ -196,7 +191,7 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
                       </span>
                       {cardio ? (
                         <span>
-                          {set.durationSec ? formatSetSec(set.durationSec) : '—'}
+                          {set.durationSec ? formatMMSS(set.durationSec) : '—'}
                           {set.distance != null && set.distance > 0 && (
                             <span> · {set.distance} mi</span>
                           )}

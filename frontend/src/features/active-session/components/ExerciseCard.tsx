@@ -5,6 +5,7 @@ import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
 import { isCardioExercise } from '../../../shared/api/predicates';
+import { formatMMSS } from '../../../shared/utils/format';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
 interface ExerciseCardProps {
@@ -27,12 +28,6 @@ interface ExerciseCardProps {
   onSwapExercise?: () => void;
   isLogging: boolean;
 }
-
-const formatDuration = (sec: number): string => {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
 
 interface EditingSet {
   id: number;
@@ -315,7 +310,7 @@ export function ExerciseCard({
               <div className="flex items-center justify-between py-2 px-3 rounded-lg
                               bg-green-50 dark:bg-green-900/20">
                 <span className="text-green-700 dark:text-green-300 font-medium tabular-nums">
-                  ✓ {set.durationSec ? formatDuration(set.durationSec) : '—'}
+                  ✓ {set.durationSec ? formatMMSS(set.durationSec) : '—'}
                   {set.distance != null && set.distance > 0 && (
                     <span className="ml-2">• {set.distance} mi</span>
                   )}

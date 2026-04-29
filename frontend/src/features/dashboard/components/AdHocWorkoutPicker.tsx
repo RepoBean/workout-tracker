@@ -7,15 +7,8 @@ import { usePrograms } from '../../../shared/api/queries';
 import { useStartSession } from '../../active-session/hooks/useStartSession';
 import { api } from '../../../shared/api/client';
 import { useToast } from '../../../shared/ui/Toast';
+import { CARDIO_MODALITY_OPTIONS } from '../../../shared/api/cardio';
 import type { ActiveSession, CardioModality, Program, Workout } from '../../../shared/api/types';
-
-const CARDIO_OPTIONS: { value: CardioModality; label: string }[] = [
-  { value: 'running', label: 'Running' },
-  { value: 'cycling', label: 'Cycling' },
-  { value: 'treadmill', label: 'Treadmill' },
-  { value: 'rowing', label: 'Rowing' },
-  { value: 'other', label: 'Other' },
-];
 
 interface AdHocWorkoutPickerProps {
     isOpen: boolean;
@@ -102,7 +95,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                     <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
                         <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Pick a cardio type</div>
                         <div className="grid grid-cols-2 gap-2">
-                            {CARDIO_OPTIONS.map(({ value, label }) => (
+                            {CARDIO_MODALITY_OPTIONS.map(({ value, label }) => (
                                 <button
                                     key={value}
                                     type="button"

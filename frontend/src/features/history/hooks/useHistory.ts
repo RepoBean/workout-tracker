@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useHistory as useHistoryQuery } from '../../../shared/api/queries';
 import { api } from '../../../shared/api/client';
 import { useToast } from '../../../shared/ui/Toast';
+import { clearSessionLocalState } from '../../active-session/lib/sessionStorage';
 
 const PAGE_SIZE = 10;
 
@@ -43,8 +44,12 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: async (sessionId: number) => {
       await api.delete(`/sessions/${sessionId}`);
+      return sessionId;
     },
-    onSuccess: () => {
+    onSuccess: (sessionId) => {
+      // Drop any per-session localStorage so deleted sessions don't leak
+      // state into storage forever.
+      clearSessionLocalState(sessionId);
       queryClient.invalidateQueries({ queryKey: ['history'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       queryClient.invalidateQueries({ queryKey: ['calendarSessions'] });

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { api } from '../../../shared/api/client';
 import { queryKeys, useSession } from '../../../shared/api/queries';
 import type { Set, ActiveSession, LogSetRequest, CompleteSessionRequest } from '../../../shared/api/types';
@@ -27,12 +27,27 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
   const { startTimer } = useTimer();
   const heartRate = useHeartRate();
 
-  // HR tracking window — session-level uses sessionStartRef; per-set uses lastSetAtRef
+  // HR tracking window — session-level uses sessionStartRef; per-set uses lastSetAtRef.
+  // Both are anchored to session.createdAt once it loads (see effect below) so that
+  // resumed sessions use the real start time, not hook mount time.
   const sessionStartRef = useRef<number>(Date.now());
   const lastSetAtRef = useRef<number>(sessionStartRef.current);
+  const anchoredRef = useRef(false);
 
   // Fetch session data
   const { data: session, isLoading, error } = useSession(sessionId);
+
+  // Anchor session-level HR t=0 to session.createdAt once available. Run only
+  // once — after this, lastSetAtRef advances per-set inside logSetMutation and
+  // must not be clobbered by re-renders.
+  useEffect(() => {
+    if (anchoredRef.current) return;
+    if (!session?.createdAt) return;
+    const startMs = new Date(session.createdAt).getTime();
+    sessionStartRef.current = startMs;
+    lastSetAtRef.current = startMs;
+    anchoredRef.current = true;
+  }, [session?.createdAt]);
 
   // Log Set Mutation with Optimistic Update
   const logSetMutation = useMutation({

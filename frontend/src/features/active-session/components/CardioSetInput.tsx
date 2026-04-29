@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useHeartRate } from '../../../shared/context/HeartRateContext';
+import { formatMMSS } from '../../../shared/utils/format';
 
 interface CardioSetInputProps {
   exerciseId: number | null;
@@ -21,16 +23,43 @@ interface CardioSetInputProps {
 
 type Phase = 'idle' | 'running' | 'finishing';
 
-const formatElapsed = (sec: number): string => {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
-
 const formatTarget = (sec: number): string => {
   if (sec >= 60 && sec % 60 === 0) return `${sec / 60} min`;
-  return formatElapsed(sec);
+  return formatMMSS(sec);
 };
+
+/**
+ * Storage key prefix for in-progress cardio state, scoped per session.
+ * Used by the session completion handler to scan-and-clear all cardio
+ * state for the session.
+ */
+export function getCardioStorageKeyPrefix(sessionId: number): string {
+  return `wt:cardio:${sessionId}:`;
+}
+
+/**
+ * Build a stable storage key for a cardio set in progress.
+ * Program exercises use their stable id; ad-hoc exercises (negative id,
+ * regenerated per page load via -Date.now()) fall back to the exercise name.
+ */
+function getCardioStorageKey(
+  sessionId: number,
+  exerciseId: number | null,
+  exerciseName: string,
+  setNumber: number
+): string {
+  const identity =
+    exerciseId !== null && exerciseId > 0
+      ? `id-${exerciseId}`
+      : `name-${exerciseName.toLowerCase()}`;
+  return `${getCardioStorageKeyPrefix(sessionId)}${identity}:${setNumber}`;
+}
+
+interface PersistedCardioState {
+  startedAt: number;
+  phase: 'running' | 'finishing';
+  distanceStr?: string;
+}
 
 export function CardioSetInput({
   exerciseId,
@@ -42,10 +71,55 @@ export function CardioSetInput({
   isLogging = false,
 }: CardioSetInputProps) {
   const heartRate = useHeartRate();
+  const { id } = useParams<{ id: string }>();
+  const sessionId = Number(id);
+
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsedSec, setElapsedSec] = useState(0);
   const [distanceStr, setDistanceStr] = useState('');
   const startedAtRef = useRef<number | null>(null);
+  const hasRestoredRef = useRef(false);
+
+  const storageKey = Number.isFinite(sessionId)
+    ? getCardioStorageKey(sessionId, exerciseId, exerciseName, setNumber)
+    : null;
+
+  // Restore in-progress cardio state from localStorage on mount.
+  // Survives navigation (dropdown, dashboard) and mobile tab eviction.
+  useEffect(() => {
+    if (hasRestoredRef.current) return;
+    hasRestoredRef.current = true;
+    if (!storageKey) return;
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as PersistedCardioState;
+      if (typeof parsed?.startedAt !== 'number') return;
+      if (parsed.phase !== 'running' && parsed.phase !== 'finishing') return;
+      startedAtRef.current = parsed.startedAt;
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - parsed.startedAt) / 1000)));
+      if (typeof parsed.distanceStr === 'string') setDistanceStr(parsed.distanceStr);
+      setPhase(parsed.phase);
+    } catch {
+      // ignore parse / quota errors — fall back to fresh idle state
+    }
+  }, [storageKey]);
+
+  // Persist whenever in-progress state changes. Skip while idle.
+  useEffect(() => {
+    if (!storageKey) return;
+    if (phase === 'idle' || startedAtRef.current === null) return;
+    try {
+      const payload: PersistedCardioState = {
+        startedAt: startedAtRef.current,
+        phase,
+        ...(distanceStr ? { distanceStr } : {}),
+      };
+      localStorage.setItem(storageKey, JSON.stringify(payload));
+    } catch {
+      // ignore quota errors
+    }
+  }, [storageKey, phase, distanceStr, elapsedSec]);
 
   // Tick the elapsed counter while running, drift-corrected against Date.now()
   useEffect(() => {
@@ -83,7 +157,15 @@ export function CardioSetInput({
       durationSec,
       distance,
     });
-  }, [elapsedSec, distanceStr, onLogSet, exerciseId, exerciseName, setNumber]);
+    // Clear persisted state once the set has been handed off to the API.
+    if (storageKey) {
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+        // ignore quota errors
+      }
+    }
+  }, [elapsedSec, distanceStr, onLogSet, exerciseId, exerciseName, setNumber, storageKey]);
 
   const handleResume = useCallback(() => {
     if (startedAtRef.current !== null) {
@@ -131,7 +213,7 @@ export function CardioSetInput({
             Elapsed
           </div>
           <div className="text-5xl font-display font-bold text-primary-700 dark:text-primary-300 tabular-nums mt-1">
-            {formatElapsed(elapsedSec)}
+            {formatMMSS(elapsedSec)}
           </div>
           {targetDurationSec && (
             <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">
@@ -167,7 +249,7 @@ export function CardioSetInput({
       <div className="text-center">
         <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Duration</div>
         <div className="text-3xl font-display font-bold text-gray-800 dark:text-gray-100 tabular-nums mt-1">
-          {formatElapsed(elapsedSec)}
+          {formatMMSS(elapsedSec)}
         </div>
       </div>
 

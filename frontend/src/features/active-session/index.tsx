@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
-import { useExerciseNavigation, getNavStorageKeys } from './hooks/useExerciseNavigation';
-import { useAdHocExercises, getAdHocStorageKey } from './hooks/useAdHocExercises';
-import { useExerciseOrdering, getOrderStorageKey, getHiddenStorageKey } from './hooks/useExerciseOrdering';
+import { useExerciseNavigation } from './hooks/useExerciseNavigation';
+import { useAdHocExercises } from './hooks/useAdHocExercises';
+import { useExerciseOrdering } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
+import { clearSessionLocalState } from './lib/sessionStorage';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
@@ -19,17 +20,10 @@ import { useTimer } from '../../shared/context/TimerContext';
 import { useHeartRate } from '../../shared/context/HeartRateContext';
 import { downsampleHr } from '../../shared/utils/heartRate';
 import { getTargetSets, isCardioExercise, isCardioSet } from '../../shared/api/predicates';
+import { CARDIO_MODALITY_INFO } from '../../shared/api/cardio';
+import { getHrChartStorageKey } from './lib/sessionStorage';
+import { makeVirtualExercise } from './lib/virtualExercise';
 import type { CardioModality, Exercise } from '../../shared/api/types';
-
-const CARDIO_LABELS: Record<CardioModality, string> = {
-  running: 'Run',
-  cycling: 'Ride',
-  treadmill: 'Treadmill',
-  rowing: 'Row',
-  other: 'Cardio',
-};
-
-const getHrChartStorageKey = (sessionId: number) => `wt:livehr:visible:${sessionId}`;
 
 const readHrChartOverride = (sessionId: number): boolean | null => {
   if (!Number.isFinite(sessionId)) return null;
@@ -75,12 +69,12 @@ export default function ActiveSession() {
   const seededCardioRef = sessionId; // re-key the effect when session changes
   useEffect(() => {
     const modality = searchParams.get('cardio') as CardioModality | null;
-    if (!modality || !CARDIO_LABELS[modality]) return;
+    if (!modality || !CARDIO_MODALITY_INFO[modality]) return;
     setAdHocExercises(prev => {
       if (prev.some(e => isCardioExercise(e))) return prev;
       return [...prev, {
         tempId: `adhoc-cardio-${Date.now()}`,
-        name: CARDIO_LABELS[modality],
+        name: CARDIO_MODALITY_INFO[modality].short,
         exerciseType: 'cardio',
         cardioModality: modality,
         targetDurationSec: null,
@@ -243,22 +237,9 @@ export default function ActiveSession() {
       onSuccess: () => {
         stopTimer();
 
-        // Clear navigation state
-        const navKeys = getNavStorageKeys(sessionId);
-        localStorage.removeItem(navKeys.step);
-        localStorage.removeItem(navKeys.superset);
-
-        // Clear ad-hoc exercise persistence
-        localStorage.removeItem(getAdHocStorageKey(sessionId));
-
-        // Clear exercise ordering
-        localStorage.removeItem(getOrderStorageKey(sessionId));
-
-        // Clear hidden exercises (from swaps)
-        localStorage.removeItem(getHiddenStorageKey(sessionId));
-
-        // Clear live HR chart visibility override
-        localStorage.removeItem(getHrChartStorageKey(sessionId));
+        // Clear all session-scoped localStorage (nav, ad-hoc, ordering,
+        // hidden, HR chart override, cardio persistence).
+        clearSessionLocalState(sessionId);
 
         // Show celebration instead of navigating immediately
         setCelebrationData({
@@ -274,21 +255,10 @@ export default function ActiveSession() {
 
   // Handler for adding an ad-hoc exercise to a program workout
   const handleAddExercise = (name: string) => {
-    const virtualExercise: Exercise = {
+    const virtualExercise = makeVirtualExercise({
       id: -Date.now(),
-      workoutId: 0,
       name,
-      targetSets: 3,
-      targetReps: '10',
-      orderIndex: 0,
-      supersetGroup: null,
-      exerciseType: 'strength',
-      cardioModality: null,
-      targetDurationSec: null,
-      targetDistance: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    });
 
     // Add to adHocProgramExercises (for reconstruction on session resume)
     setAdHocProgramExercises(prev => [...prev, virtualExercise]);
@@ -305,9 +275,8 @@ export default function ActiveSession() {
 
   // Handler for swapping an exercise mid-workout
   const handleSwapExercise = (exercise: Exercise, newName: string) => {
-    const replacementExercise: Exercise = {
+    const replacementExercise = makeVirtualExercise({
       id: -Date.now(),
-      workoutId: 0,
       name: newName,
       targetSets: exercise.targetSets,
       targetReps: exercise.targetReps,
@@ -317,9 +286,7 @@ export default function ActiveSession() {
       cardioModality: exercise.cardioModality,
       targetDurationSec: exercise.targetDurationSec,
       targetDistance: exercise.targetDistance,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    });
 
     // Always in-place replacement — original's logged sets are preserved
     // in the database (history-independent via exerciseName on Set rows)
@@ -639,21 +606,15 @@ export default function ActiveSession() {
             const adHocSets = adHocSetsByName.get(adHocEx.name.toLowerCase()) || [];
             const isCardio = isCardioExercise(adHocEx, adHocSets);
 
-            const virtualExercise: Exercise = {
+            const virtualExercise = makeVirtualExercise({
               id: -Math.abs(adHocEx.tempId.split('').reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0), 0)) - 1,
-              workoutId: 0,
               name: adHocEx.name,
               targetSets: isCardio ? 1 : 3,
-              targetReps: '10',
-              orderIndex: 0,
-              supersetGroup: null,
               exerciseType: isCardio ? 'cardio' : 'strength',
               cardioModality: adHocEx.cardioModality ?? null,
               targetDurationSec: adHocEx.targetDurationSec ?? null,
               targetDistance: adHocEx.targetDistance ?? null,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
+            });
 
             return (
               <ExerciseCard
