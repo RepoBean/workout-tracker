@@ -7,6 +7,7 @@ import {
     Tooltip,
 } from 'recharts';
 import { useProgressData } from '../hooks/useProgressData';
+import { useTheme } from '../../../shared/context/ThemeContext';
 
 interface ComparisonCardProps {
     title: string;
@@ -71,6 +72,8 @@ export function VolumeTrendsTab() {
         thisMonthVolume,
         lastMonthVolume,
     } = useProgressData();
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
 
     if (isLoading) {
         return (
@@ -87,8 +90,6 @@ export function VolumeTrendsTab() {
             </div>
         );
     }
-
-    const isDark = document.documentElement.classList.contains('dark');
 
     // Check if there's any workout data
     const hasData = weeklyVolumes.some(w => w.totalVolume > 0);
