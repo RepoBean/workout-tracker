@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useActiveSession } from './hooks/useActiveSession';
 import { usePreviousData } from './hooks/usePreviousData';
@@ -87,6 +87,8 @@ export default function ActiveSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seededCardioRef]);
 
+  const pendingAdvanceStepRef = useRef<number | null>(null);
+
   // Celebration state
   const [showCelebration, setShowCelebration] = useState(false);
   const [celebrationData, setCelebrationData] = useState<{
@@ -171,6 +173,17 @@ export default function ActiveSession() {
     sets,
     sessionId,
   });
+
+  // Fires only when handleAddExercise gated on a complete current step.
+  // Other operations that change steps.length (resume reconstruction, etc.)
+  // leave the ref null and are no-ops here.
+  useEffect(() => {
+    const target = pendingAdvanceStepRef.current;
+    if (target !== null && navigation.steps.length > target) {
+      navigation.goToStep(target);
+      pendingAdvanceStepRef.current = null;
+    }
+  }, [navigation.steps.length]);
 
   // RPE flow management
   const {
@@ -271,6 +284,10 @@ export default function ActiveSession() {
       : 0;
     const insertPos = currentFlatIndex + currentStepSize;
     insertExerciseAt(virtualExercise, insertPos);
+
+    if (navigation.isCurrentStepComplete) {
+      pendingAdvanceStepRef.current = navigation.currentStepIndex + 1;
+    }
   };
 
   // Handler for swapping an exercise mid-workout

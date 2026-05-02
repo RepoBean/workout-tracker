@@ -57,6 +57,10 @@ const historyByNameSchema = z.object({
   name: z.string().min(1),
 });
 
+const allSetsByNameSchema = z.object({
+  name: z.string().min(1),
+});
+
 // ============================================
 // Routes
 // ============================================
@@ -121,6 +125,57 @@ router.get('/history-by-name', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching exercise history by name:', error);
     res.status(500).json({ error: 'Failed to fetch exercise history' });
+  }
+});
+
+// GET /api/exercises/all-sets-by-name - All standard sets for an exercise across all completed sessions
+router.get('/all-sets-by-name', async (req: Request, res: Response) => {
+  try {
+    const result = allSetsByNameSchema.safeParse({ name: req.query.name });
+    if (!result.success) {
+      res.status(400).json({ error: 'Name parameter is required' });
+      return;
+    }
+
+    const { name } = result.data;
+
+    // Find all standard sets (dropIndex === 0) belonging to completed sessions.
+    const matchingSets = await SetModel.findAll({
+      where: {
+        dropIndex: 0,
+      },
+      include: [{
+        model: Session,
+        as: 'session',
+        where: {
+          completedAt: { [Op.not]: null },
+        },
+        attributes: ['id', 'completedAt'],
+      }],
+      order: [
+        [{ model: Session, as: 'session' }, 'completedAt', 'DESC'],
+        ['setNumber', 'ASC'],
+      ],
+    });
+
+    // Filter by name (case-insensitive); SQLite LOWER() through Sequelize is awkward.
+    const filtered = matchingSets.filter(
+      set => set.exerciseName.toLowerCase() === name.toLowerCase()
+    );
+
+    const sets = filtered.map(set => ({
+      weight: set.weight,
+      reps: set.reps,
+      dropIndex: set.dropIndex,
+      durationSec: set.durationSec,
+      distance: set.distance,
+      completedAt: (set as SetWithSession).session.completedAt,
+    }));
+
+    res.json({ sets });
+  } catch (error) {
+    console.error('Error fetching all sets by name:', error);
+    res.status(500).json({ error: 'Failed to fetch sets' });
   }
 });
 

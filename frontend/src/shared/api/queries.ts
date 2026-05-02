@@ -20,6 +20,7 @@ export const queryKeys = {
   history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
+  exerciseAllSets: (name: string) => ['exercises', 'all-sets', name] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   stats: ['stats'] as const,
   progressHistory: ['progressHistory'] as const,
@@ -139,15 +140,47 @@ export function useExerciseHistoryByName(name: string) {
 }
 
 /**
+ * Fetch all standard sets for an exercise across all completed sessions.
+ * Used by the active session PR check. Returns raw set rows so the frontend
+ * can compute the best estimated 1-rep max client-side.
+ */
+export interface ExerciseAllSet {
+  weight: number;
+  reps: number;
+  dropIndex: number;
+  durationSec: number | null;
+  distance: number | null;
+  completedAt: string | null;
+}
+
+export function useExerciseAllSetsByName(name: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.exerciseAllSets(name),
+    queryFn: async () => {
+      const { data } = await api.get<{ sets: ExerciseAllSet[] }>(
+        '/exercises/all-sets-by-name',
+        { params: { name } }
+      );
+      return data;
+    },
+    enabled: enabled && name.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
  * Fetch sessions for a calendar month (for rendering workout dots)
  */
 export function useCalendarSessions(year: number, month: number) {
   return useQuery({
     queryKey: queryKeys.calendarSessions(year, month),
     queryFn: async () => {
-      const from = `${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00.000Z`;
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+      // Use local-midnight boundaries so sessions land in the cell they were
+      // completed in for the user's timezone. Calendar cells filter by local
+      // month/day; the API stores UTC, so the toISOString() conversion lines
+      // both sides up.
+      const from = new Date(year, month, 1).toISOString();
+      const to = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
       const { data } = await api.get<Session[]>('/sessions/history', {
         params: { from, to, limit: 100 },
       });
