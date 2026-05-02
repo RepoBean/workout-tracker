@@ -17,6 +17,12 @@ interface ProgressChartProps {
     data: Array<{ date: string; value: number }>;
     exerciseName: string;
     metric: 'volume' | '1rm' | 'weight';
+    // Override the default `${value} ${unit}` tooltip — cardio uses this to
+    // append units like "mi" / "mph" / "bpm" or render duration as m:ss.
+    formatTooltip?: (value: number) => string;
+    // Override the default Y-axis tick label. Mostly only needed for duration
+    // where raw seconds should render as m:ss.
+    formatAxisTick?: (value: number) => string;
 }
 
 function formatDate(dateString: string): string {
@@ -29,7 +35,7 @@ function formatShortDate(dateString: string): string {
     return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps) {
+export function ProgressChart({ data, exerciseName, metric, formatTooltip, formatAxisTick }: ProgressChartProps) {
     const isDark = document.documentElement.classList.contains('dark');
 
     if (data.length === 0) {
@@ -61,14 +67,15 @@ export function ProgressChart({ data, exerciseName, metric }: ProgressChartProps
                         tick={{ fontSize: 12 }}
                         stroke="#9ca3af"
                         domain={['auto', 'auto']}
-                        tickFormatter={(value) => `${value}`}
+                        tickFormatter={(value) => formatAxisTick ? formatAxisTick(value) : `${value}`}
                     />
                     <Tooltip
                         formatter={(value: number | undefined) => {
-                            if (value !== undefined) {
-                                return [`${value} ${unit}`, exerciseName];
-                            }
-                            return undefined; // Or handle as appropriate for your UI
+                            if (value === undefined) return undefined;
+                            const display = formatTooltip
+                                ? formatTooltip(value)
+                                : `${value} ${unit}`;
+                            return [display, exerciseName];
                         }}
                         labelFormatter={(label, payload) => {
                             if (payload && payload[0]) {

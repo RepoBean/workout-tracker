@@ -4,6 +4,7 @@ import ProgramBuilder from './features/program-builder';
 import Progress from './features/progress';
 import ActiveSession from './features/active-session';
 import History from './features/history';
+import Settings from './features/settings';
 import { useOffline } from './shared/context/OfflineContext';
 import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
@@ -135,6 +136,7 @@ function AppContent() {
               }
             />
             <Route path="/history" element={<History />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </ErrorBoundary>
       </main>

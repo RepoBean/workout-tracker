@@ -35,6 +35,23 @@ export interface PersonalRecord {
     isRecentPR: boolean;          // achieved in last 30 days
 }
 
+export interface CardioExerciseSession {
+    sessionId: number;
+    date: string;                   // completedAt
+    workoutName: string;
+    totalDurationSec: number;       // sum across all cardio sets in session
+    totalDistance: number;          // miles, 0 if none logged
+    avgPaceMph: number | null;      // null when totalDistance is 0
+    avgHr: number | null;           // duration-weighted across sets with HR
+    sets: Array<{
+        setNumber: number;
+        durationSec: number;
+        distance: number | null;
+        heartRateAvg: number | null;
+        perceivedEffort?: number;
+    }>;
+}
+
 export interface UseProgressDataReturn {
     isLoading: boolean;
     error: Error | null;
@@ -42,10 +59,15 @@ export interface UseProgressDataReturn {
     // For exercise picker
     allExerciseNames: string[];           // Unique exercise names from history
     mostTrainedExercises: string[];       // Top 5 by frequency
-    activeExercises: string[];            // Exercises from active program
+    activeExercises: string[];            // Strength exercises from active program
 
-    // For chart/list
+    // For chart/list (strength)
     getExerciseHistory: (name: string) => ExerciseSession[];
+
+    // Cardio counterparts
+    allCardioExerciseNames: string[];     // Names with at least one cardio set
+    activeCardioExercises: string[];      // Cardio exercises from active program
+    getCardioExerciseHistory: (name: string) => CardioExerciseSession[];
 
     // For volume trends
     weeklyVolumes: WeeklyVolume[];        // Last 12 weeks, oldest first
@@ -93,7 +115,7 @@ export function useProgressData(): UseProgressDataReturn {
             .map(([name]) => name);
     }, [sessions]);
 
-    // Derive exercises from active program (strength only — cardio has no PRs/charts in V1)
+    // Derive exercises from active program (strength only — cardio is in activeCardioExercises)
     const activeExercises = useMemo(() => {
         if (!programs) return [];
         const activeProgram = programs.find(p => p.isActive);
@@ -108,6 +130,36 @@ export function useProgressData(): UseProgressDataReturn {
         });
         return Array.from(names);
     }, [programs]);
+
+    const activeCardioExercises = useMemo(() => {
+        if (!programs) return [];
+        const activeProgram = programs.find(p => p.isActive);
+        if (!activeProgram?.workouts) return [];
+
+        const names = new Set<string>();
+        activeProgram.workouts.forEach(workout => {
+            workout.exercises?.forEach(exercise => {
+                if (!isCardioExercise(exercise)) return;
+                names.add(exercise.name);
+            });
+        });
+        return Array.from(names);
+    }, [programs]);
+
+    // Names that appear in at least one cardio set across history. Includes
+    // ad-hoc cardio entries that were never part of a program.
+    const allCardioExerciseNames = useMemo(() => {
+        if (!sessions) return [];
+        const names = new Set<string>();
+        sessions.forEach((session: Session) => {
+            session.sets?.forEach((set: Set) => {
+                if (set.exerciseName && isCardioSet(set)) {
+                    names.add(set.exerciseName);
+                }
+            });
+        });
+        return Array.from(names).sort();
+    }, [sessions]);
 
     // Get exercise history for chart/list
     const getExerciseHistory = useMemo(() => {
@@ -168,6 +220,71 @@ export function useProgressData(): UseProgressDataReturn {
             });
 
             // Sort by date ascending for chart (oldest first)
+            return result.sort((a, b) =>
+                new Date(a.date).getTime() - new Date(b.date).getTime()
+            );
+        };
+    }, [sessions]);
+
+    const getCardioExerciseHistory = useMemo(() => {
+        return (name: string): CardioExerciseSession[] => {
+            if (!sessions) return [];
+
+            const result: CardioExerciseSession[] = [];
+
+            sessions.forEach((session: Session) => {
+                if (!session.completedAt) return;
+
+                const cardioSets = session.sets?.filter(
+                    (set: Set) => set.exerciseName === name && isCardioSet(set)
+                ) || [];
+
+                if (cardioSets.length === 0) return;
+
+                let totalDurationSec = 0;
+                let totalDistance = 0;
+                let hrWeightedSum = 0;
+                let hrWeightTotal = 0;
+
+                cardioSets.forEach(s => {
+                    const dur = s.durationSec ?? 0;
+                    const dist = s.distance ?? 0;
+                    totalDurationSec += dur;
+                    totalDistance += dist;
+                    if (s.heartRateAvg != null && dur > 0) {
+                        hrWeightedSum += s.heartRateAvg * dur;
+                        hrWeightTotal += dur;
+                    }
+                });
+
+                const avgPaceMph =
+                    totalDistance > 0 && totalDurationSec > 0
+                        ? totalDistance / (totalDurationSec / 3600)
+                        : null;
+                const avgHr = hrWeightTotal > 0
+                    ? Math.round(hrWeightedSum / hrWeightTotal)
+                    : null;
+
+                result.push({
+                    sessionId: session.id,
+                    date: session.completedAt,
+                    workoutName: session.workoutName,
+                    totalDurationSec,
+                    totalDistance,
+                    avgPaceMph,
+                    avgHr,
+                    sets: cardioSets
+                        .map(s => ({
+                            setNumber: s.setNumber,
+                            durationSec: s.durationSec ?? 0,
+                            distance: s.distance,
+                            heartRateAvg: s.heartRateAvg,
+                            perceivedEffort: s.perceivedEffort ?? undefined,
+                        }))
+                        .sort((a, b) => a.setNumber - b.setNumber),
+                });
+            });
+
             return result.sort((a, b) =>
                 new Date(a.date).getTime() - new Date(b.date).getTime()
             );
@@ -358,6 +475,9 @@ export function useProgressData(): UseProgressDataReturn {
         mostTrainedExercises,
         activeExercises,
         getExerciseHistory,
+        allCardioExerciseNames,
+        activeCardioExercises,
+        getCardioExerciseHistory,
         weeklyVolumes,
         thisWeekVolume,
         lastWeekVolume,

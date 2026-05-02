@@ -5,6 +5,7 @@ import { ThemeProvider } from './shared/context/ThemeContext';
 import { TimerProvider } from './shared/context/TimerContext';
 import { OfflineProvider } from './shared/context/OfflineContext';
 import { HeartRateProvider } from './shared/context/HeartRateContext';
+import { UserProfileProvider } from './shared/context/UserProfileContext';
 import { ToastProvider } from './shared/ui/Toast';
 import App from './App';
 import './index.css';
@@ -27,9 +28,11 @@ createRoot(document.getElementById('root')!).render(
         <OfflineProvider>
           <TimerProvider>
             <HeartRateProvider>
-              <ToastProvider>
-                <App />
-              </ToastProvider>
+              <UserProfileProvider>
+                <ToastProvider>
+                  <App />
+                </ToastProvider>
+              </UserProfileProvider>
             </HeartRateProvider>
           </TimerProvider>
         </OfflineProvider>

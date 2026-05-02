@@ -20,6 +20,7 @@ export const queryKeys = {
   history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
+  exerciseAllSets: (name: string) => ['exercises', 'all-sets', name] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   stats: ['stats'] as const,
   progressHistory: ['progressHistory'] as const,
@@ -134,6 +135,35 @@ export function useExerciseHistoryByName(name: string) {
       return data;
     },
     enabled: name.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Fetch all standard sets for an exercise across all completed sessions.
+ * Used by the active session PR check. Returns raw set rows so the frontend
+ * can compute the best estimated 1-rep max client-side.
+ */
+export interface ExerciseAllSet {
+  weight: number;
+  reps: number;
+  dropIndex: number;
+  durationSec: number | null;
+  distance: number | null;
+  completedAt: string | null;
+}
+
+export function useExerciseAllSetsByName(name: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.exerciseAllSets(name),
+    queryFn: async () => {
+      const { data } = await api.get<{ sets: ExerciseAllSet[] }>(
+        '/exercises/all-sets-by-name',
+        { params: { name } }
+      );
+      return data;
+    },
+    enabled: enabled && name.length > 0,
     staleTime: 5 * 60 * 1000,
   });
 }
