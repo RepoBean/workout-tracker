@@ -6,6 +6,7 @@ import {
     YAxis,
     Tooltip,
 } from 'recharts';
+import { useTheme } from '../../../shared/context/ThemeContext';
 
 interface ChartDataPoint {
     date: string;
@@ -36,7 +37,8 @@ function formatShortDate(dateString: string): string {
 }
 
 export function ProgressChart({ data, exerciseName, metric, formatTooltip, formatAxisTick }: ProgressChartProps) {
-    const isDark = document.documentElement.classList.contains('dark');
+    const { theme } = useTheme();
+    const isDark = theme === 'dark';
 
     if (data.length === 0) {
         return (
