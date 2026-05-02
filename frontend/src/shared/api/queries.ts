@@ -175,9 +175,12 @@ export function useCalendarSessions(year: number, month: number) {
   return useQuery({
     queryKey: queryKeys.calendarSessions(year, month),
     queryFn: async () => {
-      const from = `${year}-${String(month + 1).padStart(2, '0')}-01T00:00:00.000Z`;
-      const lastDay = new Date(year, month + 1, 0).getDate();
-      const to = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}T23:59:59.999Z`;
+      // Use local-midnight boundaries so sessions land in the cell they were
+      // completed in for the user's timezone. Calendar cells filter by local
+      // month/day; the API stores UTC, so the toISOString() conversion lines
+      // both sides up.
+      const from = new Date(year, month, 1).toISOString();
+      const to = new Date(year, month + 1, 0, 23, 59, 59, 999).toISOString();
       const { data } = await api.get<Session[]>('/sessions/history', {
         params: { from, to, limit: 100 },
       });
