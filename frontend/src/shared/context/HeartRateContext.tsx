@@ -52,6 +52,7 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
   const deviceRef = useRef<BluetoothDevice | null>(null);
   const characteristicRef = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const samplesRef = useRef<{ ts: number; bpm: number }[]>([]);
+  const isSubscribedRef = useRef(false);
 
   // Drop samples older than the longest plausible session window so the
   // buffer can't grow unbounded across long-lived provider mounts.
@@ -73,15 +74,19 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
 
   const cleanupListeners = useCallback(() => {
     const char = characteristicRef.current;
-    if (char) {
-      try {
-        char.removeEventListener('characteristicvaluechanged', handleValueChanged);
-        char.stopNotifications().catch(() => {});
-      } catch {
-        // Ignore
-      }
-    }
     characteristicRef.current = null;
+    isSubscribedRef.current = false;
+    if (!char) return;
+    try {
+      char.removeEventListener('characteristicvaluechanged', handleValueChanged);
+    } catch {
+      // Listener may already be detached
+    }
+    try {
+      char.stopNotifications().catch(() => {});
+    } catch {
+      // Characteristic may already be torn down
+    }
   }, [handleValueChanged]);
 
   const handleDisconnected = useCallback(() => {
@@ -93,20 +98,27 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
   const subscribeToDevice = useCallback(
     async (device: BluetoothDevice) => {
       if (!device.gatt) throw new Error('Device has no GATT server');
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(HEART_RATE_SERVICE);
-      const characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT);
-      await characteristic.startNotifications();
-      characteristic.addEventListener('characteristicvaluechanged', handleValueChanged);
+      if (isSubscribedRef.current) return;
+      isSubscribedRef.current = true;
+      try {
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(HEART_RATE_SERVICE);
+        const characteristic = await service.getCharacteristic(HEART_RATE_MEASUREMENT);
+        await characteristic.startNotifications();
+        characteristic.addEventListener('characteristicvaluechanged', handleValueChanged);
 
-      device.removeEventListener('gattserverdisconnected', handleDisconnected);
-      device.addEventListener('gattserverdisconnected', handleDisconnected);
+        device.removeEventListener('gattserverdisconnected', handleDisconnected);
+        device.addEventListener('gattserverdisconnected', handleDisconnected);
 
-      deviceRef.current = device;
-      characteristicRef.current = characteristic;
-      setDeviceName(device.name ?? 'Heart Rate Monitor');
-      setIsConnected(true);
-      setError(null);
+        deviceRef.current = device;
+        characteristicRef.current = characteristic;
+        setDeviceName(device.name ?? 'Heart Rate Monitor');
+        setIsConnected(true);
+        setError(null);
+      } catch (err) {
+        isSubscribedRef.current = false;
+        throw err;
+      }
     },
     [handleValueChanged, handleDisconnected],
   );
