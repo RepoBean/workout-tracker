@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import confetti from 'canvas-confetti';
 import { Button } from '../../../shared/ui/Button';
+import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
 import { SessionHRChart } from '../../history/components/SessionHRChart';
 
 interface CompletionCelebrationProps {
@@ -89,6 +90,9 @@ export function CompletionCelebration({
           <div className="mb-4 -mx-2">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Heart Rate</p>
             <SessionHRChart series={hrSeries} mode="continuous" />
+            <div className="mx-2 mt-2 text-left">
+              <TimeInZoneBar series={hrSeries} />
+            </div>
           </div>
         )}
 

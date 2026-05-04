@@ -121,3 +121,46 @@ export function getZone(bpm: number, profile: UserProfile): ZoneResult | null {
     overMax,
   };
 }
+
+export interface ZoneBreakdownEntry {
+  zone: ZoneNumber;
+  name: string;
+  seconds: number;
+}
+
+export interface TimeInZoneResult {
+  totalSeconds: number;
+  breakdown: ZoneBreakdownEntry[]; // length 6, ordered Z0..Z5
+}
+
+/**
+ * Attribute each inter-sample interval to the zone of its leading sample.
+ * The trailing sample contributes zero (no following gap). Returns null when
+ * max HR cannot be determined (no DOB and no override) — caller should hide
+ * the breakdown rather than show meaningless data.
+ */
+export function computeTimeInZone(
+  series: { t: number[]; b: number[] } | null | undefined,
+  profile: UserProfile,
+): TimeInZoneResult | null {
+  if (estimateMaxHr(profile) == null) return null;
+  const empty: ZoneBreakdownEntry[] = ZONE_DEFS.map((d) => ({
+    zone: d.zone,
+    name: d.name,
+    seconds: 0,
+  }));
+  if (!series || series.t.length < 2) {
+    return { totalSeconds: 0, breakdown: empty };
+  }
+  const breakdown = empty;
+  let total = 0;
+  for (let i = 0; i < series.t.length - 1; i++) {
+    const dt = series.t[i + 1] - series.t[i];
+    if (dt <= 0) continue;
+    const z = getZone(series.b[i], profile);
+    if (!z) continue;
+    breakdown[z.zone].seconds += dt;
+    total += dt;
+  }
+  return { totalSeconds: total, breakdown };
+}

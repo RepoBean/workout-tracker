@@ -4,6 +4,7 @@ import { isCardioSet } from '../../../shared/api/predicates';
 import { parseSeries } from '../../../shared/utils/heartRate';
 import { formatMMSS } from '../../../shared/utils/format';
 import { SessionHRChart } from './SessionHRChart';
+import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
 
 interface SessionCardProps {
   session: Session;
@@ -167,11 +168,14 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
             }));
             const hasCardio = (session.sets ?? []).some(isCardioSet);
             return (
-              <SessionHRChart
-                series={parsed}
-                setMarkers={setMarkers}
-                mode={hasCardio ? 'continuous' : 'interval'}
-              />
+              <>
+                <SessionHRChart
+                  series={parsed}
+                  setMarkers={setMarkers}
+                  mode={hasCardio ? 'continuous' : 'interval'}
+                />
+                <TimeInZoneBar series={parsed} />
+              </>
             );
           })()}
           {exerciseGroups.map((group) => (
