@@ -2,7 +2,9 @@
 
 A **self-hosted workout tracker** that's designed to be flexible — just type in whatever exercise you want, and it'll track it. No rigid exercise databases, no predefined lists. If you do it at the gym, you can log it.
 
-![Dashboard](screenshots/dashboard.png)
+| Light Mode | Dark Mode |
+|:---:|:---:|
+| ![Dashboard Light](screenshots/dashboard-light.png) | ![Dashboard Dark](screenshots/dashboard-dark.png) |
 
 ## ✨ Features
 
@@ -10,10 +12,13 @@ A **self-hosted workout tracker** that's designed to be flexible — just type i
 - **Custom programs** — build workout routines with exercises, sets, reps, and supersets
 - **Active workout session** — guided workout flow with RPE tracking, rest timers, and set logging
 - **Progress analytics** — exercise progress charts, volume trends, and personal records
+- **Cardio analytics & HR zones** — time-in-zone summaries on completion and in your history
+- **In-session PR toasts** — get notified immediately when you hit a new personal record
+- **User profile** — configure your heart rate zones and application settings
 - **Workout history** — browse past sessions, view details, and export to CSV
 - **Workout calendar** — monthly view with workout frequency at a glance
 - **Ad-hoc workouts** — jump into a quick session without a program
-- **Modern UI system** — brand new typography (DM Sans + Outfit), warm dark surfaces, and slick gradient hero cards
+- **Modern UI system** — brand new typography (DM Sans + Outfit), slick gradient hero cards, and reactive Light/Dark mode themes
 - **Bottom navigation** — easy one-handed gym usage with an intuitive mobile-friendly fixed tab bar
 - **Offline support** — cached data available if connectivity drops
 
@@ -34,13 +39,19 @@ The structured data formats make it easy for any LLM to parse and reason about y
 <summary>Click to expand</summary>
 
 ### Programs
-![Programs](screenshots/programs.png)
+| Light Mode | Dark Mode |
+|:---:|:---:|
+| ![Programs Light](screenshots/programs-light.png) | ![Programs Dark](screenshots/programs-dark.png) |
 
 ### Progress
-![Progress](screenshots/progress.png)
+| Light Mode | Dark Mode |
+|:---:|:---:|
+| ![Progress Light](screenshots/progress-light.png) | ![Progress Dark](screenshots/progress-dark.png) |
 
 ### History
-![History](screenshots/history.png)
+| Light Mode | Dark Mode |
+|:---:|:---:|
+| ![History Light](screenshots/history-light.png) | ![History Dark](screenshots/history-dark.png) |
 
 </details>
 
