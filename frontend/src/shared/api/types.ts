@@ -54,6 +54,7 @@ export interface Session {
   heartRateMin: number | null;
   heartRateMax: number | null;
   heartRateSeries: string | null;
+  exerciseNotes: Record<string, string> | null;
   createdAt: string;
   updatedAt: string;
   sets?: Set[];
@@ -155,6 +156,11 @@ export interface CompleteSessionRequest {
   heartRateMin?: number | null;
   heartRateMax?: number | null;
   heartRateSeries?: { t: number[]; b: number[] } | null;
+}
+
+export interface SetExerciseNoteRequest {
+  exerciseName: string;
+  note: string | null;
 }
 
 // ============================================

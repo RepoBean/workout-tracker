@@ -12,6 +12,7 @@ interface ExerciseCardProps {
   exercise: Exercise;
   loggedSets: Set[];
   previousHint?: PreviousExerciseHint;
+  note?: string | null;
   onLogSet: (data: {
     exerciseId: number | null;
     exerciseName: string;
@@ -39,6 +40,7 @@ export function ExerciseCard({
   exercise,
   loggedSets,
   previousHint,
+  note,
   onLogSet,
   onDeleteSet,
   onUpdateSet,
@@ -46,6 +48,7 @@ export function ExerciseCard({
   isLogging,
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
+  const [showNote, setShowNote] = useState(false);
   const isCardio = isCardioExercise(exercise);
 
   // Only count standard sets (dropIndex=0) for completion
@@ -130,6 +133,23 @@ export function ExerciseCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center">
             <h3 className="font-display font-bold text-xl truncate">{exercise.name}</h3>
+            {note && (
+              <button
+                onClick={() => setShowNote(s => !s)}
+                className="ml-2 p-1.5 text-amber-500 hover:text-amber-600
+                           dark:text-amber-400 dark:hover:text-amber-300
+                           rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20
+                           transition-colors shrink-0"
+                aria-label={showNote ? 'Hide note' : 'Show note'}
+                aria-expanded={showNote}
+                title="Toggle note"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M9 12h6m-6 4h4m1-12H7a2 2 0 00-2 2v14l4-3h8a2 2 0 002-2V8l-4-4z" />
+                </svg>
+              </button>
+            )}
             {onSwapExercise && (
               <button
                 onClick={onSwapExercise}
@@ -147,6 +167,14 @@ export function ExerciseCard({
               </button>
             )}
           </div>
+          {note && showNote && (
+            <p className="mt-1 px-3 py-2 text-sm italic
+                          bg-amber-50 dark:bg-amber-900/20
+                          text-amber-800 dark:text-amber-200
+                          rounded-lg whitespace-pre-wrap break-words">
+              {note}
+            </p>
+          )}
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isCardio ? (
               <>

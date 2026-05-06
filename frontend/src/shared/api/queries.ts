@@ -1,6 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData } from './types';
+import type { Program, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest } from './types';
+import { useToast } from '../ui/Toast';
 
 // ============================================
 // Query Keys
@@ -216,6 +217,52 @@ export function useActiveSessionCheck() {
       return data;
     },
     staleTime: 30 * 1000, // 30 seconds — reduce unnecessary refetches on window focus
+  });
+}
+
+/**
+ * Set or clear a per-exercise note on a session.
+ * Empty/whitespace `note` (or null) clears the note for that exercise.
+ */
+export function useSetExerciseNote(sessionId: number) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async (vars: SetExerciseNoteRequest) => {
+      const { data } = await api.put<Session>(`/sessions/${sessionId}/exercise-note`, vars);
+      return data;
+    },
+    onMutate: async ({ exerciseName, note }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+      const previous = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      if (previous) {
+        const trimmed = typeof note === 'string' ? note.trim() : null;
+        const nextNotes = { ...(previous.exerciseNotes ?? {}) };
+        if (trimmed === null || trimmed === '') {
+          delete nextNotes[exerciseName];
+        } else {
+          nextNotes[exerciseName] = trimmed;
+        }
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previous,
+          exerciseNotes: Object.keys(nextNotes).length > 0 ? nextNotes : null,
+        });
+      }
+
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previous);
+      }
+      toast.error('Failed to save note. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      queryClient.invalidateQueries({ queryKey: ['history'] });
+    },
   });
 }
 

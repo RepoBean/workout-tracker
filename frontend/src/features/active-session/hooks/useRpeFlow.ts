@@ -6,12 +6,13 @@ interface UseRpeFlowParams {
     navigation: UseExerciseNavigationResult;
     mergedExercises: Exercise[];
     updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) => void;
+    setExerciseNote?: (exerciseName: string, note: string | null) => void;
 }
 
 interface UseRpeFlowResult {
     rpePromptExercise: { id: number; name: string } | null;
     handleSetLogged: (exerciseId: number | null, exerciseName: string, dropIndex: number) => void;
-    handleRpeSubmit: (rpe: number) => void;
+    handleRpeSubmit: (rpe: number, note: string | null) => void;
     handleRpeSkip: () => void;
 }
 
@@ -19,6 +20,7 @@ export function useRpeFlow({
     navigation,
     mergedExercises,
     updateSetsEffort,
+    setExerciseNote,
 }: UseRpeFlowParams): UseRpeFlowResult {
     const [rpePromptExercise, setRpePromptExercise] = useState<{ id: number; name: string } | null>(null);
     const completedExercisesRef = useRef<Set<number>>(new Set());
@@ -84,14 +86,17 @@ export function useRpeFlow({
         }
     }, [mergedExercises, navigation]);
 
-    const handleRpeSubmit = useCallback((rpe: number) => {
+    const handleRpeSubmit = useCallback((rpe: number, note: string | null) => {
         if (rpePromptExercise) {
             // Pass exerciseName for ad-hoc exercises (negative ID) which have null exerciseId in DB
             updateSetsEffort(rpePromptExercise.id, rpe, rpePromptExercise.name);
+            if (note !== null && setExerciseNote) {
+                setExerciseNote(rpePromptExercise.name, note);
+            }
         }
         setRpePromptExercise(null);
         navigateAfterRpe();
-    }, [rpePromptExercise, updateSetsEffort, navigateAfterRpe]);
+    }, [rpePromptExercise, updateSetsEffort, setExerciseNote, navigateAfterRpe]);
 
     const handleRpeSkip = useCallback(() => {
         setRpePromptExercise(null);

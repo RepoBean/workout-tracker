@@ -47,6 +47,11 @@ const logSetSchema = z.object({
   }
 });
 
+const setExerciseNoteSchema = z.object({
+  exerciseName: z.string().min(1).max(255),
+  note: z.string().max(500).nullable(),
+});
+
 const completeSessionSchema = z.object({
   heartRateAvg: z.number().int().min(20).max(250).nullable().optional(),
   heartRateMin: z.number().int().min(20).max(250).nullable().optional(),
@@ -571,6 +576,37 @@ router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, r
   } catch (error) {
     console.error('Error updating set:', error);
     res.status(500).json({ error: 'Failed to update set' });
+  }
+});
+
+// PUT /api/sessions/:id/exercise-note - Set or clear a per-exercise note on a session
+router.put('/:id/exercise-note', validate(setExerciseNoteSchema), async (req: Request, res: Response) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const { exerciseName, note } = req.body as { exerciseName: string; note: string | null };
+
+    const session = await Session.findByPk(sessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    const next = { ...(session.exerciseNotes ?? {}) };
+    const trimmed = typeof note === 'string' ? note.trim() : null;
+    if (trimmed === null || trimmed === '') {
+      delete next[exerciseName];
+    } else {
+      next[exerciseName] = trimmed;
+    }
+
+    session.exerciseNotes = Object.keys(next).length > 0 ? next : null;
+    session.changed('exerciseNotes', true);
+    await session.save();
+
+    res.json(session);
+  } catch (error) {
+    console.error('Error setting exercise note:', error);
+    res.status(500).json({ error: 'Failed to set exercise note' });
   }
 });
 

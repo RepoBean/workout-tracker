@@ -48,6 +48,7 @@ export default function ActiveSession() {
     isLoggingSet,
     updateSet,
     updateSetsEffort,
+    setExerciseNote,
     deleteSet,
     completeSession,
     isCompletingSession,
@@ -197,6 +198,7 @@ export default function ActiveSession() {
     navigation,
     mergedExercises,
     updateSetsEffort,
+    setExerciseNote,
   });
 
   // Wire up set logging callback
@@ -479,6 +481,7 @@ export default function ActiveSession() {
                   exercise={exercise}
                   loggedSets={getSetsForExercise(exercise)}
                   previousHint={getPreviousHintForExercise(exercise)}
+                  note={session?.exerciseNotes?.[exercise.name] ?? null}
                   onLogSet={(data) => {
                     const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
                     handleLogSet({ ...data, exerciseId: exerciseIdForApi });
@@ -528,6 +531,7 @@ export default function ActiveSession() {
                               exercise={exercise}
                               loggedSets={getSetsForExercise(exercise)}
                               previousHint={getPreviousHintForExercise(exercise)}
+                              note={session?.exerciseNotes?.[exercise.name] ?? null}
                               onLogSet={(data) => {
                                 const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
                                 handleLogSet({ ...data, exerciseId: exerciseIdForApi });
@@ -643,6 +647,7 @@ export default function ActiveSession() {
                 key={adHocEx.tempId}
                 exercise={virtualExercise}
                 loggedSets={adHocSets}
+                note={session?.exerciseNotes?.[virtualExercise.name] ?? null}
                 onLogSet={(data) => handleLogSet({ ...data, exerciseId: null })}
                 onDeleteSet={deleteSet}
                 onUpdateSet={updateSet}

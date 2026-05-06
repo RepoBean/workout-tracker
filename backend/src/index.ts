@@ -107,6 +107,13 @@ async function start() {
       // Column already exists, ignore
     }
 
+    try {
+      await sequelize.query('ALTER TABLE Sessions ADD COLUMN exerciseNotes JSON');
+      console.log('Added exerciseNotes column to Sessions table');
+    } catch {
+      // Column already exists, ignore
+    }
+
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/api/health`);

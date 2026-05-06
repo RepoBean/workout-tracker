@@ -12,11 +12,12 @@ export interface SessionAttributes {
   heartRateMin: number | null;
   heartRateMax: number | null;
   heartRateSeries: string | null;
+  exerciseNotes: Record<string, string> | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
-export interface SessionCreationAttributes extends Optional<SessionAttributes, 'id' | 'completedAt' | 'isAdHoc' | 'heartRateAvg' | 'heartRateMin' | 'heartRateMax' | 'heartRateSeries'> {}
+export interface SessionCreationAttributes extends Optional<SessionAttributes, 'id' | 'completedAt' | 'isAdHoc' | 'heartRateAvg' | 'heartRateMin' | 'heartRateMax' | 'heartRateSeries' | 'exerciseNotes'> {}
 
 export class Session extends Model<SessionAttributes, SessionCreationAttributes> implements SessionAttributes {
   declare id: number;
@@ -30,6 +31,7 @@ export class Session extends Model<SessionAttributes, SessionCreationAttributes>
   declare heartRateMin: number | null;
   declare heartRateMax: number | null;
   declare heartRateSeries: string | null;
+  declare exerciseNotes: Record<string, string> | null;
   declare readonly createdAt: Date;
   declare readonly updatedAt: Date;
 
@@ -99,6 +101,11 @@ export class Session extends Model<SessionAttributes, SessionCreationAttributes>
       heartRateSeries: {
         type: DataTypes.TEXT,
         allowNull: true
+      },
+      exerciseNotes: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        defaultValue: null
       }
     }, {
       sequelize,

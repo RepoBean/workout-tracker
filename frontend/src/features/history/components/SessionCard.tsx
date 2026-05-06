@@ -183,9 +183,16 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
               </>
             );
           })()}
-          {exerciseGroups.map((group) => (
+          {exerciseGroups.map((group) => {
+            const note = session.exerciseNotes?.[group.name];
+            return (
             <div key={group.name}>
               <div className="text-sm font-medium mb-1">{group.name}</div>
+              {note && (
+                <div className="text-xs italic text-amber-700 dark:text-amber-300 mb-1 whitespace-pre-wrap break-words">
+                  {note}
+                </div>
+              )}
               <div className="space-y-0.5">
                 {group.sets.map((set) => {
                   const cardio = isCardioSet(set);
@@ -219,7 +226,8 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
                 })}
               </div>
             </div>
-          ))}
+            );
+          })}
           {onDelete && (
             <button
               onClick={(e) => {

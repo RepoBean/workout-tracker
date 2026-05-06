@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 import { api } from '../../../shared/api/client';
-import { queryKeys, useSession, type ExerciseAllSet } from '../../../shared/api/queries';
+import { queryKeys, useSession, useSetExerciseNote, type ExerciseAllSet } from '../../../shared/api/queries';
 import type { Set, ActiveSession, LogSetRequest, CompleteSessionRequest } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
@@ -43,6 +43,9 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
 
   // Fetch session data
   const { data: session, isLoading, error } = useSession(sessionId);
+
+  // Per-exercise note mutation (paired with the RPE flow)
+  const setExerciseNoteMutation = useSetExerciseNote(sessionId);
 
   // Anchor session-level HR t=0 to session.createdAt once available. Run only
   // once — after this, lastSetAtRef advances per-set inside logSetMutation and
@@ -356,6 +359,8 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
     updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) =>
       updateSetsEffortMutation.mutate({ exerciseId, effort, exerciseName }),
     isUpdatingSetsEffort: updateSetsEffortMutation.isPending,
+    setExerciseNote: (exerciseName: string, note: string | null) =>
+      setExerciseNoteMutation.mutate({ exerciseName, note }),
     deleteSet: deleteSetMutation.mutate,
     isDeletingSet: deleteSetMutation.isPending,
     completeSession: completeSessionMutation.mutate,

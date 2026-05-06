@@ -4,7 +4,7 @@ import { Button } from '../../../shared/ui/Button';
 
 interface RpePromptProps {
     exerciseName: string;
-    onSubmit: (rpe: number) => void;
+    onSubmit: (rpe: number, note: string | null) => void;
     onSkip: () => void;
     isOpen: boolean;
 }
@@ -15,16 +15,20 @@ interface RpePromptProps {
  */
 export function RpePrompt({ exerciseName, onSubmit, onSkip, isOpen }: RpePromptProps) {
     const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
+    const [note, setNote] = useState('');
 
     const handleSubmit = () => {
         if (selectedRpe !== null) {
-            onSubmit(selectedRpe);
+            const trimmed = note.trim();
+            onSubmit(selectedRpe, trimmed.length > 0 ? trimmed : null);
             setSelectedRpe(null);
+            setNote('');
         }
     };
 
     const handleSkip = () => {
         setSelectedRpe(null);
+        setNote('');
         onSkip();
     };
 
@@ -55,6 +59,28 @@ export function RpePrompt({ exerciseName, onSubmit, onSkip, isOpen }: RpePromptP
                             {value}
                         </button>
                     ))}
+                </div>
+
+                {/* Optional note */}
+                <div>
+                    <label htmlFor="rpe-note" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Note (optional)
+                    </label>
+                    <textarea
+                        id="rpe-note"
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        maxLength={500}
+                        rows={2}
+                        placeholder="How did this exercise feel? (optional)"
+                        className="w-full px-3 py-2 text-sm border rounded-lg
+                                   border-gray-300 dark:border-gray-600
+                                   bg-white dark:bg-gray-800
+                                   text-gray-900 dark:text-gray-100
+                                   placeholder-gray-400 dark:placeholder-gray-500
+                                   focus:outline-none focus:ring-2 focus:ring-primary-500
+                                   resize-none"
+                    />
                 </div>
 
                 {/* Action buttons */}
