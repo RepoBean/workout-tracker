@@ -5,6 +5,7 @@ import { parseSeries } from '../../../shared/utils/heartRate';
 import { formatMMSS } from '../../../shared/utils/format';
 import { SessionHRChart } from './SessionHRChart';
 import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
+import { averageRpe } from '../../active-session/logic/averageRpe';
 
 interface SessionCardProps {
   session: Session;
@@ -82,6 +83,7 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
       totalVolume,
       cardioSeconds,
       cardioDistance,
+      avgRpe: averageRpe(sets),
     };
   }, [session.sets]);
 
@@ -152,6 +154,9 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
         )}
         {stats.cardioDistance > 0 && (
           <span>{stats.cardioDistance.toFixed(2)} mi</span>
+        )}
+        {stats.avgRpe != null && (
+          <span>Avg RPE {stats.avgRpe.toFixed(1)}</span>
         )}
       </div>
 

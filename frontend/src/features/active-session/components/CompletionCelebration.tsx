@@ -10,6 +10,7 @@ interface CompletionCelebrationProps {
   totalSets: number;
   totalVolume: number;
   duration: number; // in minutes
+  avgRpe?: number | null;
   hrSeries?: { t: number[]; b: number[] } | null;
   onDismiss: () => void;
 }
@@ -20,6 +21,7 @@ export function CompletionCelebration({
   totalSets,
   totalVolume,
   duration,
+  avgRpe,
   hrSeries,
   onDismiss,
 }: CompletionCelebrationProps) {
@@ -97,7 +99,7 @@ export function CompletionCelebration({
         )}
 
         {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className={`grid ${avgRpe != null ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-3 mb-6`}>
           <div className="bg-surface-100 dark:bg-surface-850 rounded-card py-3 px-2">
             <p className="text-2xl font-display font-bold tabular-nums">{totalSets}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">Sets</p>
@@ -110,6 +112,12 @@ export function CompletionCelebration({
             <p className="text-2xl font-display font-bold tabular-nums">{duration}</p>
             <p className="text-xs text-gray-500 dark:text-gray-400">min</p>
           </div>
+          {avgRpe != null && (
+            <div className="bg-surface-100 dark:bg-surface-850 rounded-card py-3 px-2">
+              <p className="text-2xl font-display font-bold tabular-nums">{avgRpe.toFixed(1)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Avg RPE</p>
+            </div>
+          )}
         </div>
 
         <Button variant="primary" size="lg" onClick={onDismiss} className="w-full">

@@ -23,6 +23,7 @@ import { getTargetSets, isCardioExercise, isCardioSet } from '../../shared/api/p
 import { CARDIO_MODALITY_INFO } from '../../shared/api/cardio';
 import { getHrChartStorageKey } from './lib/sessionStorage';
 import { makeVirtualExercise } from './lib/virtualExercise';
+import { averageRpe } from './logic/averageRpe';
 import type { CardioModality, Exercise } from '../../shared/api/types';
 
 const readHrChartOverride = (sessionId: number): boolean | null => {
@@ -95,6 +96,7 @@ export default function ActiveSession() {
     totalSets: number;
     totalVolume: number;
     duration: number;
+    avgRpe: number | null;
     hrSeries: { t: number[]; b: number[] } | null;
   } | null>(null);
 
@@ -245,6 +247,7 @@ export default function ActiveSession() {
       : Date.now();
     const durationMins = Math.round((Date.now() - sessionStartMs) / 60000);
     const hrSeries = downsampleHr(samplesSince(sessionStartMs), sessionStartMs);
+    const avgRpeValue = averageRpe(sets);
 
     completeSession(undefined, {
       onSuccess: () => {
@@ -259,6 +262,7 @@ export default function ActiveSession() {
           totalSets: totalSetsCount,
           totalVolume: totalVolumeCalc,
           duration: durationMins,
+          avgRpe: avgRpeValue,
           hrSeries,
         });
         setShowCelebration(true);
@@ -378,6 +382,7 @@ export default function ActiveSession() {
           totalSets={celebrationData.totalSets}
           totalVolume={celebrationData.totalVolume}
           duration={celebrationData.duration}
+          avgRpe={celebrationData.avgRpe}
           hrSeries={celebrationData.hrSeries}
           onDismiss={() => {
             setShowCelebration(false);
@@ -680,6 +685,7 @@ export default function ActiveSession() {
         totalSets={celebrationData?.totalSets || 0}
         totalVolume={celebrationData?.totalVolume || 0}
         duration={celebrationData?.duration || 0}
+        avgRpe={celebrationData?.avgRpe ?? null}
         hrSeries={celebrationData?.hrSeries || null}
         onDismiss={() => {
           setShowCelebration(false);
