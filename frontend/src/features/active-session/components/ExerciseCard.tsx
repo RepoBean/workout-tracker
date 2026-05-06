@@ -213,7 +213,14 @@ export function ExerciseCard({
               >
                 {/* Last time (left - 1/3 width) */}
                 <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2 tabular-nums">
-                  {previousSet ? `${previousSet.weight}×${previousSet.reps}` : '—'}
+                  {previousSet ? (
+                    <>
+                      {previousSet.weight}×{previousSet.reps}
+                      {previousSet.perceivedEffort != null && (
+                        <span className="ml-1 text-xs text-gray-500">RPE {previousSet.perceivedEffort}</span>
+                      )}
+                    </>
+                  ) : '—'}
                 </div>
 
                 {/* Arrow */}

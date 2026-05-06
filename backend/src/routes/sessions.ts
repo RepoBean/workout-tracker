@@ -392,6 +392,7 @@ router.get('/:id/previous', async (req: Request, res: Response) => {
           setNumber: set.setNumber,
           weight: set.weight,
           reps: set.reps,
+          perceivedEffort: set.perceivedEffort,
         }));
 
       exerciseData[exercise.id] = { sets: setsFromMostRecent };

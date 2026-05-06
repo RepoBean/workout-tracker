@@ -115,6 +115,7 @@ export interface PreviousSetData {
   setNumber: number;
   weight: number;
   reps: number;
+  perceivedEffort: number | null;
 }
 
 export interface PreviousExerciseData {
