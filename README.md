@@ -10,7 +10,10 @@ A **self-hosted workout tracker** that's designed to be flexible — just type i
 
 - **Fully flexible exercise tracking** — type any exercise name and it's tracked. No restrictions.
 - **Custom programs** — build workout routines with exercises, sets, reps, and supersets
-- **Active workout session** — guided workout flow with RPE tracking, rest timers, and set logging
+- **Active workout session** — guided workout flow with rest timers and set logging
+- **RPE & notes per exercise** — prompted after each exercise for perceived effort plus optional notes ("felt strong", "left elbow tweaky"), with edit/clear UI to fix entries on the fly
+- **Smart previous-set hints** — when you start a set, you see the weight, reps, *and last RPE* from your previous session so you know exactly how hard it felt last time
+- **Avg RPE summaries** — completion celebration and every history card surface average RPE, so you can spot when a session was unusually hard or easy at a glance
 - **Progress analytics** — exercise progress charts, volume trends, and personal records
 - **Cardio analytics & HR zones** — time-in-zone summaries on completion and in your history
 - **In-session PR toasts** — get notified immediately when you hit a new personal record
