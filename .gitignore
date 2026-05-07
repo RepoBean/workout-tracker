@@ -20,6 +20,9 @@ build/
 *.swp
 *.swo
 
+# Claude Code (local-only settings, hooks, transcripts)
+.claude/
+
 # OS
 .DS_Store
 Thumbs.db
