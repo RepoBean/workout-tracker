@@ -488,6 +488,7 @@ export default function ActiveSession() {
                   }}
                   onDeleteSet={deleteSet}
                   onUpdateSet={updateSet}
+                  onSetNote={(note) => setExerciseNote(exercise.name, note)}
                   onSwapExercise={() => setSwapTarget(exercise)}
                   isLogging={isLoggingSet}
                 />
@@ -538,6 +539,7 @@ export default function ActiveSession() {
                               }}
                               onDeleteSet={deleteSet}
                               onUpdateSet={updateSet}
+                              onSetNote={(note) => setExerciseNote(exercise.name, note)}
                               onSwapExercise={() => setSwapTarget(exercise)}
                               isLogging={isLoggingSet}
                             />
@@ -651,6 +653,7 @@ export default function ActiveSession() {
                 onLogSet={(data) => handleLogSet({ ...data, exerciseId: null })}
                 onDeleteSet={deleteSet}
                 onUpdateSet={updateSet}
+                onSetNote={(note) => setExerciseNote(virtualExercise.name, note)}
                 isLogging={isLoggingSet}
               />
             );

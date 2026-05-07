@@ -26,6 +26,7 @@ interface ExerciseCardProps {
   }) => void;
   onDeleteSet: (setId: number) => void;
   onUpdateSet?: (setId: number, updates: { weight?: number; reps?: number }) => void;
+  onSetNote?: (note: string | null) => void;
   onSwapExercise?: () => void;
   isLogging: boolean;
 }
@@ -44,11 +45,28 @@ export function ExerciseCard({
   onLogSet,
   onDeleteSet,
   onUpdateSet,
+  onSetNote,
   onSwapExercise,
   isLogging,
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [showNote, setShowNote] = useState(false);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const isEditingNote = editingNote !== null;
+
+  const handleNoteSave = () => {
+    if (editingNote === null || !onSetNote) return;
+    const trimmed = editingNote.trim();
+    onSetNote(trimmed === '' ? null : trimmed);
+    setEditingNote(null);
+  };
+
+  const handleNoteClear = () => {
+    if (!onSetNote) return;
+    if (!confirm('Delete note?')) return;
+    onSetNote(null);
+    setEditingNote(null);
+  };
   const isCardio = isCardioExercise(exercise);
 
   // Only count standard sets (dropIndex=0) for completion
@@ -168,12 +186,76 @@ export function ExerciseCard({
             )}
           </div>
           {note && showNote && (
-            <p className="mt-1 px-3 py-2 text-sm italic
-                          bg-amber-50 dark:bg-amber-900/20
-                          text-amber-800 dark:text-amber-200
-                          rounded-lg whitespace-pre-wrap break-words">
-              {note}
-            </p>
+            <div className="mt-1 px-3 py-2 text-sm
+                            bg-amber-50 dark:bg-amber-900/20
+                            text-amber-800 dark:text-amber-200
+                            rounded-lg">
+              {isEditingNote ? (
+                <>
+                  <textarea
+                    value={editingNote ?? ''}
+                    onChange={(e) => setEditingNote(e.target.value)}
+                    rows={3}
+                    autoFocus
+                    className="w-full bg-white dark:bg-surface-800
+                               border border-amber-200 dark:border-amber-700/50
+                               rounded p-2 text-sm
+                               text-amber-900 dark:text-amber-100
+                               focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingNote(null)}
+                      className="text-xs px-2 py-1 rounded
+                                 text-amber-700 dark:text-amber-300
+                                 hover:bg-amber-100 dark:hover:bg-amber-900/30
+                                 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleNoteSave}
+                      className="text-xs px-2 py-1 rounded font-medium
+                                 bg-amber-500 text-white hover:bg-amber-600
+                                 dark:bg-amber-600 dark:hover:bg-amber-500
+                                 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="italic whitespace-pre-wrap break-words">{note}</p>
+                  {onSetNote && (
+                    <div className="flex justify-end gap-2 mt-2">
+                      <button
+                        type="button"
+                        onClick={handleNoteClear}
+                        className="text-xs px-2 py-1 rounded
+                                   text-amber-700 dark:text-amber-300
+                                   hover:bg-amber-100 dark:hover:bg-amber-900/30
+                                   transition-colors"
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingNote(note)}
+                        className="text-xs px-2 py-1 rounded
+                                   text-amber-700 dark:text-amber-300
+                                   hover:bg-amber-100 dark:hover:bg-amber-900/30
+                                   transition-colors"
+                      >
+                        Edit
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
           )}
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isCardio ? (
