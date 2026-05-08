@@ -384,18 +384,37 @@ Reference: `shared/ui/ErrorBoundary.tsx`, `App.tsx`
 
 ## Development Setup
 
-### Ports
-- Frontend: **5174**
-- Backend: **3002**
+### Production / Self-Hosted (Docker) — primary deployment
 
-### Running
+This is how the app actually runs day-to-day. `docker-compose up -d` from the repo root brings up two containers:
+
+| Container | Host Port | Internal Port | Notes |
+|-----------|-----------|---------------|-------|
+| `workout-tracker-frontend` | 8035 | 80 (nginx) | Serves the built React bundle and proxies `/api/*` to the backend |
+| `workout-tracker-backend`  | — (not exposed) | 3001 | Reachable only on the docker network |
+
+The backend reads `DB_PATH=/data/database.sqlite`, mounted from the named volume `workout-tracker-data` (host: `/var/lib/docker/volumes/workout-tracker-data/_data/`). **This volume is the real database** — not anything in the repo.
+
+To inspect live data:
 ```bash
-# Backend
-cd backend && npm run dev    # localhost:3002
+# Hit the API from inside the container
+docker exec workout-tracker-backend node -e \
+  'require("http").get("http://localhost:3001/api/programs", r=>{let d="";r.on("data",c=>d+=c);r.on("end",()=>console.log(d))})'
 
-# Frontend
-cd frontend && npm run dev   # localhost:5174
+# Or copy the live DB out for ad-hoc sqlite queries
+docker cp workout-tracker-backend:/data/database.sqlite /tmp/live.sqlite
 ```
+
+### Local dev (npm) — for code changes
+
+Run the frontend and backend directly when iterating on code. This uses a **separate, throwaway** SQLite file at `backend/database.sqlite` (gitignored) — it has nothing to do with the docker volume.
+
+| Layer | Port | Command |
+|-------|------|---------|
+| Backend | 3002 | `cd backend && npm run dev` |
+| Frontend | 5174 | `cd frontend && npm run dev` |
+
+If you need real data in dev, copy it out of the container first (`docker cp ...` above).
 
 ---
 
@@ -437,6 +456,7 @@ cd frontend && npm run dev   # localhost:5174
 | 29239f9 | Fix: SessionHeader shows workout name, Complete confirmation, session-scoped nav state |
 | 4a4c1e0 | Fix: History staleTime, swipe confirmation, calendar highlight pagination |
 | 9c148f1 | Fix: Progress page dark mode tooltips, 1RM calculation, dropdown, error states |
+| — | Schema: Add `Session.exerciseNotes` JSON column (per-exercise notes captured in RPE prompt). Keyed by exercise name. Chose Session-level over Set-level to avoid replicating the same string across every set of an exercise. |
 
 ---
 
