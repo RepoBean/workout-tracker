@@ -72,7 +72,7 @@ export function SessionHeader({
 
       {/* Elapsed time + Progress bar + percentage */}
       <div className="flex items-center gap-2">
-        <span className="text-xs font-display font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">
+        <span className="text-xs font-display font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums inline-block min-w-[3.75rem] text-left">
           {formatElapsed(elapsedSec)}
         </span>
         <div className="flex-1 h-2.5 bg-gray-200 dark:bg-surface-800 rounded-full overflow-hidden">
@@ -82,7 +82,7 @@ export function SessionHeader({
             style={{ width: `${Math.min(100, progress)}%` }}
           />
         </div>
-        <span className="text-xs font-display font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums">
+        <span className="text-xs font-display font-bold text-gray-600 dark:text-gray-400 whitespace-nowrap tabular-nums inline-block min-w-[2.5rem] text-right">
           {progress}%
         </span>
       </div>
