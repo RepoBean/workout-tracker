@@ -141,15 +141,15 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
 
   return (
     <Modal isOpen onClose={onClose} title={isEditing ? 'Edit Exercise' : 'Add Exercise'}>
-      <div className="space-y-4">
-        {/* Type toggle */}
-        <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-5">
+        {/* Type toggle — slim segmented control */}
+        <div className="inline-flex w-full p-0.5 rounded-lg bg-gray-100 dark:bg-surface-900">
           <button
             type="button"
             onClick={() => setExerciseType('strength')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${exerciseType === 'strength'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+            className={`flex-1 h-9 rounded-md text-sm font-medium transition-colors ${exerciseType === 'strength'
+              ? 'bg-white dark:bg-surface-800 text-primary-700 dark:text-primary-300 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
             Strength
@@ -157,9 +157,9 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
           <button
             type="button"
             onClick={() => setExerciseType('cardio')}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${exerciseType === 'cardio'
-              ? 'bg-primary-600 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
+            className={`flex-1 h-9 rounded-md text-sm font-medium transition-colors ${exerciseType === 'cardio'
+              ? 'bg-white dark:bg-surface-800 text-primary-700 dark:text-primary-300 shadow-sm'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
           >
             Cardio
@@ -179,7 +179,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             placeholder="e.g. Bench Press"
           />
           {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-32 overflow-auto">
+            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-auto">
               {filteredSuggestions.map((suggestion) => (
                 <button
                   key={suggestion}
@@ -221,13 +221,13 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Modality
               </label>
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-1.5 flex-wrap">
                 {CARDIO_MODALITY_OPTIONS.map(({ value, label }) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setCardioModality(value)}
-                    className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                    className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                       cardioModality === value
                         ? 'bg-primary-600 text-white'
                         : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
@@ -268,10 +268,10 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Superset Group
           </label>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 flex-wrap">
             <button
               onClick={() => setSupersetGroup('')}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+              className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                 supersetGroup === ''
                   ? 'bg-primary-600 text-white'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
@@ -284,7 +284,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
               <button
                 key={group}
                 onClick={() => setSupersetGroup(group)}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                   supersetGroup === group
                     ? 'bg-primary-600 text-white'
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
@@ -297,7 +297,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             {nextAvailableGroup && (
               <button
                 onClick={() => setSupersetGroup(nextAvailableGroup)}
-                className="px-3 py-1.5 rounded text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                className="px-2.5 py-1.5 rounded text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
               >
                 + New Group
               </button>
@@ -306,25 +306,25 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         </div>
         )}
 
-        <div className="flex gap-2 pt-2">
+        <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100 dark:border-white/[0.06]">
           {isEditing ? (
             <>
-              <Button onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting}>
+              <Button onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting} className="w-full sm:w-auto">
                 Save
               </Button>
-              <Button variant="secondary" onClick={onClose}>
+              <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto">
                 Cancel
               </Button>
             </>
           ) : (
             <>
-              <Button onClick={() => handleSubmit('next')} disabled={!name.trim() || isSubmitting}>
+              <Button onClick={() => handleSubmit('next')} disabled={!name.trim() || isSubmitting} className="w-full sm:w-auto">
                 Add & Next
               </Button>
-              <Button variant="secondary" onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting}>
+              <Button variant="secondary" onClick={() => handleSubmit('close')} disabled={!name.trim() || isSubmitting} className="w-full sm:w-auto">
                 Add & Close
               </Button>
-              <Button variant="secondary" onClick={onClose}>
+              <Button variant="ghost" onClick={onClose} className="w-full sm:w-auto">
                 Cancel
               </Button>
             </>

@@ -33,6 +33,8 @@ export default function ProgramBuilder() {
     ? sortedPrograms
     : sortedPrograms.filter(p => !p.isArchived);
 
+  const activeProgram = visiblePrograms.find(p => p.isActive);
+  const otherPrograms = visiblePrograms.filter(p => !p.isActive);
   const archivedCount = sortedPrograms.filter(p => p.isArchived).length;
 
   const handleCreate = () => {
@@ -125,9 +127,26 @@ export default function ProgramBuilder() {
         </div>
       )}
 
-      {visiblePrograms.map(program => (
-        <ProgramCard key={program.id} program={program} />
-      ))}
+      {activeProgram && (
+        <ProgramCard key={activeProgram.id} program={activeProgram} variant="hero" />
+      )}
+
+      {otherPrograms.length > 0 && (
+        <>
+          {activeProgram && (
+            <div className="flex items-center gap-3 pt-2">
+              <div className="flex-1 h-px bg-gray-200 dark:bg-white/[0.06]" />
+              <span className="text-xs uppercase tracking-wider text-gray-400 dark:text-gray-500 font-medium">
+                Other programs
+              </span>
+              <div className="flex-1 h-px bg-gray-200 dark:bg-white/[0.06]" />
+            </div>
+          )}
+          {otherPrograms.map(program => (
+            <ProgramCard key={program.id} program={program} />
+          ))}
+        </>
+      )}
 
       {archivedCount > 0 && (
         <button

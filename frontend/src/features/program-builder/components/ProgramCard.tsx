@@ -10,10 +10,12 @@ import type { Program } from '../../../shared/api/types';
 
 interface ProgramCardProps {
   program: Program;
+  variant?: 'default' | 'hero';
 }
 
-export function ProgramCard({ program }: ProgramCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) {
+  const isHero = variant === 'hero';
+  const [isExpanded, setIsExpanded] = useState(isHero);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(program.name);
   const [showAddWorkout, setShowAddWorkout] = useState(false);
@@ -83,11 +85,15 @@ export function ProgramCard({ program }: ProgramCardProps) {
     reorderWorkouts.mutate(reordered.map(w => w.id));
   };
 
+  const nextWorkout = workouts.length > 0
+    ? workouts[program.currentWorkoutIndex % workouts.length]
+    : null;
+
   return (
     <div
       className={`card overflow-hidden ${
-        program.isActive
-          ? 'border-l-4 border-l-primary-600'
+        isHero
+          ? 'p-5 border-l-[6px] border-l-primary-600 bg-gradient-to-br from-primary-50/70 to-white dark:from-primary-950/30 dark:to-surface-850'
           : program.isArchived
           ? 'opacity-60'
           : ''
@@ -95,59 +101,77 @@ export function ProgramCard({ program }: ProgramCardProps) {
     >
       {/* Header */}
       <div
-        className="flex items-center justify-between cursor-pointer"
+        className="flex items-start justify-between cursor-pointer gap-2"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-start gap-2 flex-1 min-w-0">
           <svg
-            className={`w-5 h-5 text-gray-500 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+            className={`${isHero ? 'w-6 h-6 mt-1' : 'w-5 h-5 mt-0.5'} text-gray-500 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
             fill="none" viewBox="0 0 24 24" stroke="currentColor"
           >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
 
-          {isEditingName ? (
-            <input
-              className="flex-1 px-2 py-1 text-lg font-bold border rounded dark:bg-gray-700 dark:border-gray-600"
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              onBlur={handleSaveName}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSaveName();
-                if (e.key === 'Escape') {
-                  setEditName(program.name);
-                  setIsEditingName(false);
-                }
-              }}
-              onClick={(e) => e.stopPropagation()}
-              autoFocus
-            />
-          ) : (
-            <h3
-              className="text-lg font-bold truncate"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditName(program.name);
-                setIsEditingName(true);
-              }}
-            >
-              {program.name}
-            </h3>
-          )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              {isEditingName ? (
+                <input
+                  className={`flex-1 px-2 py-1 ${isHero ? 'text-2xl' : 'text-lg'} font-bold border rounded dark:bg-gray-700 dark:border-gray-600`}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  onBlur={handleSaveName}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveName();
+                    if (e.key === 'Escape') {
+                      setEditName(program.name);
+                      setIsEditingName(false);
+                    }
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                  autoFocus
+                />
+              ) : (
+                <h3
+                  className={`${isHero ? 'text-2xl font-display' : 'text-lg'} font-bold truncate`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditName(program.name);
+                    setIsEditingName(true);
+                  }}
+                >
+                  {program.name}
+                </h3>
+              )}
 
-          {program.isActive && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 flex-shrink-0">
-              Active
-            </span>
-          )}
-          {program.isArchived && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400 flex-shrink-0">
-              Archived
-            </span>
-          )}
+              {program.isActive && !isHero && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 flex-shrink-0">
+                  Active
+                </span>
+              )}
+              {program.isArchived && (
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400 flex-shrink-0">
+                  Archived
+                </span>
+              )}
+            </div>
+
+            {isHero && (
+              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                {nextWorkout ? (
+                  <>
+                    <span className="text-xs uppercase tracking-wider text-primary-700 dark:text-primary-400 font-semibold">Up next</span>
+                    <span className="mx-1.5">·</span>
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{nextWorkout.name}</span>
+                  </>
+                ) : (
+                  <span className="italic">No workouts yet — add one below</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        <span className="text-sm text-gray-500 flex-shrink-0 ml-2">
+        <span className={`${isHero ? 'text-xs uppercase tracking-wider' : 'text-sm'} text-gray-500 flex-shrink-0 ml-2 mt-1`}>
           {workouts.length} workout{workouts.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -196,31 +220,14 @@ export function ProgramCard({ program }: ProgramCardProps) {
           {/* Workouts List */}
           <div className="space-y-2">
             {workouts.map((workout, index) => (
-              <div key={workout.id} className="flex items-start gap-1">
-                <div className="flex flex-col flex-shrink-0 pt-2">
-                  <button
-                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    disabled={index === 0}
-                    onClick={() => handleMoveWorkout(index, 'up')}
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                    </svg>
-                  </button>
-                  <button
-                    className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                    disabled={index === workouts.length - 1}
-                    onClick={() => handleMoveWorkout(index, 'down')}
-                  >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                </div>
-                <div className="flex-1">
-                  <WorkoutCard workout={workout} />
-                </div>
-              </div>
+              <WorkoutCard
+                key={workout.id}
+                workout={workout}
+                onMoveUp={() => handleMoveWorkout(index, 'up')}
+                onMoveDown={() => handleMoveWorkout(index, 'down')}
+                canMoveUp={index > 0}
+                canMoveDown={index < workouts.length - 1}
+              />
             ))}
           </div>
 

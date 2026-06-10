@@ -14,9 +14,13 @@ const SUPERSET_COLORS: Record<string, string> = {
 
 interface WorkoutCardProps {
   workout: Workout;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
-export function WorkoutCard({ workout }: WorkoutCardProps) {
+export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: WorkoutCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(workout.name);
@@ -108,6 +112,37 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
           </span>
         </div>
 
+        {onMoveUp && onMoveDown && (
+          <>
+            <button
+              className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+              disabled={!canMoveUp}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveUp();
+              }}
+              title="Move up"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+            <button
+              className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+              disabled={!canMoveDown}
+              onClick={(e) => {
+                e.stopPropagation();
+                onMoveDown();
+              }}
+              title="Move down"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 self-center mx-0.5 flex-shrink-0" />
+          </>
+        )}
         <button
           className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600 flex-shrink-0"
           onClick={(e) => {
@@ -144,32 +179,10 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
           {exercises.map((exercise, index) => (
             <div
               key={exercise.id}
-              className="flex items-center gap-2 py-1.5 border-b dark:border-gray-700 last:border-0"
+              className="flex items-center gap-1 py-1 border-b dark:border-gray-700 last:border-0"
             >
-              {/* Reorder buttons */}
-              <div className="flex flex-col flex-shrink-0">
-                <button
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                  disabled={index === 0}
-                  onClick={() => handleMoveExercise(index, 'up')}
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-                <button
-                  className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-600 disabled:opacity-30"
-                  disabled={index === exercises.length - 1}
-                  onClick={() => handleMoveExercise(index, 'down')}
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-              </div>
-
               {/* Exercise info */}
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 pr-1">
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-medium truncate">{exercise.name}</span>
                   {exercise.supersetGroup && (
@@ -178,14 +191,37 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
                     </span>
                   )}
                 </div>
-                <span className="text-xs text-gray-500">
-                  {exercise.targetSets} x {exercise.targetReps}
+                <span className="text-xs text-gray-500 tabular-nums">
+                  {exercise.targetSets} × {exercise.targetReps}
                 </span>
               </div>
 
+              {/* Compact reorder */}
+              <button
+                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+                disabled={index === 0}
+                onClick={() => handleMoveExercise(index, 'up')}
+                title="Move up"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                </svg>
+              </button>
+              <button
+                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+                disabled={index === exercises.length - 1}
+                onClick={() => handleMoveExercise(index, 'down')}
+                title="Move down"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 self-center mx-0.5 flex-shrink-0" />
+
               {/* Edit / Delete */}
               <button
-                className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600"
+                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600 flex-shrink-0"
                 onClick={() => setExerciseFormState({ open: true, exercise })}
                 title="Edit exercise"
               >
@@ -194,7 +230,7 @@ export function WorkoutCard({ workout }: WorkoutCardProps) {
                 </svg>
               </button>
               <button
-                className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-red-600"
+                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-red-600 flex-shrink-0"
                 onClick={() => handleDeleteExercise(exercise)}
                 title="Delete exercise"
               >
