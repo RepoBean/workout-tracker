@@ -1,6 +1,7 @@
 import { FormEvent, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserProfile } from '../../shared/context/UserProfileContext';
+import { useProgression } from '../../shared/context/ProgressionContext';
 import {
   PROFILE_LIMITS,
   Sex,
@@ -34,7 +35,19 @@ interface FieldErrors {
 
 export default function Settings() {
   const { profile, setProfile } = useUserProfile();
+  const { settings: progression, setSettings: setProgression } = useProgression();
   const toast = useToast();
+
+  const [incrementStr, setIncrementStr] = useState(String(progression.incrementLbs));
+
+  function handleIncrementBlur() {
+    const parsed = Number(incrementStr.trim());
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setIncrementStr(String(progression.incrementLbs));
+      return;
+    }
+    setProgression({ ...progression, incrementLbs: parsed });
+  }
 
   const [dobStr, setDobStr] = useState(profile.dob ?? '');
   const [sex, setSex] = useState<Sex>(profile.sex);
@@ -214,6 +227,46 @@ export default function Settings() {
           Save
         </Button>
       </form>
+
+      <div className="card space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Auto-Progression</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            When you hit the top of an exercise's rep range on every set, next session's
+            suggested weight goes up by this much. It only changes the recommendation — your
+            program is never edited.
+          </p>
+        </div>
+
+        <label className="flex items-center justify-between gap-3 cursor-pointer">
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Enable auto-progression
+          </span>
+          <input
+            type="checkbox"
+            checked={progression.enabled}
+            onChange={(e) => setProgression({ ...progression, enabled: e.target.checked })}
+            className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500"
+          />
+        </label>
+
+        <div>
+          <Input
+            label="Weight increment (lbs)"
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="2.5"
+            value={incrementStr}
+            onChange={(e) => setIncrementStr(e.target.value)}
+            onBlur={handleIncrementBlur}
+            disabled={!progression.enabled}
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Added to the suggested weight once you top out the rep range. Default 5 lbs.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
 import { isCardioExercise } from '../../../shared/api/predicates';
 import { formatMMSS } from '../../../shared/utils/format';
+import { useProgression } from '../../../shared/context/ProgressionContext';
+import { computeProgression } from '../logic/progression';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
 interface ExerciseCardProps {
@@ -68,6 +70,7 @@ export function ExerciseCard({
     setEditingNote(null);
   };
   const isCardio = isCardioExercise(exercise);
+  const { settings: progressionSettings } = useProgression();
 
   // Only count standard sets (dropIndex=0) for completion
   const standardSets = useMemo(
@@ -95,15 +98,34 @@ export function ExerciseCard({
     return match ? parseInt(match[1], 10) : 10;
   }, [exercise.targetReps]);
 
-  // Priority: 1) Last set from THIS session, 2) Matching set from previous session, 3) Previous session's last weight, 4) 0
+  // Auto-progression: deterministic double-progression suggestion from last session.
+  // Off by default, never for cardio. Only influences the pre-fill before the first
+  // set is logged this session — once you've logged a set, that wins (see chain below).
+  const noSetsLoggedYet = standardSets.length === 0;
+  const progressionResult = useMemo(() => {
+    if (!progressionSettings.enabled || isCardio) return null;
+    if (!previousHint?.sets || previousHint.sets.length === 0) return null;
+    return computeProgression({
+      previousSets: previousHint.sets,
+      targetReps: exercise.targetReps,
+      incrementLbs: progressionSettings.incrementLbs,
+    });
+  }, [progressionSettings, isCardio, previousHint, exercise.targetReps]);
+
+  // Priority: 1) Last set from THIS session, 2) Progression suggestion (pre-first-set),
+  // 3) Matching set from previous session, 4) Previous session's last weight, 5) 0
   const lastCurrentSessionSet = standardSets.length > 0 ? standardSets[standardSets.length - 1] : null;
   const matchingPreviousSet = getPreviousSet(nextSetNumber);
   const hintWeight = lastCurrentSessionSet?.weight
+    ?? (noSetsLoggedYet ? progressionResult?.suggestedWeight : undefined)
     ?? matchingPreviousSet?.weight
     ?? previousHint?.lastWeight
     ?? 0;
-  // For reps: Use previous session's matching set reps, or target reps from exercise
-  const hintRepsForInput = matchingPreviousSet?.reps ?? hintReps;
+  // For reps: progression suggestion first (pre-first-set), then previous session's
+  // matching set reps, or target reps from exercise
+  const hintRepsForInput = (noSetsLoggedYet ? progressionResult?.suggestedReps : undefined)
+    ?? matchingPreviousSet?.reps
+    ?? hintReps;
 
   // Get drop sets for display (grouped by setNumber)
   const dropSetsBySetNumber = useMemo(() => {
@@ -456,15 +478,28 @@ export function ExerciseCard({
             isLogging={isLogging}
           />
         ) : (
-          <SetInput
-            exerciseId={exercise.id}
-            exerciseName={exercise.name}
-            setNumber={nextSetNumber}
-            previousWeight={hintWeight}
-            previousReps={hintRepsForInput}
-            onLogSet={onLogSet}
-            isLogging={isLogging}
-          />
+          <>
+            {progressionResult && noSetsLoggedYet && (
+              <div
+                className={`mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
+                  ${progressionResult.ready
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                    : 'bg-gray-100 dark:bg-surface-800 text-gray-600 dark:text-gray-400'}`}
+              >
+                {progressionResult.ready && <span aria-hidden>📈</span>}
+                <span>{progressionResult.reason}</span>
+              </div>
+            )}
+            <SetInput
+              exerciseId={exercise.id}
+              exerciseName={exercise.name}
+              setNumber={nextSetNumber}
+              previousWeight={hintWeight}
+              previousReps={hintRepsForInput}
+              onLogSet={onLogSet}
+              isLogging={isLogging}
+            />
+          </>
         )
       )}
     </div>
