@@ -457,6 +457,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | 4a4c1e0 | Fix: History staleTime, swipe confirmation, calendar highlight pagination |
 | 9c148f1 | Fix: Progress page dark mode tooltips, 1RM calculation, dropdown, error states |
 | — | Schema: Add `Session.exerciseNotes` JSON column (per-exercise notes captured in RPE prompt). Keyed by exercise name. Chose Session-level over Set-level to avoid replicating the same string across every set of an exercise. |
+| c685617 | Feature: Auto-Progression — opt-in deterministic double-progression hint. When every working set tops the rep range at one weight, suggests a weight bump (default 5 lb) and resets reps to the bottom of the range. Pure logic + tests, localStorage context, Settings card. Session-time hint only; never edits the program. |
 
 ---
 
