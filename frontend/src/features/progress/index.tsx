@@ -6,9 +6,9 @@ import { PersonalRecordsTab } from './components/PersonalRecordsTab';
 type TabId = 'exercise' | 'volume' | 'records';
 
 const tabs: { id: TabId; label: string }[] = [
-    { id: 'exercise', label: 'Exercise Progress' },
-    { id: 'volume', label: 'Volume Trends' },
-    { id: 'records', label: 'Personal Records' },
+    { id: 'exercise', label: 'Exercises' },
+    { id: 'volume', label: 'Volume' },
+    { id: 'records', label: 'Records' },
 ];
 
 export default function Progress() {

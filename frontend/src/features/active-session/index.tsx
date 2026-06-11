@@ -6,6 +6,7 @@ import { useExerciseNavigation } from './hooks/useExerciseNavigation';
 import { useAdHocExercises } from './hooks/useAdHocExercises';
 import { useExerciseOrdering } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
+import { useDiscardSession } from './hooks/useDiscardSession';
 import { clearSessionLocalState } from './lib/sessionStorage';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
@@ -274,6 +275,23 @@ export default function ActiveSession() {
     });
   };
 
+  const discardMutation = useDiscardSession();
+
+  const handleDiscard = () => {
+    const count = sets.length;
+    const detail = count > 0
+      ? ` This will delete ${count} logged set${count !== 1 ? 's' : ''}.`
+      : '';
+    if (!confirm(`Discard this workout?${detail}`)) return;
+
+    discardMutation.mutate(sessionId, {
+      onSuccess: () => {
+        stopTimer();
+        navigate('/');
+      },
+    });
+  };
+
   // Handler for adding an ad-hoc exercise to a program workout
   const handleAddExercise = (name: string) => {
     const virtualExercise = makeVirtualExercise({
@@ -503,7 +521,17 @@ export default function ActiveSession() {
         </div>
       )}
 
-
+      {/* Discard session — escape hatch without going Home → Resume card */}
+      <div className="mt-8 text-center">
+        <button
+          onClick={handleDiscard}
+          disabled={discardMutation.isPending}
+          className="min-h-[44px] px-4 text-sm font-medium text-red-600 dark:text-red-400
+                     hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+        >
+          {discardMutation.isPending ? 'Discarding...' : 'Discard Workout'}
+        </button>
+      </div>
 
       {/* Swap Exercise Modal */}
       <SwapExercise

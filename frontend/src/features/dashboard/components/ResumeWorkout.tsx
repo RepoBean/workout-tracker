@@ -1,34 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useActiveSessionCheck, queryKeys } from '../../../shared/api/queries';
-import { api } from '../../../shared/api/client';
+import { useActiveSessionCheck } from '../../../shared/api/queries';
 import { Button } from '../../../shared/ui/Button';
 import { Modal } from '../../../shared/ui/Modal';
-import { useToast } from '../../../shared/ui/Toast';
-import { clearSessionLocalState } from '../../active-session/lib/sessionStorage';
+import { useDiscardSession } from '../../active-session/hooks/useDiscardSession';
 
 export function ResumeWorkout() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const toast = useToast();
   const { data: activeSession, isLoading } = useActiveSessionCheck();
   const [showDiscard, setShowDiscard] = useState(false);
 
-  const discardMutation = useMutation({
-    mutationFn: async (sessionId: number) => {
-      await api.delete(`/sessions/${sessionId}`);
-    },
-    onSuccess: (_data, sessionId) => {
-      clearSessionLocalState(sessionId);
-      toast.success('Workout discarded');
-      queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
-      setShowDiscard(false);
-    },
-    onError: () => {
-      toast.error('Failed to discard workout');
-    },
-  });
+  const discardMutation = useDiscardSession();
 
   if (isLoading || !activeSession) return null;
 
@@ -90,7 +72,9 @@ export function ResumeWorkout() {
           </Button>
           <Button
             variant="danger"
-            onClick={() => discardMutation.mutate(activeSession.id)}
+            onClick={() => discardMutation.mutate(activeSession.id, {
+              onSuccess: () => setShowDiscard(false),
+            })}
             disabled={discardMutation.isPending}
           >
             {discardMutation.isPending ? 'Discarding...' : 'Discard'}
