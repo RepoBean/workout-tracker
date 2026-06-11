@@ -60,19 +60,19 @@ export function SwapExercise({ isOpen, currentExerciseName, onSwap, onCancel }: 
             }
           }}
           placeholder="New exercise name..."
-          className="w-full px-3 py-3 border rounded-lg dark:bg-gray-700
-                     dark:border-gray-600 dark:text-white text-base"
+          className="w-full px-3 py-3 border rounded-lg dark:bg-surface-900
+                     dark:border-surface-800 dark:text-white text-base"
         />
 
         {/* Autocomplete suggestions */}
         {showSuggestions && suggestions && suggestions.length > 0 && (
           <div className="absolute z-10 left-0 right-0 mt-1 bg-white dark:bg-surface-800
-                          border dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          border dark:border-surface-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
             {suggestions.map((suggestion, i) => (
               <button
                 key={i}
                 className="w-full text-left px-3 py-3 text-base hover:bg-gray-100
-                           dark:hover:bg-gray-700 transition-colors min-h-[44px]"
+                           dark:hover:bg-surface-700 transition-colors min-h-[44px]"
                 onClick={() => handleSwap(suggestion)}
               >
                 {suggestion}

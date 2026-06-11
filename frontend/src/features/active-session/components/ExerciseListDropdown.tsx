@@ -95,7 +95,7 @@ export function ExerciseListDropdown({
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className="w-full flex items-center justify-between p-3 bg-gray-100 dark:bg-surface-800 
-                   rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                   rounded-lg hover:bg-gray-200 dark:hover:bg-surface-700 transition-colors"
             >
                 <span className="font-medium">
                     All Exercises ({completedCount}/{exercises.length})
@@ -113,7 +113,7 @@ export function ExerciseListDropdown({
             {/* Dropdown List */}
             {isOpen && (
                 <div
-                    className="mt-2 bg-white dark:bg-surface-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden"
+                    className="mt-2 bg-white dark:bg-surface-800 rounded-lg border border-gray-200 dark:border-surface-700 overflow-hidden"
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                 >
@@ -130,12 +130,12 @@ export function ExerciseListDropdown({
                                 data-exercise-row
                                 onTouchStart={(e) => handleTouchStart(e, index)}
                                 onClick={() => handleRowClick(index)}
-                                className={`flex items-center gap-3 p-3 border-b border-gray-100 dark:border-gray-700 
+                                className={`flex items-center gap-3 p-3 border-b border-gray-100 dark:border-surface-700 
                            last:border-b-0 cursor-pointer transition-all
                            ${isCurrent ? 'bg-primary-50 dark:bg-primary-900/20' : ''}
                            ${isDragging ? 'opacity-50 scale-95' : ''}
                            ${isDragOver ? 'border-t-2 border-t-primary-500' : ''}
-                           ${!isDragging && !isDragOver ? 'hover:bg-gray-50 dark:hover:bg-gray-700' : ''}`}
+                           ${!isDragging && !isDragOver ? 'hover:bg-gray-50 dark:hover:bg-surface-700' : ''}`}
                             >
                                 {/* Drag handle */}
                                 <div className="text-gray-400 dark:text-gray-500 touch-none">

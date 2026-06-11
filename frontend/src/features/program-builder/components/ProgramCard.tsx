@@ -116,7 +116,7 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
             <div className="flex items-center gap-2 flex-wrap">
               {isEditingName ? (
                 <input
-                  className={`flex-1 px-2 py-1 ${isHero ? 'text-2xl' : 'text-lg'} font-bold border rounded dark:bg-gray-700 dark:border-gray-600`}
+                  className={`flex-1 px-2 py-1 ${isHero ? 'text-2xl' : 'text-lg'} font-bold border rounded dark:bg-surface-900 dark:border-surface-800`}
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
                   onBlur={handleSaveName}
@@ -149,7 +149,7 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
                 </span>
               )}
               {program.isArchived && (
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-400 flex-shrink-0">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-200 text-gray-600 dark:bg-surface-700 dark:text-gray-400 flex-shrink-0">
                   Archived
                 </span>
               )}

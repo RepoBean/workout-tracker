@@ -64,7 +64,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
   };
 
   return (
-    <div className="border dark:border-gray-700 rounded-lg overflow-hidden">
+    <div className="border dark:border-surface-700 rounded-lg overflow-hidden">
       {/* Workout Header */}
       <div
         className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-surface-800 cursor-pointer"
@@ -80,7 +80,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
 
           {isEditingName ? (
             <input
-              className="flex-1 px-2 py-0.5 text-sm border rounded dark:bg-gray-700 dark:border-gray-600"
+              className="flex-1 px-2 py-0.5 text-sm border rounded dark:bg-surface-900 dark:border-surface-800"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleSaveName}
@@ -140,7 +140,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 self-center mx-0.5 flex-shrink-0" />
+            <div className="w-px h-6 bg-gray-200 dark:bg-surface-700 self-center mx-0.5 flex-shrink-0" />
           </>
         )}
         <button
@@ -179,7 +179,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
           {exercises.map((exercise, index) => (
             <div
               key={exercise.id}
-              className="flex items-center gap-1 py-1 border-b dark:border-gray-700 last:border-0"
+              className="flex items-center gap-1 py-1 border-b dark:border-surface-700 last:border-0"
             >
               {/* Exercise info */}
               <div className="flex-1 min-w-0 pr-1">
@@ -217,7 +217,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
-              <div className="w-px h-6 bg-gray-200 dark:bg-gray-700 self-center mx-0.5 flex-shrink-0" />
+              <div className="w-px h-6 bg-gray-200 dark:bg-surface-700 self-center mx-0.5 flex-shrink-0" />
 
               {/* Edit / Delete */}
               <button

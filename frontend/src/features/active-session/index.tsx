@@ -516,7 +516,7 @@ export default function ActiveSession() {
           {nextExercise && (
             <div
               onClick={() => navigation.goToNext()}
-              className="text-sm text-gray-500 dark:text-gray-400 py-3 px-4 mt-4 bg-gray-50 dark:bg-surface-800/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+              className="text-sm text-gray-500 dark:text-gray-400 py-3 px-4 mt-4 bg-gray-50 dark:bg-surface-800/50 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-surface-700/50 transition-colors"
             >
               Up next: <span className="font-medium text-gray-700 dark:text-gray-300">{nextExercise.name}</span>
               <span className="float-right text-primary-500">→</span>

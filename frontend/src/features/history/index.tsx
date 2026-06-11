@@ -22,8 +22,8 @@ export default function History() {
         <h1 className="text-2xl font-display font-bold">Workout History</h1>
         {[1, 2, 3].map(i => (
           <div key={i} className="card animate-pulse">
-            <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-40 mb-2" />
-            <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-24" />
+            <div className="h-5 bg-gray-200 dark:bg-surface-700 rounded w-40 mb-2" />
+            <div className="h-4 bg-gray-200 dark:bg-surface-700 rounded w-24" />
           </div>
         ))}
       </div>

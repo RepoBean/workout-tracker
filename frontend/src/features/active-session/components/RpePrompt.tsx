@@ -74,8 +74,8 @@ export function RpePrompt({ exerciseName, onSubmit, onSkip, isOpen }: RpePromptP
                         rows={2}
                         placeholder="How did this exercise feel? (optional)"
                         className="w-full px-3 py-2 text-sm border rounded-lg
-                                   border-gray-300 dark:border-gray-600
-                                   bg-white dark:bg-gray-800
+                                   border-gray-300 dark:border-surface-800
+                                   bg-white dark:bg-surface-900
                                    text-gray-900 dark:text-gray-100
                                    placeholder-gray-400 dark:placeholder-gray-500
                                    focus:outline-none focus:ring-2 focus:ring-primary-500

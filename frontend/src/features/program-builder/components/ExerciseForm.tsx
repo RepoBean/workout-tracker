@@ -179,11 +179,11 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             placeholder="e.g. Bench Press"
           />
           {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-gray-700 border dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-auto">
+            <div className="absolute z-10 w-full mt-1 bg-white dark:bg-surface-800 border dark:border-surface-700 rounded-lg shadow-lg max-h-48 overflow-auto">
               {filteredSuggestions.map((suggestion) => (
                 <button
                   key={suggestion}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-surface-600 transition-colors"
                   onMouseDown={(e) => {
                     e.preventDefault();
                     setName(suggestion);
@@ -230,7 +230,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
                     className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                       cardioModality === value
                         ? 'bg-primary-600 text-white'
-                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                        : 'bg-gray-200 dark:bg-surface-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-surface-600'
                     }`}
                   >
                     {label}
@@ -274,7 +274,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
               className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                 supersetGroup === ''
                   ? 'bg-primary-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                  : 'bg-gray-200 dark:bg-surface-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-surface-600'
               }`}
             >
               None
@@ -287,7 +287,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
                 className={`px-2.5 py-1.5 rounded text-sm font-medium transition-colors ${
                   supersetGroup === group
                     ? 'bg-primary-600 text-white'
-                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+                    : 'bg-gray-200 dark:bg-surface-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-surface-600'
                 }`}
               >
                 {group}
@@ -297,7 +297,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             {nextAvailableGroup && (
               <button
                 onClick={() => setSupersetGroup(nextAvailableGroup)}
-                className="px-2.5 py-1.5 rounded text-sm font-medium transition-colors bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600"
+                className="px-2.5 py-1.5 rounded text-sm font-medium transition-colors bg-gray-200 dark:bg-surface-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-surface-600"
               >
                 + New Group
               </button>

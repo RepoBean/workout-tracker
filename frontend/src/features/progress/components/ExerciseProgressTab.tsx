@@ -166,14 +166,14 @@ export function ExerciseProgressTab() {
         <div className="space-y-4">
             {/* Mode toggle */}
             <div className="flex justify-center">
-                <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                <div className="inline-flex bg-gray-100 dark:bg-surface-800 rounded-lg p-1">
                     {(['strength', 'cardio'] as const).map(m => (
                         <button
                             key={m}
                             onClick={() => handleModeChange(m)}
                             className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors min-w-[90px]
                                 ${mode === m
-                                    ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-white shadow-sm'
+                                    ? 'bg-white dark:bg-surface-600 text-primary-600 dark:text-white shadow-sm'
                                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                 }`}
                         >
@@ -197,19 +197,19 @@ export function ExerciseProgressTab() {
                             }
                         }}
                         placeholder={mode === 'cardio' ? 'Search cardio exercise...' : 'Search exercise...'}
-                        className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700
-                       dark:border-gray-600 dark:text-white text-sm"
+                        className="w-full px-3 py-2 border rounded-lg dark:bg-surface-900
+                       dark:border-surface-800 dark:text-white text-sm"
                     />
 
                     {/* Autocomplete suggestions */}
                     {showSuggestions && filteredSuggestions.length > 0 && (
                         <div className="absolute z-10 left-0 right-0 mt-1 bg-white dark:bg-surface-800
-                            border dark:border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                            border dark:border-surface-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                             {filteredSuggestions.map((suggestion, i) => (
                                 <button
                                     key={i}
                                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100
-                             dark:hover:bg-gray-700 transition-colors min-h-[44px] flex items-center"
+                             dark:hover:bg-surface-700 transition-colors min-h-[44px] flex items-center"
                                     onClick={() => handleSelectExercise(suggestion)}
                                 >
                                     {suggestion}
@@ -231,7 +231,7 @@ export function ExerciseProgressTab() {
                                     className={`px-3 py-2 rounded-full text-sm font-medium transition-colors min-h-[44px]
                     ${selectedExercise === name
                                             ? 'bg-primary-600 text-white'
-                                            : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                            : 'bg-gray-100 dark:bg-surface-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-surface-600'
                                         }`}
                                 >
                                     {name}
@@ -252,8 +252,8 @@ export function ExerciseProgressTab() {
                                 key={name}
                                 onClick={() => handleSelectExercise(name)}
                                 className="px-3 py-2 rounded-full text-sm font-medium bg-gray-100
-                           dark:bg-gray-700 text-gray-700 dark:text-gray-300
-                           hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors min-h-[44px]"
+                           dark:bg-surface-700 text-gray-700 dark:text-gray-300
+                           hover:bg-gray-200 dark:hover:bg-surface-600 transition-colors min-h-[44px]"
                             >
                                 {name}
                             </button>
@@ -280,14 +280,14 @@ export function ExerciseProgressTab() {
 
                         {/* Metric Toggle */}
                         <div className="flex justify-center mb-6">
-                            <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                            <div className="inline-flex bg-gray-100 dark:bg-surface-900 rounded-lg p-1">
                                 {(['volume', '1rm', 'weight'] as const).map(metric => (
                                     <button
                                         key={metric}
                                         onClick={() => setChartMetric(metric)}
                                         className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors
                                             ${chartMetric === metric
-                                                ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-white shadow-sm'
+                                                ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-white shadow-sm'
                                                 : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                                             }`}
                                     >
@@ -316,7 +316,7 @@ export function ExerciseProgressTab() {
                                 {exerciseHistory.slice().reverse().map((session) => (
                                     <div
                                         key={session.sessionId}
-                                        className="py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                        className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"
                                     >
                                         <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                             {formatSessionDate(session.date)}
@@ -366,7 +366,7 @@ export function ExerciseProgressTab() {
                         </div>
 
                         <div className="flex justify-center mb-2">
-                            <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+                            <div className="inline-flex bg-gray-100 dark:bg-surface-900 rounded-lg p-1">
                                 {(['pace', 'distance', 'duration', 'hr'] as const).map(metric => {
                                     const disabled = metric === 'pace' && paceDisabled;
                                     const active = effectiveCardioMetric === metric;
@@ -377,7 +377,7 @@ export function ExerciseProgressTab() {
                                             disabled={disabled}
                                             className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors
                                                 ${active
-                                                    ? 'bg-white dark:bg-gray-600 text-primary-600 dark:text-white shadow-sm'
+                                                    ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-white shadow-sm'
                                                     : disabled
                                                         ? 'text-gray-300 dark:text-gray-500 cursor-not-allowed'
                                                         : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
@@ -415,7 +415,7 @@ export function ExerciseProgressTab() {
                                 {cardioHistory.slice().reverse().map((session) => (
                                     <div
                                         key={session.sessionId}
-                                        className="py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                                        className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"
                                     >
                                         <div className="flex items-baseline justify-between mb-1">
                                             <span className="text-sm font-medium text-gray-700 dark:text-gray-300">

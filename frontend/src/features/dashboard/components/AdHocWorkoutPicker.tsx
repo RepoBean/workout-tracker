@@ -92,7 +92,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                         </div>
                     </Button>
                 ) : (
-                    <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                    <div className="rounded-lg border border-gray-200 dark:border-surface-700 p-3 space-y-2">
                         <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Pick a cardio type</div>
                         <div className="grid grid-cols-2 gap-2">
                             {CARDIO_MODALITY_OPTIONS.map(({ value, label }) => (
@@ -121,9 +121,9 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
 
                 {/* Divider */}
                 <div className="flex items-center gap-3">
-                    <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                    <div className="flex-1 border-t border-gray-200 dark:border-surface-700" />
                     <span className="text-sm text-gray-500 dark:text-gray-400">or from a program</span>
-                    <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                    <div className="flex-1 border-t border-gray-200 dark:border-surface-700" />
                 </div>
 
                 {/* Programs list */}
@@ -135,11 +135,11 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                 ) : programs && programs.length > 0 ? (
                     <div className="space-y-2 max-h-[50vh] overflow-y-auto">
                         {programs.filter((p: Program) => !p.isArchived).map((program: Program) => (
-                            <div key={program.id} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <div key={program.id} className="border border-gray-200 dark:border-surface-700 rounded-lg overflow-hidden">
                                 {/* Program header */}
                                 <button
                                     onClick={() => toggleProgram(program.id)}
-                                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-gray-800"
+                                    className="w-full flex items-center justify-between p-3 hover:bg-gray-50 dark:hover:bg-surface-700"
                                 >
                                     <div className="flex items-center gap-2">
                                         <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -164,15 +164,15 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
 
                                 {/* Workouts list (expanded) */}
                                 {expandedProgramId === program.id && program.workouts && (
-                                    <div className="border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-surface-800/50">
+                                    <div className="border-t border-gray-200 dark:border-surface-700 bg-gray-50 dark:bg-surface-800/50">
                                         {program.workouts.length > 0 ? (
                                             program.workouts.map((workout: Workout) => (
                                                 <button
                                                     key={workout.id}
                                                     onClick={() => handleSelectWorkout(workout.id)}
                                                     disabled={startSession.isPending}
-                                                    className="w-full flex items-center gap-3 p-3 hover:bg-gray-100 dark:hover:bg-gray-700 
-                                     border-b border-gray-200 dark:border-gray-700 last:border-b-0"
+                                                    className="w-full flex items-center gap-3 p-3 hover:bg-gray-100 dark:hover:bg-surface-700 
+                                     border-b border-gray-200 dark:border-surface-700 last:border-b-0"
                                                 >
                                                     <svg className="w-4 h-4 text-gray-400 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}

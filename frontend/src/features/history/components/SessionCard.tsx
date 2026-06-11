@@ -162,7 +162,7 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
 
       {/* Expanded Details */}
       {isExpanded && (
-        <div className="mt-3 pt-3 border-t dark:border-gray-700 space-y-3">
+        <div className="mt-3 pt-3 border-t dark:border-surface-700 space-y-3">
           {(() => {
             const parsed = parseSeries(session.heartRateSeries);
             if (!parsed) return null;

@@ -184,7 +184,7 @@ export function ExerciseCard({
                            flex items-center justify-center
                            text-gray-400 hover:text-primary-600
                            dark:hover:text-primary-400 rounded-lg
-                           hover:bg-gray-100 dark:hover:bg-gray-700
+                           hover:bg-gray-100 dark:hover:bg-surface-700
                            transition-colors shrink-0"
                 aria-label="Swap exercise"
                 title="Replace exercise"
@@ -318,35 +318,31 @@ export function ExerciseCard({
                   onSwipeLeft={() => onDeleteSet(currentSet.id)}
                   disabled={currentSet.id < 0}
                 >
-                  {/* Opaque layer matching the card bg so the translucent row
-                      highlight renders the same as outside the SwipeableRow */}
-                  <div className="bg-white dark:bg-surface-800 rounded-lg">
-                    <div
-                      role={onUpdateSet ? 'button' : undefined}
-                      tabIndex={onUpdateSet ? 0 : undefined}
-                      onClick={() => handleSetTap(currentSet)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') handleSetTap(currentSet); }}
-                      className={`grid grid-cols-[1fr_auto_2fr] gap-2 items-center min-h-[44px] py-1.5 rounded-lg
-                                 ${onUpdateSet ? 'cursor-pointer' : ''}
-                                 ${showBetterHighlight ? 'bg-green-50 dark:bg-green-900/10' : ''}`}
-                    >
-                      {previousCell}
-                      {arrowCell}
-                      <div className="flex items-center justify-between gap-1 min-w-0">
-                        <span className="font-medium text-green-600 dark:text-green-400 truncate">
-                          ✓ {currentSet.weight}×{currentSet.reps}
-                          {currentSet.perceivedEffort && (
-                            <span className="ml-1 text-xs text-gray-500">RPE {currentSet.perceivedEffort}</span>
-                          )}
-                        </span>
-                        {onUpdateSet && (
-                          <svg className="w-4 h-4 mr-1 text-gray-300 dark:text-gray-600 shrink-0"
-                               fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
+                  <div
+                    role={onUpdateSet ? 'button' : undefined}
+                    tabIndex={onUpdateSet ? 0 : undefined}
+                    onClick={() => handleSetTap(currentSet)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSetTap(currentSet); }}
+                    className={`grid grid-cols-[1fr_auto_2fr] gap-2 items-center min-h-[44px] py-1.5 rounded-lg
+                               ${onUpdateSet ? 'cursor-pointer' : ''}
+                               ${showBetterHighlight ? 'bg-green-50 dark:bg-green-900/10' : ''}`}
+                  >
+                    {previousCell}
+                    {arrowCell}
+                    <div className="flex items-center justify-between gap-1 min-w-0">
+                      <span className="font-medium text-green-600 dark:text-green-400 truncate">
+                        ✓ {currentSet.weight}×{currentSet.reps}
+                        {currentSet.perceivedEffort && (
+                          <span className="ml-1 text-xs text-gray-500">RPE {currentSet.perceivedEffort}</span>
                         )}
-                      </div>
+                      </span>
+                      {onUpdateSet && (
+                        <svg className="w-4 h-4 mr-1 text-gray-300 dark:text-gray-600 shrink-0"
+                             fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      )}
                     </div>
                   </div>
                 </SwipeableRow>

@@ -88,7 +88,7 @@ export default function ProgramBuilder() {
         </div>
         {[1, 2, 3].map(i => (
           <div key={i} className="card animate-pulse">
-            <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-48" />
+            <div className="h-6 bg-gray-200 dark:bg-surface-700 rounded w-48" />
           </div>
         ))}
       </div>

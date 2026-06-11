@@ -72,7 +72,7 @@ export function SwipeableRow({ onSwipeLeft, disabled = false, children }: Swipea
           transform: `translateX(${offset}px)`,
           transition: swiping ? 'none' : 'transform 0.2s ease-out',
         }}
-        className="relative bg-white dark:bg-gray-900"
+        className="relative bg-white dark:bg-surface-800"
       >
         {children}
       </div>

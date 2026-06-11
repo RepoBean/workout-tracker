@@ -63,7 +63,7 @@ export function SupersetStep({
               tabIndex={0}
               onClick={() => onActivate(idx)}
               onKeyDown={(e) => { if (e.key === 'Enter') onActivate(idx); }}
-              className={`card py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800
+              className={`card py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-surface-700
                          ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''}`}
             >
               <div className="flex items-center justify-between">
