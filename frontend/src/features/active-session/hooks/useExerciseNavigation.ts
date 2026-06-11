@@ -36,6 +36,8 @@ export interface UseExerciseNavigationResult {
     getCurrentFlatIndex: () => number;
     /** Advance to next exercise in superset (called after logging a set) */
     rotateSupersetActive: () => void;
+    /** Directly activate a superset exercise by its index within the current step */
+    setSupersetActive: (index: number) => void;
     /** Check if exercise is complete (all target sets logged) */
     isExerciseComplete: (exerciseId: number) => boolean;
     /** Check if current step is complete */
@@ -342,6 +344,14 @@ export function useExerciseNavigation({
         // All others complete — stay on current exercise (do NOT advance to a completed one)
     }, [currentStep, supersetActiveIndex, isExerciseComplete, getExerciseProgress]);
 
+    // Directly activate a superset exercise (collapsed-card tap)
+    const setSupersetActive = useCallback((index: number) => {
+        if (!currentStep || currentStep.type !== 'superset') return;
+        if (index >= 0 && index < currentStep.exercises.length) {
+            setSupersetActiveIndex(index);
+        }
+    }, [currentStep]);
+
     return {
         steps,
         currentStepIndex,
@@ -353,6 +363,7 @@ export function useExerciseNavigation({
         goToStep,
         getCurrentFlatIndex,
         rotateSupersetActive,
+        setSupersetActive,
         isExerciseComplete,
         isCurrentStepComplete,
         getSetsForExercise,

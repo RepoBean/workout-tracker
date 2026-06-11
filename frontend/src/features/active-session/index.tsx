@@ -13,6 +13,7 @@ import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
 import { AddExercise } from './components/AddExercise';
 import { SwapExercise } from './components/SwapExercise';
+import { SupersetStep } from './components/SupersetStep';
 import { RpePrompt } from './components/RpePrompt';
 import { CompletionCelebration } from './components/CompletionCelebration';
 import { LiveHRChart } from './components/LiveHRChart';
@@ -334,6 +335,28 @@ export default function ActiveSession() {
     return idx;
   };
 
+  // Shared ExerciseCard wiring for the focused view (single + superset steps)
+  const renderExerciseCard = (exercise: Exercise) => {
+    const isExerciseAdHoc = exercise.id < 0;
+    return (
+      <ExerciseCard
+        exercise={exercise}
+        loggedSets={getSetsForExercise(exercise)}
+        previousHint={getPreviousHintForExercise(exercise)}
+        note={session?.exerciseNotes?.[exercise.name] ?? null}
+        onLogSet={(data) => {
+          const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
+          handleLogSet({ ...data, exerciseId: exerciseIdForApi });
+        }}
+        onDeleteSet={deleteSet}
+        onUpdateSet={updateSet}
+        onSetNote={(note) => setExerciseNote(exercise.name, note)}
+        onSwapExercise={() => setSwapTarget(exercise)}
+        isLogging={isLoggingSet}
+      />
+    );
+  };
+
   // Get next exercise for "Up next" preview — skip already-completed steps
   // so the label matches where goToNext() will actually land.
   const getNextExercise = (): Exercise | null => {
@@ -473,116 +496,20 @@ export default function ActiveSession() {
         <>
           {/* Current step exercises */}
           <div className="space-y-4">
-            {navigation.currentStep?.type === 'single' && (() => {
-              const exercise = navigation.currentStep.exercise;
-              const isExerciseAdHoc = exercise.id < 0;
-              return (
-                <ExerciseCard
-                  exercise={exercise}
-                  loggedSets={getSetsForExercise(exercise)}
-                  previousHint={getPreviousHintForExercise(exercise)}
-                  note={session?.exerciseNotes?.[exercise.name] ?? null}
-                  onLogSet={(data) => {
-                    const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-                    handleLogSet({ ...data, exerciseId: exerciseIdForApi });
-                  }}
-                  onDeleteSet={deleteSet}
-                  onUpdateSet={updateSet}
-                  onSetNote={(note) => setExerciseNote(exercise.name, note)}
-                  onSwapExercise={() => setSwapTarget(exercise)}
-                  isLogging={isLoggingSet}
-                />
-              );
-            })()}
+            {navigation.currentStep?.type === 'single' &&
+              renderExerciseCard(navigation.currentStep.exercise)}
 
-            {navigation.currentStep?.type === 'superset' && (() => {
-              const supersetExercises = navigation.currentStep.exercises;
-              const activeIdx = navigation.supersetActiveIndex % supersetExercises.length;
-
-              // Reorder so active exercise is first
-              const reorderedExercises = [
-                supersetExercises[activeIdx],
-                ...supersetExercises.filter((_, idx) => idx !== activeIdx)
-              ];
-
-              return (
-                <div className="space-y-4">
-                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400 
-                               px-3 py-1 bg-purple-100 dark:bg-purple-900/30 rounded-lg inline-block">
-                    Superset {navigation.currentStep.group}
-                  </div>
-                  {reorderedExercises.map((exercise, displayIdx) => {
-                    const isActive = displayIdx === 0; // First is always active
-                    const isComplete = navigation.isExerciseComplete(exercise.id);
-
-                    return (
-                      <div
-                        key={exercise.id}
-                        className={`transition-all ${isActive
-                          ? ''
-                          : isComplete
-                            ? 'opacity-60 scale-[0.98]'
-                            : 'opacity-75'
-                          }`}
-                      >
-                        {isActive ? (() => {
-                          const isExerciseAdHoc = exercise.id < 0;
-                          return (
-                            <ExerciseCard
-                              exercise={exercise}
-                              loggedSets={getSetsForExercise(exercise)}
-                              previousHint={getPreviousHintForExercise(exercise)}
-                              note={session?.exerciseNotes?.[exercise.name] ?? null}
-                              onLogSet={(data) => {
-                                const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-                                handleLogSet({ ...data, exerciseId: exerciseIdForApi });
-                              }}
-                              onDeleteSet={deleteSet}
-                              onUpdateSet={updateSet}
-                              onSetNote={(note) => setExerciseNote(exercise.name, note)}
-                              onSwapExercise={() => setSwapTarget(exercise)}
-                              isLogging={isLoggingSet}
-                            />
-                          );
-                        })() : (
-                          // Collapsed view for non-active superset exercises
-                          <div
-                            className={`card py-3 px-4 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 ${isComplete ? 'ring-2 ring-green-500 dark:ring-green-400' : ''
-                              }`}
-                            onClick={() => {
-                              // Click to switch to this exercise
-                              const originalIdx = supersetExercises.findIndex(e => e.id === exercise.id);
-                              const diff = originalIdx - activeIdx;
-                              for (let i = 0; i < Math.abs(diff); i++) {
-                                navigation.rotateSupersetActive();
-                              }
-                            }}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <h3 className="font-medium">{exercise.name}</h3>
-                                <p className="text-sm text-gray-500 dark:text-gray-400">
-                                  {(() => {
-                                    const p = navigation.getExerciseProgress(exercise.id);
-                                    const unit = isCardioExercise(exercise) ? 'effort' : 'sets';
-                                    return `${p.logged}/${p.target} ${unit}`;
-                                  })()}
-                                </p>
-                              </div>
-                              {isComplete && (
-                                <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                </svg>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+            {navigation.currentStep?.type === 'superset' && (
+              <SupersetStep
+                exercises={navigation.currentStep.exercises}
+                group={navigation.currentStep.group}
+                activeIndex={navigation.supersetActiveIndex}
+                isExerciseComplete={navigation.isExerciseComplete}
+                getExerciseProgress={navigation.getExerciseProgress}
+                onActivate={navigation.setSupersetActive}
+                renderExerciseCard={renderExerciseCard}
+              />
+            )}
           </div>
 
           {/* Up next preview */}
