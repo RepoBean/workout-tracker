@@ -14,6 +14,7 @@ import { ExerciseListDropdown } from './components/ExerciseListDropdown';
 import { AddExercise } from './components/AddExercise';
 import { SwapExercise } from './components/SwapExercise';
 import { SupersetStep } from './components/SupersetStep';
+import { CompletedSessionSummary } from './components/CompletedSessionSummary';
 import { RpePrompt } from './components/RpePrompt';
 import { CompletionCelebration } from './components/CompletionCelebration';
 import { LiveHRChart } from './components/LiveHRChart';
@@ -284,7 +285,7 @@ export default function ActiveSession() {
     setAdHocProgramExercises(prev => [...prev, virtualExercise]);
 
     // Insert AFTER the current step so user stays on current exercise
-    const currentFlatIndex = navigation.getCurrentFlatIndex();
+    const currentFlatIndex = navigation.flatIndexForStep(navigation.currentStepIndex);
     const currentStep = navigation.currentStep;
     const currentStepSize = currentStep
       ? (currentStep.type === 'single' ? 1 : currentStep.exercises.length)
@@ -321,20 +322,6 @@ export default function ActiveSession() {
     setSwapTarget(null);
   };
 
-  // Find exercise index in flat list for dropdown navigation
-  const getExerciseIndexInList = (stepIndex: number): number => {
-    let idx = 0;
-    for (let i = 0; i < stepIndex && i < navigation.steps.length; i++) {
-      const step = navigation.steps[i];
-      if (step.type === 'single') {
-        idx++;
-      } else {
-        idx += step.exercises.length;
-      }
-    }
-    return idx;
-  };
-
   // Shared ExerciseCard wiring for the focused view (single + superset steps)
   const renderExerciseCard = (exercise: Exercise) => {
     const isExerciseAdHoc = exercise.id < 0;
@@ -357,21 +344,9 @@ export default function ActiveSession() {
     );
   };
 
-  // Get next exercise for "Up next" preview — skip already-completed steps
-  // so the label matches where goToNext() will actually land.
-  const getNextExercise = (): Exercise | null => {
-    for (let i = navigation.currentStepIndex + 1; i < navigation.steps.length; i++) {
-      const step = navigation.steps[i];
-      const complete = step.type === 'single'
-        ? navigation.isExerciseComplete(step.exercise.id)
-        : step.exercises.every(ex => navigation.isExerciseComplete(ex.id));
-      if (!complete) {
-        return step.type === 'single' ? step.exercise : step.exercises[0];
-      }
-    }
-    return null;
-  };
-  const nextExercise = getNextExercise();
+  // "Up next" preview — the hook skips already-completed steps so the label
+  // matches where goToNext() will actually land.
+  const nextExercise = navigation.nextIncompleteExercise;
 
   if (isLoading) {
     return (
@@ -417,60 +392,7 @@ export default function ActiveSession() {
       );
     }
 
-    // Calculate session stats
-    const completedSets = sets.filter(s => (s.dropIndex || 0) === 0);
-    const completedTotalSets = completedSets.length;
-    const completedTotalVolume = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-    const completedDuration = session.createdAt
-      ? Math.round((new Date(session.completedAt).getTime() - new Date(session.createdAt).getTime()) / 60000)
-      : 0;
-
-    const formatVolume = (v: number) => {
-      if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
-      return String(v);
-    };
-
-    return (
-      <div className="text-center py-12 px-4">
-        <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full
-                       flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none"
-            viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-semibold mb-1">{session.workoutName}</h2>
-        <p className="text-gray-600 dark:text-gray-400 mb-6">
-          Completed on {new Date(session.completedAt).toLocaleDateString()}
-        </p>
-
-        {/* Stats grid */}
-        <div className="grid grid-cols-3 gap-4 mb-6 max-w-xs mx-auto">
-          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
-            <p className="text-2xl font-display font-bold">{completedTotalSets}</p>
-            <p className="text-xs text-gray-500">Sets</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
-            <p className="text-2xl font-display font-bold">{formatVolume(completedTotalVolume)}</p>
-            <p className="text-xs text-gray-500">lbs</p>
-          </div>
-          <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">
-            <p className="text-2xl font-display font-bold">{completedDuration}</p>
-            <p className="text-xs text-gray-500">min</p>
-          </div>
-        </div>
-
-        <div className="space-x-4">
-          <Link to="/history" className="text-primary-600 hover:underline">
-            View History
-          </Link>
-          <Link to="/" className="text-primary-600 hover:underline">
-            Dashboard
-          </Link>
-        </div>
-      </div>
-    );
+    return <CompletedSessionSummary session={session} />;
   }
 
   return (
@@ -527,22 +449,10 @@ export default function ActiveSession() {
           <div className="mt-4">
             <ExerciseListDropdown
               exercises={orderedExercises}
-              currentStepIndex={getExerciseIndexInList(navigation.currentStepIndex)}
+              currentStepIndex={navigation.flatIndexForStep(navigation.currentStepIndex)}
               getExerciseProgress={navigation.getExerciseProgress}
               isExerciseComplete={navigation.isExerciseComplete}
-              onSelectExercise={(idx) => {
-                // Find step containing this exercise
-                let count = 0;
-                for (let i = 0; i < navigation.steps.length; i++) {
-                  const step = navigation.steps[i];
-                  const stepSize = step.type === 'single' ? 1 : step.exercises.length;
-                  if (idx < count + stepSize) {
-                    navigation.goToStep(i);
-                    return;
-                  }
-                  count += stepSize;
-                }
-              }}
+              onSelectExercise={(idx) => navigation.goToStep(navigation.stepForFlatIndex(idx))}
               onMoveExercise={handleMoveExercise}
             />
           </div>

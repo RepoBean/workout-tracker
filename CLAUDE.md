@@ -97,6 +97,7 @@ src/
 │   │   │   ├── ExerciseNote.tsx   # Per-exercise note view/edit/clear widget
 │   │   │   ├── SupersetStep.tsx   # Superset step — fixed-position cards, expand in place
 │   │   │   ├── CompletionCelebration.tsx  # Session complete animation
+│   │   │   ├── CompletedSessionSummary.tsx # Read-only view for already-completed sessions
 │   │   │   ├── PlateCalculator.tsx
 │   │   │   ├── SessionHeader.tsx
 │   │   │   ├── AddExercise.tsx
@@ -104,6 +105,8 @@ src/
 │   │   │   └── RpePrompt.tsx      # Post-exercise RPE modal
 │   │   ├── hooks/
 │   │   │   ├── useActiveSession.ts    # Session state + optimistic updates
+│   │   │   ├── usePrCelebration.ts    # Session-scoped PR detection + toast
+│   │   │   ├── useHrWindow.ts         # HR window refs anchored to session start
 │   │   │   ├── usePreviousData.ts     # Cached previous weights/reps
 │   │   │   ├── useStartSession.ts     # Session initialization
 │   │   │   ├── useExerciseNavigation.ts # Focused view navigation + supersets
@@ -113,7 +116,7 @@ src/
 │   │   ├── logic/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   └── plates.ts          # Plate calculator math
-│   │   └── index.tsx              # WorkoutSession page entry (~475 lines)
+│   │   └── index.tsx              # WorkoutSession page entry (~540 lines)
 │   │
 │   ├── program-builder/           # Program/workout/exercise CRUD
 │   │   ├── components/
@@ -496,6 +499,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Fix: SetInput localStorage override leak — weight/reps overrides are now session-scoped (`wt:setinput:${sessionId}:...`, key builders in `lib/sessionStorage.ts`; SetInput reads sessionId from route params like CardioSetInput). `clearSessionLocalState` sweeps the prefix on complete/delete; dashboard discard now also calls `clearSessionLocalState` (was missing). One-time legacy sweep of unscoped `set-weight-*`/`set-reps-*` keys at app start (`main.tsx`). |
 | — | UX: Coach polish — assistant bubbles render markdown via `react-markdown` + `remark-gfm` (`CoachMarkdown.tsx`; user messages stay plain, streaming draft renders live). Composer sticky offset now matches the tab bar exactly (`bottom-[calc(56px+env(safe-area-inset-bottom))]`). Starter chips send immediately instead of filling the input. Errors report once (in-thread ⚠️ bubble only; toast dropped). |
 | — | Dark token sweep — migrated all `dark:(bg\|border\|hover:bg)-gray-(600-900)` surface styles (~60 across 19 files) to `surface-*` tokens. Added missing `surface-600` (#3F3F4E) and `surface-700` (#32323F) palette stops — coach/HeartRatePill already referenced surface-700 but the token didn't exist (classes were silently dead). Conventions: inputs `dark:bg-surface-900 dark:border-surface-800`; popovers `dark:bg-surface-800` + `border-surface-700`; borders/dividers/skeletons `surface-700`; hover on card `surface-700`, on page bg `surface-800`. SwipeableRow backdrop `gray-900`→`surface-800` (matches card; removed ExerciseCard's opaque-wrapper workaround). text-gray-* untouched. |
+| — | Code health bundle — extracted `CompletedSessionSummary.tsx` from active-session index (633→542 lines); step↔flat-index math + "up next" scan moved into `useExerciseNavigation` (`flatIndexForStep`/`stepForFlatIndex`/`nextIncompleteExercise`; replaced `getCurrentFlatIndex`, `goToNext` shares the scan); PR detection extracted to `usePrCelebration.ts` and HR-window refs to `useHrWindow.ts` (useActiveSession 369→305 lines); raw `['history']`/`['stats']`/`['calendarSessions']` invalidations now use the `queryKeys` factory (added `calendarSessionsAll`); import-program mutation moved to `shared/api/queries.ts` as `useImportProgram` (coach no longer imports from program-builder; `useProgramMutations` delegates); ExerciseListDropdown drag hit-test scoped to a container ref instead of `document.querySelectorAll`. No behavior changes. |
 
 ---
 

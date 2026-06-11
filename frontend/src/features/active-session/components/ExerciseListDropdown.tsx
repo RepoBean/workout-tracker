@@ -26,6 +26,7 @@ export function ExerciseListDropdown({
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const touchStartY = useRef(0);
+    const listRef = useRef<HTMLDivElement>(null);
 
     const handleTouchStart = useCallback((e: React.TouchEvent, index: number) => {
         touchStartY.current = e.touches[0].clientY;
@@ -48,11 +49,11 @@ export function ExerciseListDropdown({
             }
         }
 
-        // Handle drag
+        // Handle drag — hit-test only this dropdown's rows
         if (draggingIndex !== null) {
             e.preventDefault();
             const touch = e.touches[0];
-            const elements = document.querySelectorAll('[data-exercise-row]');
+            const elements = Array.from(listRef.current?.querySelectorAll('[data-exercise-row]') ?? []);
             let targetIndex = draggingIndex;
 
             elements.forEach((el, idx) => {
@@ -113,6 +114,7 @@ export function ExerciseListDropdown({
             {/* Dropdown List */}
             {isOpen && (
                 <div
+                    ref={listRef}
                     className="mt-2 bg-white dark:bg-surface-800 rounded-lg border border-gray-200 dark:border-surface-700 overflow-hidden"
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}

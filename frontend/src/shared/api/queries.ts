@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest } from './types';
+import type { Program, ProgramExportPayload, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest } from './types';
 import { useToast } from '../ui/Toast';
 
 // ============================================
@@ -23,6 +23,7 @@ export const queryKeys = {
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
   exerciseAllSets: (name: string) => ['exercises', 'all-sets', name] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
+  calendarSessionsAll: ['calendarSessions'] as const,
   stats: ['stats'] as const,
   progressHistory: ['progressHistory'] as const,
 };
@@ -261,7 +262,31 @@ export function useSetExerciseNote(sessionId: number) {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
-      queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
+    },
+  });
+}
+
+/**
+ * Import a program from a version-1 export payload.
+ * Shared because both the program builder and the AI coach's
+ * "build a program" flow import through the same preview-then-confirm path.
+ */
+export function useImportProgram() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async (data: ProgramExportPayload) => {
+      const { data: program } = await api.post<Program>('/programs/import', data);
+      return program;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.programs });
+      toast.success('Program imported');
+    },
+    onError: () => {
+      toast.error('Failed to import program');
     },
   });
 }

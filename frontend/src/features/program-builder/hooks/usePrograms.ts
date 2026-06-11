@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../shared/api/client';
-import { queryKeys } from '../../../shared/api/queries';
+import { queryKeys, useImportProgram } from '../../../shared/api/queries';
 import { useToast } from '../../../shared/ui/Toast';
 import type {
   Program,
@@ -12,7 +12,6 @@ import type {
   UpdateWorkoutRequest,
   CreateExerciseRequest,
   UpdateExerciseRequest,
-  ProgramExportPayload,
 } from '../../../shared/api/types';
 
 export function useProgramMutations() {
@@ -79,19 +78,8 @@ export function useProgramMutations() {
     },
   });
 
-  const importProgram = useMutation({
-    mutationFn: async (data: ProgramExportPayload) => {
-      const { data: program } = await api.post<Program>('/programs/import', data);
-      return program;
-    },
-    onSuccess: () => {
-      invalidatePrograms();
-      toast.success('Program imported');
-    },
-    onError: () => {
-      toast.error('Failed to import program');
-    },
-  });
+  // Shared with the AI coach's "build a program" flow
+  const importProgram = useImportProgram();
 
   const createWorkout = useMutation({
     mutationFn: async (data: CreateWorkoutRequest) => {

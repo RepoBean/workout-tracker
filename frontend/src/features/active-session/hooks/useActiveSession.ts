@@ -1,14 +1,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
 import { api } from '../../../shared/api/client';
-import { queryKeys, useSession, useSetExerciseNote, type ExerciseAllSet } from '../../../shared/api/queries';
+import { queryKeys, useSession, useSetExerciseNote } from '../../../shared/api/queries';
 import type { Set, ActiveSession, LogSetRequest, CompleteSessionRequest } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
 import { useTimer } from '../../../shared/context/TimerContext';
 import { useHeartRate } from '../../../shared/context/HeartRateContext';
 import { downsampleHr } from '../../../shared/utils/heartRate';
-import { computeBestOneRepMax, epleyOneRepMax } from '../logic/personalRecord';
+import { useHrWindow } from './useHrWindow';
+import { usePrCelebration } from './usePrCelebration';
 
 interface UpdateSetRequest {
   weight?: number;
@@ -28,82 +28,18 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
   const { startTimer } = useTimer();
   const heartRate = useHeartRate();
 
-  // HR tracking window — session-level uses sessionStartRef; per-set uses lastSetAtRef.
-  // Both are anchored to session.createdAt once it loads (see effect below) so that
-  // resumed sessions use the real start time, not hook mount time.
-  const sessionStartRef = useRef<number>(Date.now());
-  const lastSetAtRef = useRef<number>(sessionStartRef.current);
-  const anchoredRef = useRef(false);
-
-  // Tracks the running best estimated 1RM per exercise (lowercased name) for
-  // this session. Lazily seeded on first set log per exercise from history,
-  // then bumped each time a PR-breaking set is logged so subsequent working
-  // sets in the same session don't re-fire.
-  const sessionPRsRef = useRef<Map<string, number>>(new Map());
-
   // Fetch session data
   const { data: session, isLoading, error } = useSession(sessionId);
 
+  // HR tracking window — session-level uses sessionStartRef; per-set uses
+  // lastSetAtRef (advanced inside logSetMutation).
+  const { sessionStartRef, lastSetAtRef } = useHrWindow(session?.createdAt);
+
+  // Session-scoped PR detection + toast
+  const { checkAndCelebratePR } = usePrCelebration(sessionId);
+
   // Per-exercise note mutation (paired with the RPE flow)
   const setExerciseNoteMutation = useSetExerciseNote(sessionId);
-
-  // Anchor session-level HR t=0 to session.createdAt once available. Run only
-  // once — after this, lastSetAtRef advances per-set inside logSetMutation and
-  // must not be clobbered by re-renders.
-  useEffect(() => {
-    if (anchoredRef.current) return;
-    if (!session?.createdAt) return;
-    const startMs = new Date(session.createdAt).getTime();
-    sessionStartRef.current = startMs;
-    lastSetAtRef.current = startMs;
-    anchoredRef.current = true;
-  }, [session?.createdAt]);
-
-  // PR check: lazy-loads historical sets the first time we see an exercise in
-  // this session, seeds the running ref with the pre-session best 1RM, and
-  // fires a toast when a logged set beats it. The ref bumps on each PR so
-  // subsequent sets compare against the running max, not the original
-  // baseline.
-  async function checkAndCelebratePR(savedSet: Set): Promise<void> {
-    if (savedSet.dropIndex > 0) return;
-    if (isCardioSet(savedSet)) return;
-    if (savedSet.weight <= 0 || savedSet.reps <= 0) return;
-
-    const key = savedSet.exerciseName.toLowerCase();
-    let runningBest = sessionPRsRef.current.get(key);
-
-    if (runningBest === undefined) {
-      try {
-        const data = await queryClient.fetchQuery({
-          queryKey: queryKeys.exerciseAllSets(savedSet.exerciseName),
-          queryFn: async () => {
-            const { data } = await api.get<{ sets: ExerciseAllSet[] }>(
-              '/exercises/all-sets-by-name',
-              { params: { name: savedSet.exerciseName } }
-            );
-            return data;
-          },
-          staleTime: 5 * 60 * 1000,
-        });
-        const preSessionBest = computeBestOneRepMax(data.sets);
-        // Skip first-ever exercise — silent baseline establishment.
-        if (preSessionBest <= 0) return;
-        sessionPRsRef.current.set(key, preSessionBest);
-        runningBest = preSessionBest;
-      } catch (err) {
-        console.error('Failed to fetch PR history for', savedSet.exerciseName, err);
-        return;
-      }
-    }
-
-    const new1RM = epleyOneRepMax(savedSet.weight, savedSet.reps);
-    if (new1RM > runningBest) {
-      toast.success(
-        `🎉 New PR! ${savedSet.exerciseName}: ${savedSet.weight}×${savedSet.reps} (est 1RM ${new1RM})`
-      );
-      sessionPRsRef.current.set(key, new1RM);
-    }
-  }
 
   // Log Set Mutation with Optimistic Update
   const logSetMutation = useMutation({
@@ -337,10 +273,10 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
       // Invalidate related queries
       queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
       queryClient.invalidateQueries({ queryKey: queryKeys.programs }); // Refreshes useNextWorkoutLocal
-      queryClient.invalidateQueries({ queryKey: ['history'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
       queryClient.invalidateQueries({ queryKey: queryKeys.stats });
-      queryClient.invalidateQueries({ queryKey: ['calendarSessions'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.calendarSessionsAll });
     },
     onError: () => {
       toast.error('Failed to complete workout. Please try again.');

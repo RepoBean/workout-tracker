@@ -4,7 +4,7 @@ import { useAiCoach, isCoachReady } from '../../shared/context/AiCoachContext';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
 import type { ProgramExportPayload } from '../../shared/api/types';
-import { useProgramMutations } from '../program-builder/hooks/usePrograms';
+import { useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
 import { createProvider } from './lib/providers';
 import { createCoachToolset } from './lib/tools';
@@ -40,7 +40,7 @@ function DisabledState() {
 
 export default function Coach() {
   const { settings } = useAiCoach();
-  const { importProgram } = useProgramMutations();
+  const importProgram = useImportProgram();
 
   const [thread, setThread] = useState<DisplayMessage[]>(() => loadThread());
   const [input, setInput] = useState('');

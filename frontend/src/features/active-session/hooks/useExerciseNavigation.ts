@@ -32,8 +32,12 @@ export interface UseExerciseNavigationResult {
     goToPrevious: () => void;
     /** Jump to a specific step */
     goToStep: (index: number) => void;
-    /** Get the flat exercise index for the current step (for insertion) */
-    getCurrentFlatIndex: () => number;
+    /** Get the flat exercise index where a step starts (for insertion) */
+    flatIndexForStep: (stepIndex: number) => number;
+    /** Get the step index containing a flat exercise index (-1 if out of range) */
+    stepForFlatIndex: (flatIndex: number) => number;
+    /** The first incomplete exercise after the current step (null if none) — where goToNext() lands */
+    nextIncompleteExercise: Exercise | null;
     /** Advance to next exercise in superset (called after logging a set) */
     rotateSupersetActive: () => void;
     /** Directly activate a superset exercise by its index within the current step */
@@ -272,23 +276,34 @@ export function useExerciseNavigation({
         }
     }, [currentStep, supersetActiveIndex]);
 
-    // Navigation functions
-    // goToNext skips forward over already-complete steps so the user always
-    // lands on an incomplete exercise. Mirrors rotateSupersetActive's behavior
-    // across steps instead of within a superset.
-    const goToNext = useCallback(() => {
+    // First incomplete step after the current one (-1 if none). Drives both
+    // goToNext and the "Up next" preview so they always agree.
+    const nextIncompleteStepIndex = useMemo(() => {
         for (let i = currentStepIndex + 1; i < steps.length; i++) {
             const step = steps[i];
             const complete = step.type === 'single'
                 ? isExerciseComplete(step.exercise.id)
                 : step.exercises.every(ex => isExerciseComplete(ex.id));
-            if (!complete) {
-                setCurrentStepIndex(i);
-                setSupersetActiveIndex(0);
-                return;
-            }
+            if (!complete) return i;
         }
+        return -1;
     }, [currentStepIndex, steps, isExerciseComplete]);
+
+    const nextIncompleteExercise = useMemo(() => {
+        if (nextIncompleteStepIndex === -1) return null;
+        const step = steps[nextIncompleteStepIndex];
+        return step.type === 'single' ? step.exercise : step.exercises[0];
+    }, [nextIncompleteStepIndex, steps]);
+
+    // Navigation functions
+    // goToNext skips forward over already-complete steps so the user always
+    // lands on an incomplete exercise. Mirrors rotateSupersetActive's behavior
+    // across steps instead of within a superset.
+    const goToNext = useCallback(() => {
+        if (nextIncompleteStepIndex === -1) return;
+        setCurrentStepIndex(nextIncompleteStepIndex);
+        setSupersetActiveIndex(0);
+    }, [nextIncompleteStepIndex]);
 
     const goToPrevious = useCallback(() => {
         if (currentStepIndex > 0) {
@@ -304,15 +319,27 @@ export function useExerciseNavigation({
         }
     }, [steps.length]);
 
-    // Get the flat exercise index for the current step (for parent's insertion logic)
-    const getCurrentFlatIndex = useCallback((): number => {
+    // Flat exercise index where a step starts (for parent's insertion logic)
+    const flatIndexForStep = useCallback((stepIndex: number): number => {
         let index = 0;
-        for (let i = 0; i < currentStepIndex && i < steps.length; i++) {
+        for (let i = 0; i < stepIndex && i < steps.length; i++) {
             const step = steps[i];
             index += step.type === 'single' ? 1 : step.exercises.length;
         }
         return index;
-    }, [currentStepIndex, steps]);
+    }, [steps]);
+
+    // Step index containing a flat exercise index (inverse of flatIndexForStep)
+    const stepForFlatIndex = useCallback((flatIndex: number): number => {
+        let count = 0;
+        for (let i = 0; i < steps.length; i++) {
+            const step = steps[i];
+            const stepSize = step.type === 'single' ? 1 : step.exercises.length;
+            if (flatIndex < count + stepSize) return i;
+            count += stepSize;
+        }
+        return -1;
+    }, [steps]);
 
     // Rotate superset active index — prefers the incomplete exercise with fewest logged sets (round-robin fairness)
     const rotateSupersetActive = useCallback(() => {
@@ -361,7 +388,9 @@ export function useExerciseNavigation({
         goToNext,
         goToPrevious,
         goToStep,
-        getCurrentFlatIndex,
+        flatIndexForStep,
+        stepForFlatIndex,
+        nextIncompleteExercise,
         rotateSupersetActive,
         setSupersetActive,
         isExerciseComplete,
