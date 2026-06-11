@@ -10,7 +10,11 @@ import { ProgressionProvider } from './shared/context/ProgressionContext';
 import { AiCoachProvider } from './shared/context/AiCoachContext';
 import { ToastProvider } from './shared/ui/Toast';
 import App from './App';
+import { sweepLegacySetInputKeys } from './features/active-session/lib/sessionStorage';
 import './index.css';
+
+// One-time cleanup of legacy unscoped SetInput override keys
+sweepLegacySetInputKeys();
 
 const queryClient = new QueryClient({
   defaultOptions: {

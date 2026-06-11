@@ -6,6 +6,7 @@ import { api } from '../../../shared/api/client';
 import { Button } from '../../../shared/ui/Button';
 import { Modal } from '../../../shared/ui/Modal';
 import { useToast } from '../../../shared/ui/Toast';
+import { clearSessionLocalState } from '../../active-session/lib/sessionStorage';
 
 export function ResumeWorkout() {
   const navigate = useNavigate();
@@ -18,7 +19,8 @@ export function ResumeWorkout() {
     mutationFn: async (sessionId: number) => {
       await api.delete(`/sessions/${sessionId}`);
     },
-    onSuccess: () => {
+    onSuccess: (_data, sessionId) => {
+      clearSessionLocalState(sessionId);
       toast.success('Workout discarded');
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });
       setShowDiscard(false);

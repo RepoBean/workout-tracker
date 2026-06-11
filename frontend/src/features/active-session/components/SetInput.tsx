@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useParams } from 'react-router-dom';
 import { PlateCalculator } from './PlateCalculator';
+import { getSetInputStorageKeys } from '../lib/sessionStorage';
 
 interface SetInputProps {
   exerciseId: number | null;
@@ -31,8 +33,10 @@ export function SetInput({
   dropIndex,
   isDropSet = false,
 }: SetInputProps) {
-  const weightOverrideKey = `set-weight-${exerciseName}-${setNumber}`;
-  const repsOverrideKey = `set-reps-${exerciseName}-${setNumber}`;
+  const { id } = useParams<{ id: string }>();
+  const sessionId = Number(id);
+  const { weight: weightOverrideKey, reps: repsOverrideKey } =
+    getSetInputStorageKeys(sessionId, exerciseName, setNumber);
 
   // Use string state for display to prevent leading zeros issue
   const [weight, setWeight] = useState(() => {
