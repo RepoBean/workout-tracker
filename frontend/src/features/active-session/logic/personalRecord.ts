@@ -6,9 +6,9 @@
  * as a PR.
  */
 
-export function epleyOneRepMax(weight: number, reps: number): number {
-  return Math.round(weight * (1 + reps / 30));
-}
+import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
+
+export { epleyOneRepMax };
 
 export function computeBestOneRepMax(
   sets: Array<{

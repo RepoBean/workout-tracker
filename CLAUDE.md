@@ -139,16 +139,32 @@ src/
 │   │   │   └── useProgressData.ts
 │   │   └── index.tsx              # Tabbed progress page entry
 │   │
-│   └── dashboard/                 # Home/landing page
+│   ├── dashboard/                 # Home/landing page
+│   │   ├── components/
+│   │   │   ├── NextWorkout.tsx    # "What's Next?" display
+│   │   │   ├── Calendar.tsx       # Month view with workout dots
+│   │   │   ├── ResumeWorkout.tsx
+│   │   │   ├── AdHocWorkoutPicker.tsx  # Quick workout modal
+│   │   │   └── StatsCard.tsx
+│   │   ├── hooks/
+│   │   │   └── useNextWorkoutLocal.ts  # Client-side next workout calc
+│   │   └── index.tsx              # Home page entry
+│   │
+│   └── coach/                     # AI Coach (opt-in, BYO API key)
 │       ├── components/
-│       │   ├── NextWorkout.tsx    # "What's Next?" display
-│       │   ├── Calendar.tsx       # Month view with workout dots
-│       │   ├── ResumeWorkout.tsx
-│       │   ├── AdHocWorkoutPicker.tsx  # Quick workout modal
-│       │   └── StatsCard.tsx
-│       ├── hooks/
-│       │   └── useNextWorkoutLocal.ts  # Client-side next workout calc
-│       └── index.tsx              # Home page entry
+│       │   └── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
+│       ├── lib/
+│       │   ├── providers/
+│       │   │   ├── types.ts           # Provider interface
+│       │   │   ├── presets.ts         # Known providers (Anthropic, OpenAI, etc.)
+│       │   │   ├── anthropic.ts       # Anthropic SDK adapter
+│       │   │   ├── openaiCompatible.ts # OpenAI-compatible fetch adapter
+│       │   │   └── index.ts           # createProvider factory
+│       │   ├── coachLoop.ts           # Neutral agentic loop (tool calls)
+│       │   ├── tools.ts               # Read-only tools over existing /api endpoints
+│       │   ├── persona.ts             # System prompt
+│       │   └── thread.ts              # localStorage thread persistence
+│       └── index.tsx                  # Coach page entry
 │
 ├── shared/
 │   ├── ui/                        # Generic, reusable UI components
@@ -166,7 +182,8 @@ src/
 │   └── context/
 │       ├── TimerContext.tsx       # Global rest timer (survives navigation)
 │       ├── OfflineContext.tsx     # Online/offline status
-│       └── ThemeContext.tsx       # Dark mode state
+│       ├── ThemeContext.tsx       # Dark mode state
+│       └── AiCoachContext.tsx     # AI Coach settings + enabled state
 │
 ├── App.tsx                        # Router setup + context providers
 └── main.tsx                       # Entry point
@@ -343,6 +360,18 @@ backend/
 - Previous data hints fetched by exercise name via `/api/exercises/history-by-name`
 - Does NOT modify the workout definition — session-only
 
+### 16. BYO-Key AI Coach
+- Opt-in chat coach at `/coach` — tab only shown when enabled in Settings
+- Bring your own API key: supports Anthropic, OpenAI, OpenRouter, Google AI Studio, or any OpenAI-compatible endpoint
+- Provider abstraction in `features/coach/lib/providers/` — Anthropic uses `@anthropic-ai/sdk` directly; all others use a fetch-based OpenAI-compatible adapter
+- Neutral agentic loop (`coachLoop.ts`) handles tool call cycles across providers
+- Read-only tools (`tools.ts`) over existing `/api` endpoints — the AI never writes the database
+- "Build a program" flow emits version-1 export JSON into the existing import preview Modal (reuses the existing import path)
+- Conversation thread persisted in localStorage
+- Google AI Studio routed through `/ai-proxy/google/` nginx+Vite same-origin proxy (avoids CORS)
+- Settings card: provider selector, model picker with live `listModels` fetch + free-text fallback, API key input, thread clear button
+- Config in `shared/context/AiCoachContext.tsx`; backend untouched
+
 ---
 
 ## Established Patterns
@@ -458,6 +487,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | 9c148f1 | Fix: Progress page dark mode tooltips, 1RM calculation, dropdown, error states |
 | — | Schema: Add `Session.exerciseNotes` JSON column (per-exercise notes captured in RPE prompt). Keyed by exercise name. Chose Session-level over Set-level to avoid replicating the same string across every set of an exercise. |
 | c685617 | Feature: Auto-Progression — opt-in deterministic double-progression hint. When every working set tops the rep range at one weight, suggests a weight bump (default 5 lb) and resets reps to the bottom of the range. Pure logic + tests, localStorage context, Settings card. Session-time hint only; never edits the program. |
+| — | Feature: BYO-Key AI Coach — opt-in chat coach in `features/coach/`. Multi-provider (Anthropic via `@anthropic-ai/sdk`; OpenAI/OpenRouter/Google AI Studio/Custom via a fetch-based OpenAI-compatible adapter). Provider abstraction in `lib/providers/`, neutral agentic loop (`coachLoop.ts`), read-only tools over existing `/api` endpoints (`tools.ts`), persisted thread in localStorage. Settings card with dynamic model fetch (`listModels`) + free-text fallback. AI never writes the DB — "build a program" emits version-1 export JSON into the existing import preview Modal. Google routed through a same-origin `/ai-proxy/google/` nginx+Vite proxy (no CORS header). Config in `shared/context/AiCoachContext.tsx`; `/coach` route + tab shown only when enabled. Backend untouched. Also extracted `epleyOneRepMax` to `shared/lib/oneRepMax.ts`. |
 
 ---
 

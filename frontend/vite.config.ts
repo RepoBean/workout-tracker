@@ -10,6 +10,13 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3002',
         changeOrigin: true
+      },
+      // Same-origin proxy for Google Gemini (no CORS header) in dev.
+      '/ai-proxy/google': {
+        target: 'https://generativelanguage.googleapis.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/ai-proxy\/google/, '')
       }
     }
   }

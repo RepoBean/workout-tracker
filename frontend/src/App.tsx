@@ -5,7 +5,9 @@ import Progress from './features/progress';
 import ActiveSession from './features/active-session';
 import History from './features/history';
 import Settings from './features/settings';
+import Coach from './features/coach';
 import { useOffline } from './shared/context/OfflineContext';
+import { useAiCoach } from './shared/context/AiCoachContext';
 import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
 
@@ -38,6 +40,12 @@ function TabIcon({ name, active }: { name: string; active: boolean }) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       );
+    case 'coach':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-4 4v-4z" />
+        </svg>
+      );
     default:
       return null;
   }
@@ -45,6 +53,7 @@ function TabIcon({ name, active }: { name: string; active: boolean }) {
 
 function BottomTabBar() {
   const location = useLocation();
+  const { settings } = useAiCoach();
 
   // Hide tab bar during active workout session
   if (location.pathname.startsWith('/workout/')) return null;
@@ -54,6 +63,7 @@ function BottomTabBar() {
     { to: '/programs', label: 'Programs', icon: 'programs' },
     { to: '/progress', label: 'Progress', icon: 'progress' },
     { to: '/history', label: 'History', icon: 'history' },
+    ...(settings.enabled ? [{ to: '/coach', label: 'Coach', icon: 'coach' }] : []),
   ];
 
   return (
@@ -136,6 +146,14 @@ function AppContent() {
               }
             />
             <Route path="/history" element={<History />} />
+            <Route
+              path="/coach"
+              element={
+                <ErrorBoundary>
+                  <Coach />
+                </ErrorBoundary>
+              }
+            />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </ErrorBoundary>

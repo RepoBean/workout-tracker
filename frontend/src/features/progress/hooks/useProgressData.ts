@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioExercise, isCardioSet } from '../../../shared/api/predicates';
+import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 
 export interface ExerciseSession {
     sessionId: number;
@@ -191,7 +192,7 @@ export function useProgressData(): UseProgressDataReturn {
                         bestVolume = volume;
                     }
                     // Epley formula: track highest 1RM across all sets
-                    const estimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                    const estimated1RM = epleyOneRepMax(set.weight, set.reps);
                     if (estimated1RM > bestEstimated1RM) {
                         bestEstimated1RM = estimated1RM;
                     }
@@ -431,7 +432,7 @@ export function useProgressData(): UseProgressDataReturn {
                 }
 
                 // Track best estimated 1RM independently
-                const estimated1RM = Math.round(set.weight * (1 + set.reps / 30));
+                const estimated1RM = epleyOneRepMax(set.weight, set.reps);
                 const existing1RM = best1RMByExercise.get(set.exerciseName);
                 if (!existing1RM || estimated1RM > existing1RM.estimated1RM) {
                     best1RMByExercise.set(set.exerciseName, {
@@ -449,7 +450,7 @@ export function useProgressData(): UseProgressDataReturn {
         const records: PersonalRecord[] = [];
         bestVolumeByExercise.forEach((best, exerciseName) => {
             const best1RM = best1RMByExercise.get(exerciseName);
-            const estimated1RM = best1RM?.estimated1RM ?? Math.round(best.weight * (1 + best.reps / 30));
+            const estimated1RM = best1RM?.estimated1RM ?? epleyOneRepMax(best.weight, best.reps);
             const prDate = new Date(best.date);
             const isRecentPR = prDate >= thirtyDaysAgo;
 

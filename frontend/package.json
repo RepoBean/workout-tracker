@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
     "@tanstack/react-query": "^5.64.0",
     "axios": "^1.7.9",
     "canvas-confetti": "^1.9.4",

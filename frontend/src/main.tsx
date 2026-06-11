@@ -7,6 +7,7 @@ import { OfflineProvider } from './shared/context/OfflineContext';
 import { HeartRateProvider } from './shared/context/HeartRateContext';
 import { UserProfileProvider } from './shared/context/UserProfileContext';
 import { ProgressionProvider } from './shared/context/ProgressionContext';
+import { AiCoachProvider } from './shared/context/AiCoachContext';
 import { ToastProvider } from './shared/ui/Toast';
 import App from './App';
 import './index.css';
@@ -31,9 +32,11 @@ createRoot(document.getElementById('root')!).render(
             <HeartRateProvider>
               <UserProfileProvider>
                 <ProgressionProvider>
-                  <ToastProvider>
-                    <App />
-                  </ToastProvider>
+                  <AiCoachProvider>
+                    <ToastProvider>
+                      <App />
+                    </ToastProvider>
+                  </AiCoachProvider>
                 </ProgressionProvider>
               </UserProfileProvider>
             </HeartRateProvider>
