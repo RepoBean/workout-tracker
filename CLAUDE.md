@@ -154,7 +154,8 @@ src/
 │   │
 │   └── coach/                     # AI Coach (opt-in, BYO API key)
 │       ├── components/
-│       │   └── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
+│       │   ├── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
+│       │   └── CoachMarkdown.tsx        # Markdown renderer for assistant bubbles
 │       ├── lib/
 │       │   ├── providers/
 │       │   │   ├── types.ts           # Provider interface
@@ -493,6 +494,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | UX: ExerciseCard interaction pass — whole logged-set row is the tap-to-edit target with a pencil hint at row end, full-width edit row (44px select-on-focus inputs + 44px Save/Cancel), note/swap header icons bumped to 44px hit areas, set rows min-h 44px. Note view/edit/clear widget extracted to `ExerciseNote.tsx`; ExerciseCard back under 500 lines. |
 | — | UX: Superset fixed-position cards — cards stay in program order and the active exercise expands in place (no more physical reordering on rotation). Extracted superset block to `SupersetStep.tsx` with a `renderExerciseCard` render prop shared with the single-exercise branch (kills the duplicated ExerciseCard wiring). Collapsed-card tap now uses a direct `setSupersetActive(idx)` on the navigation hook instead of loop-rotating — tapping a completed card now reliably expands it. Rotation-after-set logic unchanged. |
 | — | Fix: SetInput localStorage override leak — weight/reps overrides are now session-scoped (`wt:setinput:${sessionId}:...`, key builders in `lib/sessionStorage.ts`; SetInput reads sessionId from route params like CardioSetInput). `clearSessionLocalState` sweeps the prefix on complete/delete; dashboard discard now also calls `clearSessionLocalState` (was missing). One-time legacy sweep of unscoped `set-weight-*`/`set-reps-*` keys at app start (`main.tsx`). |
+| — | UX: Coach polish — assistant bubbles render markdown via `react-markdown` + `remark-gfm` (`CoachMarkdown.tsx`; user messages stay plain, streaming draft renders live). Composer sticky offset now matches the tab bar exactly (`bottom-[calc(56px+env(safe-area-inset-bottom))]`). Starter chips send immediately instead of filling the input. Errors report once (in-thread ⚠️ bubble only; toast dropped). |
 
 ---
 

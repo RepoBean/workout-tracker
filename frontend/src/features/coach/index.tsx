@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom';
 import { useAiCoach, isCoachReady } from '../../shared/context/AiCoachContext';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
-import { useToast } from '../../shared/ui/Toast';
 import type { ProgramExportPayload } from '../../shared/api/types';
 import { useProgramMutations } from '../program-builder/hooks/usePrograms';
+import { CoachMarkdown } from './components/CoachMarkdown';
 import { createProvider } from './lib/providers';
 import { createCoachToolset } from './lib/tools';
 import { runCoach } from './lib/coachLoop';
@@ -40,7 +40,6 @@ function DisabledState() {
 
 export default function Coach() {
   const { settings } = useAiCoach();
-  const toast = useToast();
   const { importProgram } = useProgramMutations();
 
   const [thread, setThread] = useState<DisplayMessage[]>(() => loadThread());
@@ -93,7 +92,6 @@ export default function Coach() {
       setThread([...base, { role: 'assistant', content: result.finalText || '(no response)' }]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      toast.error(message);
       setThread([...base, { role: 'assistant', content: `⚠️ ${message}` }]);
     } finally {
       setBusy(false);
@@ -144,22 +142,22 @@ export default function Coach() {
             className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap break-words ${
+              className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm break-words ${
                 msg.role === 'user'
-                  ? 'bg-primary-600 text-white rounded-br-sm'
+                  ? 'bg-primary-600 text-white rounded-br-sm whitespace-pre-wrap'
                   : 'bg-white dark:bg-surface-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-white/[0.06] rounded-bl-sm'
               }`}
             >
-              {msg.content}
+              {msg.role === 'assistant' ? <CoachMarkdown content={msg.content} /> : msg.content}
             </div>
           </div>
         ))}
 
         {busy && (
           <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm whitespace-pre-wrap break-words bg-white dark:bg-surface-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-white/[0.06]">
+            <div className="max-w-[85%] rounded-2xl rounded-bl-sm px-4 py-2.5 text-sm break-words bg-white dark:bg-surface-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-white/[0.06]">
               {draft ? (
-                draft
+                <CoachMarkdown content={draft} />
               ) : toolStatus ? (
                 <span className="text-gray-500 dark:text-gray-400 italic">{toolStatus}</span>
               ) : (
@@ -172,12 +170,12 @@ export default function Coach() {
         <div ref={bottomRef} />
       </div>
 
-      <div className="sticky bottom-20 mt-3 pt-2 bg-surface-50/90 dark:bg-surface-900/90 backdrop-blur">
+      <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] mt-3 pt-2 bg-surface-50/90 dark:bg-surface-900/90 backdrop-blur">
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
           {STARTERS.map((s) => (
             <button
               key={s.label}
-              onClick={() => setInput(s.prompt)}
+              onClick={() => send(s.prompt)}
               disabled={busy}
               className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-gray-700 dark:text-gray-300 hover:border-primary-300 dark:hover:border-primary-700 disabled:opacity-40"
             >
