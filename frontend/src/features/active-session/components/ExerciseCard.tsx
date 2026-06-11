@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { SetInput } from './SetInput';
 import { CardioSetInput } from './CardioSetInput';
+import { ExerciseNote } from './ExerciseNote';
 import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
@@ -53,22 +54,6 @@ export function ExerciseCard({
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [showNote, setShowNote] = useState(false);
-  const [editingNote, setEditingNote] = useState<string | null>(null);
-  const isEditingNote = editingNote !== null;
-
-  const handleNoteSave = () => {
-    if (editingNote === null || !onSetNote) return;
-    const trimmed = editingNote.trim();
-    onSetNote(trimmed === '' ? null : trimmed);
-    setEditingNote(null);
-  };
-
-  const handleNoteClear = () => {
-    if (!onSetNote) return;
-    if (!confirm('Delete note?')) return;
-    onSetNote(null);
-    setEditingNote(null);
-  };
   const isCardio = isCardioExercise(exercise);
   const { settings: progressionSettings } = useProgression();
 
@@ -176,7 +161,9 @@ export function ExerciseCard({
             {note && (
               <button
                 onClick={() => setShowNote(s => !s)}
-                className="ml-2 p-1.5 text-amber-500 hover:text-amber-600
+                className="ml-1 -my-2 min-w-[44px] min-h-[44px]
+                           flex items-center justify-center
+                           text-amber-500 hover:text-amber-600
                            dark:text-amber-400 dark:hover:text-amber-300
                            rounded-lg hover:bg-amber-50 dark:hover:bg-amber-900/20
                            transition-colors shrink-0"
@@ -184,7 +171,7 @@ export function ExerciseCard({
                 aria-expanded={showNote}
                 title="Toggle note"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M9 12h6m-6 4h4m1-12H7a2 2 0 00-2 2v14l4-3h8a2 2 0 002-2V8l-4-4z" />
                 </svg>
@@ -193,14 +180,16 @@ export function ExerciseCard({
             {onSwapExercise && (
               <button
                 onClick={onSwapExercise}
-                className="ml-2 p-1.5 text-gray-400 hover:text-primary-600
+                className="ml-1 -my-2 min-w-[44px] min-h-[44px]
+                           flex items-center justify-center
+                           text-gray-400 hover:text-primary-600
                            dark:hover:text-primary-400 rounded-lg
                            hover:bg-gray-100 dark:hover:bg-gray-700
                            transition-colors shrink-0"
                 aria-label="Swap exercise"
                 title="Replace exercise"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                     d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
@@ -208,76 +197,7 @@ export function ExerciseCard({
             )}
           </div>
           {note && showNote && (
-            <div className="mt-1 px-3 py-2 text-sm
-                            bg-amber-50 dark:bg-amber-900/20
-                            text-amber-800 dark:text-amber-200
-                            rounded-lg">
-              {isEditingNote ? (
-                <>
-                  <textarea
-                    value={editingNote ?? ''}
-                    onChange={(e) => setEditingNote(e.target.value)}
-                    rows={3}
-                    autoFocus
-                    className="w-full bg-white dark:bg-surface-800
-                               border border-amber-200 dark:border-amber-700/50
-                               rounded p-2 text-sm
-                               text-amber-900 dark:text-amber-100
-                               focus:outline-none focus:ring-2 focus:ring-amber-400"
-                  />
-                  <div className="flex justify-end gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingNote(null)}
-                      className="text-xs px-2 py-1 rounded
-                                 text-amber-700 dark:text-amber-300
-                                 hover:bg-amber-100 dark:hover:bg-amber-900/30
-                                 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleNoteSave}
-                      className="text-xs px-2 py-1 rounded font-medium
-                                 bg-amber-500 text-white hover:bg-amber-600
-                                 dark:bg-amber-600 dark:hover:bg-amber-500
-                                 transition-colors"
-                    >
-                      Save
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p className="italic whitespace-pre-wrap break-words">{note}</p>
-                  {onSetNote && (
-                    <div className="flex justify-end gap-2 mt-2">
-                      <button
-                        type="button"
-                        onClick={handleNoteClear}
-                        className="text-xs px-2 py-1 rounded
-                                   text-amber-700 dark:text-amber-300
-                                   hover:bg-amber-100 dark:hover:bg-amber-900/30
-                                   transition-colors"
-                      >
-                        Clear
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setEditingNote(note)}
-                        className="text-xs px-2 py-1 rounded
-                                   text-amber-700 dark:text-amber-300
-                                   hover:bg-amber-100 dark:hover:bg-amber-900/30
-                                   transition-colors"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            <ExerciseNote note={note} onSetNote={onSetNote} />
           )}
           <p className="text-sm text-gray-500 dark:text-gray-400">
             {isCardio ? (
@@ -335,76 +255,110 @@ export function ExerciseCard({
           const dropSets = dropSetsBySetNumber.get(setNumber) || [];
           const showBetterHighlight = currentSet && isBetter(currentSet, previousSet);
 
+          const previousCell = (
+            <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2 tabular-nums">
+              {previousSet ? (
+                <>
+                  {previousSet.weight}×{previousSet.reps}
+                  {previousSet.perceivedEffort != null && (
+                    <span className="ml-1 text-xs text-gray-500">RPE {previousSet.perceivedEffort}</span>
+                  )}
+                </>
+              ) : '—'}
+            </div>
+          );
+          const arrowCell = <span className="text-gray-400 dark:text-gray-500 text-sm">→</span>;
+
           return (
             <div key={setNumber}>
               {/* Main set row */}
-              <div
-                className={`grid grid-cols-[1fr_auto_2fr] gap-2 items-center py-1.5 rounded-lg
-                           ${isCurrentRow ? 'bg-primary-50 dark:bg-primary-900/20' : ''}
-                           ${showBetterHighlight ? 'bg-green-50 dark:bg-green-900/10' : ''}`}
-              >
-                {/* Last time (left - 1/3 width) */}
-                <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2 tabular-nums">
-                  {previousSet ? (
-                    <>
-                      {previousSet.weight}×{previousSet.reps}
-                      {previousSet.perceivedEffort != null && (
-                        <span className="ml-1 text-xs text-gray-500">RPE {previousSet.perceivedEffort}</span>
-                      )}
-                    </>
-                  ) : '—'}
+              {currentSet && isEditing ? (
+                /* Full-width edit row */
+                <div className="flex items-center gap-2 py-1.5">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    pattern="[0-9]*\.?[0-9]*"
+                    aria-label="Edit weight in pounds"
+                    value={editingSet?.weight ?? ''}
+                    onChange={(e) => setEditingSet(prev => prev ? { ...prev, weight: e.target.value } : null)}
+                    onFocus={(e) => e.target.select()}
+                    autoFocus
+                    className="flex-1 min-w-0 h-11 text-center text-lg font-semibold tabular-nums
+                               border-2 border-gray-200 dark:border-surface-800 rounded-lg
+                               bg-white dark:bg-surface-900 dark:text-white
+                               focus:border-primary-500 focus:ring-0 transition-colors"
+                  />
+                  <span className="text-gray-400 dark:text-gray-500 shrink-0">×</span>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    aria-label="Edit number of reps"
+                    value={editingSet?.reps ?? ''}
+                    onChange={(e) => setEditingSet(prev => prev ? { ...prev, reps: e.target.value } : null)}
+                    onFocus={(e) => e.target.select()}
+                    className="flex-1 min-w-0 h-11 text-center text-lg font-semibold tabular-nums
+                               border-2 border-gray-200 dark:border-surface-800 rounded-lg
+                               bg-white dark:bg-surface-900 dark:text-white
+                               focus:border-primary-500 focus:ring-0 transition-colors"
+                  />
+                  <Button variant="primary" size="sm" className="min-w-[44px] shrink-0"
+                          onClick={handleSaveEdit} aria-label="Save set">
+                    ✓
+                  </Button>
+                  <Button variant="secondary" size="sm" className="min-w-[44px] shrink-0"
+                          onClick={() => setEditingSet(null)} aria-label="Cancel edit">
+                    ✕
+                  </Button>
                 </div>
-
-                {/* Arrow */}
-                <span className="text-gray-400 dark:text-gray-500 text-sm">→</span>
-
-                {/* This time (right) */}
-                <div>
-                  {currentSet ? (
-                    isEditing ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          value={editingSet?.weight ?? ''}
-                          onChange={(e) => setEditingSet(prev => prev ? { ...prev, weight: e.target.value } : null)}
-                          className="w-12 text-center text-sm font-semibold border rounded py-0.5
-                                     dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                          autoFocus
-                        />
-                        <span className="text-xs">×</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={editingSet?.reps ?? ''}
-                          onChange={(e) => setEditingSet(prev => prev ? { ...prev, reps: e.target.value } : null)}
-                          className="w-10 text-center text-sm font-semibold border rounded py-0.5
-                                     dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-                        />
-                        <Button variant="primary" size="sm" onClick={handleSaveEdit}>
-                          ✓
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => setEditingSet(null)}>
-                          ✕
-                        </Button>
-                      </div>
-                    ) : (
-                      <SwipeableRow
-                        onSwipeLeft={() => onDeleteSet(currentSet.id)}
-                        disabled={currentSet.id < 0}
-                      >
-                        <span
-                          className={`font-medium cursor-pointer ${showBetterHighlight ? 'text-green-600 dark:text-green-400' : 'text-green-600 dark:text-green-400'}`}
-                          onClick={() => handleSetTap(currentSet)}
-                        >
+              ) : currentSet ? (
+                /* Logged set — whole row taps to edit, swipes to delete */
+                <SwipeableRow
+                  onSwipeLeft={() => onDeleteSet(currentSet.id)}
+                  disabled={currentSet.id < 0}
+                >
+                  {/* Opaque layer matching the card bg so the translucent row
+                      highlight renders the same as outside the SwipeableRow */}
+                  <div className="bg-white dark:bg-surface-800 rounded-lg">
+                    <div
+                      role={onUpdateSet ? 'button' : undefined}
+                      tabIndex={onUpdateSet ? 0 : undefined}
+                      onClick={() => handleSetTap(currentSet)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSetTap(currentSet); }}
+                      className={`grid grid-cols-[1fr_auto_2fr] gap-2 items-center min-h-[44px] py-1.5 rounded-lg
+                                 ${onUpdateSet ? 'cursor-pointer' : ''}
+                                 ${showBetterHighlight ? 'bg-green-50 dark:bg-green-900/10' : ''}`}
+                    >
+                      {previousCell}
+                      {arrowCell}
+                      <div className="flex items-center justify-between gap-1 min-w-0">
+                        <span className="font-medium text-green-600 dark:text-green-400 truncate">
                           ✓ {currentSet.weight}×{currentSet.reps}
                           {currentSet.perceivedEffort && (
                             <span className="ml-1 text-xs text-gray-500">RPE {currentSet.perceivedEffort}</span>
                           )}
                         </span>
-                      </SwipeableRow>
-                    )
-                  ) : isCurrentRow ? (
+                        {onUpdateSet && (
+                          <svg className="w-4 h-4 mr-1 text-gray-300 dark:text-gray-600 shrink-0"
+                               fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                              d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </SwipeableRow>
+              ) : (
+                /* Not yet logged */
+                <div
+                  className={`grid grid-cols-[1fr_auto_2fr] gap-2 items-center min-h-[44px] py-1.5 rounded-lg
+                             ${isCurrentRow ? 'bg-primary-50 dark:bg-primary-900/20' : ''}`}
+                >
+                  {previousCell}
+                  {arrowCell}
+                  {isCurrentRow ? (
                     <span className="text-primary-600 dark:text-primary-400 font-medium text-sm">
                       Set {setNumber}
                     </span>
@@ -412,7 +366,7 @@ export function ExerciseCard({
                     <span className="text-gray-400 dark:text-gray-500 text-sm">—</span>
                   )}
                 </div>
-              </div>
+              )}
 
               {/* Drop sets (indented, displayed but not editable via UI) */}
               {dropSets.map((dropSet) => (

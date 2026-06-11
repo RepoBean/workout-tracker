@@ -94,6 +94,7 @@ src/
 │   │   ├── components/
 │   │   │   ├── SetInput.tsx       # Weight/reps/RPE input
 │   │   │   ├── ExerciseCard.tsx   # Single exercise with all its sets
+│   │   │   ├── ExerciseNote.tsx   # Per-exercise note view/edit/clear widget
 │   │   │   ├── CompletionCelebration.tsx  # Session complete animation
 │   │   │   ├── PlateCalculator.tsx
 │   │   │   ├── SessionHeader.tsx
@@ -488,6 +489,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Schema: Add `Session.exerciseNotes` JSON column (per-exercise notes captured in RPE prompt). Keyed by exercise name. Chose Session-level over Set-level to avoid replicating the same string across every set of an exercise. |
 | c685617 | Feature: Auto-Progression — opt-in deterministic double-progression hint. When every working set tops the rep range at one weight, suggests a weight bump (default 5 lb) and resets reps to the bottom of the range. Pure logic + tests, localStorage context, Settings card. Session-time hint only; never edits the program. |
 | — | Feature: BYO-Key AI Coach — opt-in chat coach in `features/coach/`. Multi-provider (Anthropic via `@anthropic-ai/sdk`; OpenAI/OpenRouter/Google AI Studio/Custom via a fetch-based OpenAI-compatible adapter). Provider abstraction in `lib/providers/`, neutral agentic loop (`coachLoop.ts`), read-only tools over existing `/api` endpoints (`tools.ts`), persisted thread in localStorage. Settings card with dynamic model fetch (`listModels`) + free-text fallback. AI never writes the DB — "build a program" emits version-1 export JSON into the existing import preview Modal. Google routed through a same-origin `/ai-proxy/google/` nginx+Vite proxy (no CORS header). Config in `shared/context/AiCoachContext.tsx`; `/coach` route + tab shown only when enabled. Backend untouched. Also extracted `epleyOneRepMax` to `shared/lib/oneRepMax.ts`. |
+| — | UX: ExerciseCard interaction pass — whole logged-set row is the tap-to-edit target with a pencil hint at row end, full-width edit row (44px select-on-focus inputs + 44px Save/Cancel), note/swap header icons bumped to 44px hit areas, set rows min-h 44px. Note view/edit/clear widget extracted to `ExerciseNote.tsx`; ExerciseCard back under 500 lines. |
 
 ---
 
