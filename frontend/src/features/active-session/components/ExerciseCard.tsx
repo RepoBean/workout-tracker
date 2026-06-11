@@ -23,7 +23,6 @@ interface ExerciseCardProps {
     reps: number;
     setNumber: number;
     perceivedEffort?: number;
-    dropIndex?: number;
     durationSec?: number | null;
     distance?: number | null;
   }) => void;

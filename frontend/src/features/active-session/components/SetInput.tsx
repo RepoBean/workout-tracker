@@ -15,11 +15,8 @@ interface SetInputProps {
     weight: number;
     reps: number;
     setNumber: number;
-    dropIndex?: number;
   }) => void;
   isLogging?: boolean;
-  dropIndex?: number;
-  isDropSet?: boolean;
 }
 
 export function SetInput({
@@ -30,8 +27,6 @@ export function SetInput({
   previousReps = 10,
   onLogSet,
   isLogging = false,
-  dropIndex,
-  isDropSet = false,
 }: SetInputProps) {
   const { id } = useParams<{ id: string }>();
   const sessionId = Number(id);
@@ -150,7 +145,6 @@ export function SetInput({
       weight,
       reps,
       setNumber,
-      dropIndex: isDropSet ? dropIndex : undefined,
     });
     // Reset dirty flag and clear overrides so next set can receive fresh hints
     isDirty.current = false;
@@ -158,19 +152,10 @@ export function SetInput({
     localStorage.removeItem(repsOverrideKey);
   };
 
-  const label = isDropSet ? `Drop ${dropIndex}` : `Set ${setNumber}`;
-  const buttonLabel = isDropSet ? `Log Drop ${dropIndex}` : `Log Set ${setNumber}`;
-
   return (
-    <div className={`rounded-card p-4 space-y-4 ${isDropSet
-      ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
-      : 'bg-surface-100 dark:bg-surface-850'
-      }`}>
-      <div className={`text-sm font-display font-bold ${isDropSet
-        ? 'text-orange-600 dark:text-orange-400'
-        : 'text-gray-500 dark:text-gray-400'
-        }`}>
-        {label}
+    <div className="rounded-card p-4 space-y-4 bg-surface-100 dark:bg-surface-850">
+      <div className="text-sm font-display font-bold text-gray-500 dark:text-gray-400">
+        Set {setNumber}
       </div>
 
       {/* Weight Input */}
@@ -249,7 +234,7 @@ export function SetInput({
                    active:scale-[0.97] transition-all shadow-sm
                    disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {isLogging ? 'Logging...' : buttonLabel}
+        {isLogging ? 'Logging...' : `Log Set ${setNumber}`}
       </button>
     </div>
   );

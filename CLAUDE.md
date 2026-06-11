@@ -299,10 +299,10 @@ backend/
 - Standard plates: 45, 35, 25, 10, 5, 2.5
 - Show inline or as quick modal during set logging
 
-### 4. Drop Set Support
-- Exercise can be marked for drop sets
-- Log each drop as same `setNumber` but incrementing `dropIndex`
-- Example: Set 1 (100lbs), Drop 1 (80lbs), Drop 2 (60lbs)
+### 4. Drop Set Support (display only)
+- No logging UI — the drop-set input mode was removed from SetInput (unused; schema retained for possible future use)
+- Schema: `dropIndex` on Sets — standard sets `0`, drops `1, 2, 3...`
+- Historical drop sets still display (indented orange rows in ExerciseCard, History, Progress) and support swipe-delete
 
 ### 5. Dark Mode
 - Manual toggle (Light/Dark)
@@ -502,6 +502,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Dark token sweep — migrated all `dark:(bg\|border\|hover:bg)-gray-(600-900)` surface styles (~60 across 19 files) to `surface-*` tokens. Added missing `surface-600` (#3F3F4E) and `surface-700` (#32323F) palette stops — coach/HeartRatePill already referenced surface-700 but the token didn't exist (classes were silently dead). Conventions: inputs `dark:bg-surface-900 dark:border-surface-800`; popovers `dark:bg-surface-800` + `border-surface-700`; borders/dividers/skeletons `surface-700`; hover on card `surface-700`, on page bg `surface-800`. SwipeableRow backdrop `gray-900`→`surface-800` (matches card; removed ExerciseCard's opaque-wrapper workaround). text-gray-* untouched. |
 | — | Code health bundle — extracted `CompletedSessionSummary.tsx` from active-session index (633→542 lines); step↔flat-index math + "up next" scan moved into `useExerciseNavigation` (`flatIndexForStep`/`stepForFlatIndex`/`nextIncompleteExercise`; replaced `getCurrentFlatIndex`, `goToNext` shares the scan); PR detection extracted to `usePrCelebration.ts` and HR-window refs to `useHrWindow.ts` (useActiveSession 369→305 lines); raw `['history']`/`['stats']`/`['calendarSessions']` invalidations now use the `queryKeys` factory (added `calendarSessionsAll`); import-program mutation moved to `shared/api/queries.ts` as `useImportProgram` (coach no longer imports from program-builder; `useProgramMutations` delegates); ExerciseListDropdown drag hit-test scoped to a container ref instead of `document.querySelectorAll`. No behavior changes. |
 | — | UX odds and ends — Discard Workout action on the active session screen (red text button at page bottom; `confirm()` → delete session → stop timer → navigate home). Discard mutation extracted to `hooks/useDiscardSession.ts` (DELETE + `clearSessionLocalState` + activeSession invalidation + toasts); dashboard Resume card now uses the same hook. Progress tab labels shortened to "Exercises / Volume / Records" so all three fit without horizontal scroll. |
+| — | Cleanup: Drop-set dead code removal — removed unused `isDropSet`/`dropIndex` props and the orange drop input mode from `SetInput.tsx` (zero callers), plus the dead `dropIndex` field from ExerciseCard's `onLogSet` contract. Schema, historical drop-set display, and swipe-delete unchanged. |
 
 ---
 
