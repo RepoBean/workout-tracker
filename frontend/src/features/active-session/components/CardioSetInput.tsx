@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useHeartRate } from '../../../shared/context/HeartRateContext';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { estimateMaxHr, getZone } from '../../../shared/lib/hrZones';
-import { formatMMSS } from '../../../shared/utils/format';
+import { formatMMSS, parseDurationToSec } from '../../../shared/utils/format';
 
 interface CardioSetInputProps {
   exerciseId: number | null;
@@ -11,15 +11,18 @@ interface CardioSetInputProps {
   setNumber: number;
   targetDurationSec?: number | null;
   targetDistance?: number | null;
-  onLogSet: (data: {
-    exerciseId: number | null;
-    exerciseName: string;
-    weight: number;
-    reps: number;
-    setNumber: number;
-    durationSec?: number | null;
-    distance?: number | null;
-  }) => void;
+  onLogSet: (
+    data: {
+      exerciseId: number | null;
+      exerciseName: string;
+      weight: number;
+      reps: number;
+      setNumber: number;
+      durationSec?: number | null;
+      distance?: number | null;
+    },
+    opts?: { onSuccess?: () => void }
+  ) => void;
   isLogging?: boolean;
 }
 
@@ -58,9 +61,12 @@ function getCardioStorageKey(
 }
 
 interface PersistedCardioState {
-  startedAt: number;
+  /** Wall-clock start of the live timer. Absent for manual entry. */
+  startedAt?: number;
   phase: 'running' | 'finishing';
   distanceStr?: string;
+  /** User-visible duration text, persisted for the finishing phase. */
+  durationStr?: string;
 }
 
 export function CardioSetInput({
@@ -79,7 +85,9 @@ export function CardioSetInput({
 
   const [phase, setPhase] = useState<Phase>('idle');
   const [elapsedSec, setElapsedSec] = useState(0);
+  const [durationStr, setDurationStr] = useState('');
   const [distanceStr, setDistanceStr] = useState('');
+  // null while finishing means the duration was entered manually (no timer)
   const startedAtRef = useRef<number | null>(null);
   const hasRestoredRef = useRef(false);
 
@@ -97,11 +105,25 @@ export function CardioSetInput({
       const raw = localStorage.getItem(storageKey);
       if (!raw) return;
       const parsed = JSON.parse(raw) as PersistedCardioState;
-      if (typeof parsed?.startedAt !== 'number') return;
-      if (parsed.phase !== 'running' && parsed.phase !== 'finishing') return;
-      startedAtRef.current = parsed.startedAt;
-      setElapsedSec(Math.max(0, Math.floor((Date.now() - parsed.startedAt) / 1000)));
+      if (parsed?.phase !== 'running' && parsed?.phase !== 'finishing') return;
+      const startedAt = typeof parsed.startedAt === 'number' ? parsed.startedAt : null;
+      // Running always has a timer behind it; finishing without one is manual entry
+      if (parsed.phase === 'running' && startedAt === null) return;
+      startedAtRef.current = startedAt;
+      const recoveredElapsed = startedAt !== null
+        ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
+        : 0;
+      setElapsedSec(recoveredElapsed);
       if (typeof parsed.distanceStr === 'string') setDistanceStr(parsed.distanceStr);
+      if (parsed.phase === 'finishing') {
+        // Timed entries persisted before durationStr existed fall back to
+        // the elapsed time recomputed from startedAt; manual stays blank.
+        setDurationStr(
+          typeof parsed.durationStr === 'string' && parsed.durationStr !== ''
+            ? parsed.durationStr
+            : startedAt !== null ? formatMMSS(recoveredElapsed) : ''
+        );
+      }
       setPhase(parsed.phase);
     } catch {
       // ignore parse / quota errors — fall back to fresh idle state
@@ -109,20 +131,23 @@ export function CardioSetInput({
   }, [storageKey]);
 
   // Persist whenever in-progress state changes. Skip while idle.
+  // elapsedSec is deliberately not a dep — it isn't part of the payload
+  // (running state recomputes it from startedAt) and including it would
+  // rewrite identical JSON on every 250 ms tick.
   useEffect(() => {
-    if (!storageKey) return;
-    if (phase === 'idle' || startedAtRef.current === null) return;
+    if (!storageKey || phase === 'idle') return;
     try {
       const payload: PersistedCardioState = {
-        startedAt: startedAtRef.current,
         phase,
+        ...(startedAtRef.current !== null ? { startedAt: startedAtRef.current } : {}),
         ...(distanceStr ? { distanceStr } : {}),
+        ...(phase === 'finishing' && durationStr ? { durationStr } : {}),
       };
       localStorage.setItem(storageKey, JSON.stringify(payload));
     } catch {
       // ignore quota errors
     }
-  }, [storageKey, phase, distanceStr, elapsedSec]);
+  }, [storageKey, phase, durationStr, distanceStr]);
 
   // Tick the elapsed counter while running, drift-corrected against Date.now()
   useEffect(() => {
@@ -141,26 +166,26 @@ export function CardioSetInput({
   }, []);
 
   const handleFinish = useCallback(() => {
+    let elapsed = elapsedSec;
     if (startedAtRef.current !== null) {
-      setElapsedSec(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
+      setElapsedSec(elapsed);
     }
+    setDurationStr(formatMMSS(elapsed));
+    setPhase('finishing');
+  }, [elapsedSec]);
+
+  const handleManualEntry = useCallback(() => {
+    startedAtRef.current = null;
+    setElapsedSec(0);
+    setDurationStr('');
     setPhase('finishing');
   }, []);
 
-  const handleSave = useCallback(() => {
-    const durationSec = Math.max(1, elapsedSec);
-    const parsed = parseFloat(distanceStr);
-    const distance = !isNaN(parsed) && parsed > 0 ? parsed : null;
-    onLogSet({
-      exerciseId,
-      exerciseName,
-      weight: 0,
-      reps: 0,
-      setNumber,
-      durationSec,
-      distance,
-    });
-    // Clear persisted state once the set has been handed off to the API.
+  const handleCancelManual = useCallback(() => {
+    setDurationStr('');
+    setDistanceStr('');
+    setPhase('idle');
     if (storageKey) {
       try {
         localStorage.removeItem(storageKey);
@@ -168,7 +193,39 @@ export function CardioSetInput({
         // ignore quota errors
       }
     }
-  }, [elapsedSec, distanceStr, onLogSet, exerciseId, exerciseName, setNumber, storageKey]);
+  }, [storageKey]);
+
+  const handleSave = useCallback(() => {
+    const durationSec = parseDurationToSec(durationStr);
+    if (durationSec === null) return;
+    const parsed = parseFloat(distanceStr);
+    const distance = !isNaN(parsed) && parsed > 0 ? parsed : null;
+    onLogSet(
+      {
+        exerciseId,
+        exerciseName,
+        weight: 0,
+        reps: 0,
+        setNumber,
+        durationSec,
+        distance,
+      },
+      {
+        // Clear persisted timer state only once the set actually saved —
+        // a failed POST reverts the optimistic set, and the persisted
+        // state is what lets this component restore the duration.
+        onSuccess: () => {
+          if (storageKey) {
+            try {
+              localStorage.removeItem(storageKey);
+            } catch {
+              // ignore quota errors
+            }
+          }
+        },
+      }
+    );
+  }, [durationStr, distanceStr, onLogSet, exerciseId, exerciseName, setNumber, storageKey]);
 
   const handleResume = useCallback(() => {
     if (startedAtRef.current !== null) {
@@ -202,6 +259,15 @@ export function CardioSetInput({
                      disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Start
+        </button>
+        <button
+          onClick={handleManualEntry}
+          disabled={isLogging}
+          className="w-full min-h-[44px] text-sm font-medium text-gray-500 dark:text-gray-400
+                     hover:text-primary-600 dark:hover:text-primary-400 transition-colors
+                     disabled:opacity-50"
+        >
+          Enter manually
         </button>
       </div>
     );
@@ -258,13 +324,32 @@ export function CardioSetInput({
   }
 
   // ----- Finishing -----
+  // Duration is editable in both flavors: pre-filled from the timer after
+  // Finish, blank for manual entry ("forgot to start" / treadmill readout).
+  const isManual = startedAtRef.current === null;
+  const durationValid = parseDurationToSec(durationStr) !== null;
+  const durationInvalid = durationStr.trim() !== '' && !durationValid;
+
   return (
     <div className="rounded-card p-4 space-y-4 bg-surface-100 dark:bg-surface-850">
-      <div className="text-center">
-        <div className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Duration</div>
-        <div className="text-3xl font-display font-bold text-gray-800 dark:text-gray-100 tabular-nums mt-1">
-          {formatMMSS(elapsedSec)}
-        </div>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium w-20 shrink-0">Duration</span>
+        <input
+          type="text"
+          aria-label="Duration (mm:ss or minutes)"
+          value={durationStr}
+          onChange={(e) => setDurationStr(e.target.value)}
+          onFocus={(e) => e.target.select()}
+          autoFocus={isManual}
+          placeholder="mm:ss or min"
+          className={`flex-1 min-w-0 text-center text-2xl font-display font-bold border-2 rounded-lg py-2 tabular-nums
+                     bg-white dark:bg-surface-900 dark:text-white focus:ring-0 transition-colors
+                     placeholder:text-base placeholder:font-normal placeholder:text-gray-400
+                     ${durationInvalid
+                       ? 'border-red-300 dark:border-red-800 focus:border-red-500'
+                       : 'border-gray-200 dark:border-surface-800 focus:border-primary-500'}`}
+        />
+        <span className="w-8 shrink-0" aria-hidden />
       </div>
 
       <div className="flex items-center justify-between gap-2">
@@ -287,17 +372,17 @@ export function CardioSetInput({
 
       <div className="flex gap-2">
         <button
-          onClick={handleResume}
+          onClick={isManual ? handleCancelManual : handleResume}
           disabled={isLogging}
           className="flex-1 py-3 min-h-[48px] rounded-lg font-medium text-gray-700 dark:text-gray-200
                      bg-gray-200 dark:bg-surface-800 active:scale-[0.97] transition-all
                      disabled:opacity-50"
         >
-          Resume
+          {isManual ? 'Cancel' : 'Resume'}
         </button>
         <button
           onClick={handleSave}
-          disabled={isLogging}
+          disabled={isLogging || !durationValid}
           className="flex-[2] py-3 min-h-[48px] rounded-lg font-display font-bold text-lg text-white
                      bg-gradient-to-b from-primary-500 to-primary-600 hover:from-primary-600 hover:to-primary-700
                      active:scale-[0.97] transition-all shadow-sm

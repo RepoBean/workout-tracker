@@ -204,11 +204,17 @@ export default function ActiveSession() {
     setExerciseNote,
   });
 
-  // Wire up set logging callback
-  const handleLogSet = (data: Parameters<typeof logSet>[0]) => {
+  // Wire up set logging callback. `opts.onSuccess` lets callers run cleanup
+  // only after the POST actually lands (e.g. CardioSetInput clears its
+  // persisted timer state — a failed save must keep it for recovery).
+  const handleLogSet = (
+    data: Parameters<typeof logSet>[0],
+    opts?: { onSuccess?: () => void }
+  ) => {
     logSet(data, {
       onSuccess: () => {
         handleSetLogged(data.exerciseId ?? null, data.exerciseName, data.dropIndex ?? 0);
+        opts?.onSuccess?.();
       },
     });
   };
@@ -349,9 +355,9 @@ export default function ActiveSession() {
         loggedSets={getSetsForExercise(exercise)}
         previousHint={getPreviousHintForExercise(exercise)}
         note={session?.exerciseNotes?.[exercise.name] ?? null}
-        onLogSet={(data) => {
+        onLogSet={(data, opts) => {
           const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-          handleLogSet({ ...data, exerciseId: exerciseIdForApi });
+          handleLogSet({ ...data, exerciseId: exerciseIdForApi }, opts);
         }}
         onDeleteSet={deleteSet}
         onUpdateSet={updateSet}
@@ -505,7 +511,7 @@ export default function ActiveSession() {
                 exercise={virtualExercise}
                 loggedSets={adHocSets}
                 note={session?.exerciseNotes?.[virtualExercise.name] ?? null}
-                onLogSet={(data) => handleLogSet({ ...data, exerciseId: null })}
+                onLogSet={(data, opts) => handleLogSet({ ...data, exerciseId: null }, opts)}
                 onDeleteSet={deleteSet}
                 onUpdateSet={updateSet}
                 onSetNote={(note) => setExerciseNote(virtualExercise.name, note)}

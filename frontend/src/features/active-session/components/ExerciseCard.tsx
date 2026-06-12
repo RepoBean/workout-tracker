@@ -6,7 +6,7 @@ import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
 import { isCardioExercise } from '../../../shared/api/predicates';
-import { formatMMSS } from '../../../shared/utils/format';
+import { formatMMSS, parseDurationToSec } from '../../../shared/utils/format';
 import { useProgression } from '../../../shared/context/ProgressionContext';
 import { computeProgression } from '../logic/progression';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
@@ -16,18 +16,29 @@ interface ExerciseCardProps {
   loggedSets: Set[];
   previousHint?: PreviousExerciseHint;
   note?: string | null;
-  onLogSet: (data: {
-    exerciseId: number | null;
-    exerciseName: string;
-    weight: number;
-    reps: number;
-    setNumber: number;
-    perceivedEffort?: number;
-    durationSec?: number | null;
-    distance?: number | null;
-  }) => void;
+  onLogSet: (
+    data: {
+      exerciseId: number | null;
+      exerciseName: string;
+      weight: number;
+      reps: number;
+      setNumber: number;
+      perceivedEffort?: number;
+      durationSec?: number | null;
+      distance?: number | null;
+    },
+    opts?: { onSuccess?: () => void }
+  ) => void;
   onDeleteSet: (setId: number) => void;
-  onUpdateSet?: (setId: number, updates: { weight?: number; reps?: number }) => void;
+  onUpdateSet?: (
+    setId: number,
+    updates: {
+      weight?: number;
+      reps?: number;
+      durationSec?: number | null;
+      distance?: number | null;
+    }
+  ) => void;
   onSetNote?: (note: string | null) => void;
   onSwapExercise?: () => void;
   isLogging: boolean;
@@ -37,6 +48,12 @@ interface EditingSet {
   id: number;
   weight: string;
   reps: string;
+}
+
+interface EditingCardioSet {
+  id: number;
+  duration: string;
+  distance: string;
 }
 
 export function ExerciseCard({
@@ -52,6 +69,7 @@ export function ExerciseCard({
   isLogging,
 }: ExerciseCardProps) {
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
+  const [editingCardioSet, setEditingCardioSet] = useState<EditingCardioSet | null>(null);
   const [showNote, setShowNote] = useState(false);
   const isCardio = isCardioExercise(exercise);
   const { settings: progressionSettings } = useProgression();
@@ -142,6 +160,28 @@ export function ExerciseCard({
       onUpdateSet(editingSet.id, { weight, reps });
     }
     setEditingSet(null);
+  };
+
+  const handleCardioSetTap = (set: Set) => {
+    if (editingCardioSet?.id === set.id || !onUpdateSet) return;
+    setEditingCardioSet({
+      id: set.id,
+      duration: set.durationSec ? formatMMSS(set.durationSec) : '',
+      distance: set.distance != null && set.distance > 0 ? String(set.distance) : '',
+    });
+  };
+
+  const handleSaveCardioEdit = () => {
+    if (!editingCardioSet || !onUpdateSet) return;
+
+    const durationSec = parseDurationToSec(editingCardioSet.duration);
+    const parsedDistance = parseFloat(editingCardioSet.distance);
+    const distance = !isNaN(parsedDistance) && parsedDistance > 0 ? parsedDistance : null;
+
+    if (durationSec !== null) {
+      onUpdateSet(editingCardioSet.id, { durationSec, distance });
+    }
+    setEditingCardioSet(null);
   };
 
   // Check if this time is better than last time
@@ -386,30 +426,89 @@ export function ExerciseCard({
       </div>
       )}
 
-      {/* Cardio: render logged effort summary if present */}
+      {/* Cardio: logged sets — tap to edit duration/distance, swipe to delete */}
       {isCardio && loggedSets.length > 0 && (
         <div className="mb-4 space-y-1">
           {loggedSets.map((set) => (
-            <SwipeableRow
-              key={set.id}
-              onSwipeLeft={() => onDeleteSet(set.id)}
-              disabled={set.id < 0}
-            >
-              <div className="flex items-center justify-between py-2 px-3 rounded-lg
-                              bg-green-50 dark:bg-green-900/20">
-                <span className="text-green-700 dark:text-green-300 font-medium tabular-nums">
-                  ✓ {set.durationSec ? formatMMSS(set.durationSec) : '—'}
-                  {set.distance != null && set.distance > 0 && (
-                    <span className="ml-2">• {set.distance} mi</span>
-                  )}
-                </span>
-                {set.heartRateAvg != null && (
-                  <span className="text-xs text-red-600 dark:text-red-400 tabular-nums">
-                    avg {set.heartRateAvg} BPM
-                  </span>
-                )}
+            editingCardioSet?.id === set.id ? (
+              /* Full-width edit row */
+              <div key={set.id} className="flex items-center gap-2 py-1.5">
+                <input
+                  type="text"
+                  aria-label="Edit duration (mm:ss or minutes)"
+                  value={editingCardioSet.duration}
+                  onChange={(e) => setEditingCardioSet(prev => prev ? { ...prev, duration: e.target.value } : null)}
+                  onFocus={(e) => e.target.select()}
+                  autoFocus
+                  placeholder="mm:ss"
+                  className="flex-1 min-w-0 h-11 text-center text-lg font-semibold tabular-nums
+                             border-2 border-gray-200 dark:border-surface-800 rounded-lg
+                             bg-white dark:bg-surface-900 dark:text-white
+                             focus:border-primary-500 focus:ring-0 transition-colors
+                             placeholder:text-sm placeholder:font-normal placeholder:text-gray-400"
+                />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  pattern="[0-9]*\.?[0-9]*"
+                  aria-label="Edit distance in miles"
+                  value={editingCardioSet.distance}
+                  onChange={(e) => setEditingCardioSet(prev => prev ? { ...prev, distance: e.target.value } : null)}
+                  onFocus={(e) => e.target.select()}
+                  placeholder="mi"
+                  className="flex-1 min-w-0 h-11 text-center text-lg font-semibold tabular-nums
+                             border-2 border-gray-200 dark:border-surface-800 rounded-lg
+                             bg-white dark:bg-surface-900 dark:text-white
+                             focus:border-primary-500 focus:ring-0 transition-colors
+                             placeholder:text-sm placeholder:font-normal placeholder:text-gray-400"
+                />
+                <Button variant="primary" size="sm" className="min-w-[44px] shrink-0"
+                        onClick={handleSaveCardioEdit} aria-label="Save set">
+                  ✓
+                </Button>
+                <Button variant="secondary" size="sm" className="min-w-[44px] shrink-0"
+                        onClick={() => setEditingCardioSet(null)} aria-label="Cancel edit">
+                  ✕
+                </Button>
               </div>
-            </SwipeableRow>
+            ) : (
+              <SwipeableRow
+                key={set.id}
+                onSwipeLeft={() => onDeleteSet(set.id)}
+                disabled={set.id < 0}
+              >
+                <div
+                  role={onUpdateSet ? 'button' : undefined}
+                  tabIndex={onUpdateSet ? 0 : undefined}
+                  onClick={() => handleCardioSetTap(set)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleCardioSetTap(set); }}
+                  className={`flex items-center justify-between min-h-[44px] py-2 px-3 rounded-lg
+                              bg-green-50 dark:bg-green-900/20
+                              ${onUpdateSet ? 'cursor-pointer' : ''}`}
+                >
+                  <span className="text-green-700 dark:text-green-300 font-medium tabular-nums">
+                    ✓ {set.durationSec ? formatMMSS(set.durationSec) : '—'}
+                    {set.distance != null && set.distance > 0 && (
+                      <span className="ml-2">• {set.distance} mi</span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-2 shrink-0">
+                    {set.heartRateAvg != null && (
+                      <span className="text-xs text-red-600 dark:text-red-400 tabular-nums">
+                        avg {set.heartRateAvg} BPM
+                      </span>
+                    )}
+                    {onUpdateSet && (
+                      <svg className="w-4 h-4 text-gray-300 dark:text-gray-600"
+                           fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden>
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                      </svg>
+                    )}
+                  </span>
+                </div>
+              </SwipeableRow>
+            )
           ))}
         </div>
       )}
