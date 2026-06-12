@@ -132,29 +132,33 @@ export function Calendar() {
           const hasWorkout = isCurrentMonth && workoutDays.has(day);
           const today = isToday(day, isCurrentMonth);
 
-          const handleDayClick = hasWorkout
-            ? () => navigate(`/history?sessionId=${sessionByDay.get(day)}`)
-            : undefined;
-
           return (
             <div
               key={index}
               className={`relative flex flex-col items-center py-1.5 text-sm ${isCurrentMonth
                 ? 'text-gray-900 dark:text-gray-100'
                 : 'text-gray-300 dark:text-gray-600'
-                } ${hasWorkout ? 'cursor-pointer' : ''}`}
-              onClick={handleDayClick}
+                }`}
             >
-              <span
-                className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${today
-                  ? 'bg-primary-600 text-white font-bold'
-                  : hasWorkout
-                    ? 'hover:bg-primary-50 dark:hover:bg-primary-900/30'
-                    : ''
-                  }`}
-              >
-                {day}
-              </span>
+              {hasWorkout ? (
+                <button
+                  onClick={() => navigate(`/history?sessionId=${sessionByDay.get(day)}`)}
+                  aria-label={`View workout on ${MONTH_NAMES[month]} ${day}`}
+                  className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${today
+                    ? 'bg-primary-600 text-white font-bold'
+                    : 'hover:bg-primary-50 dark:hover:bg-primary-900/30'
+                    }`}
+                >
+                  {day}
+                </button>
+              ) : (
+                <span
+                  className={`w-9 h-9 flex items-center justify-center rounded-full ${today ? 'bg-primary-600 text-white font-bold' : ''
+                    }`}
+                >
+                  {day}
+                </span>
+              )}
               {hasWorkout && !today && (
                 <div className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-0.5" />
               )}
