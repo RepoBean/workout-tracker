@@ -15,19 +15,33 @@ A **self-hosted workout tracker** that's designed to be flexible — just type i
 - **Smart previous-set hints** — when you start a set, you see the weight, reps, *and last RPE* from your previous session so you know exactly how hard it felt last time
 - **Avg RPE summaries** — completion celebration and every history card surface average RPE, so you can spot when a session was unusually hard or easy at a glance
 - **Progress analytics** — exercise progress charts, volume trends, and personal records
+- **Cardio exercises** — log runs, rides, and rows with a live timer or manual duration + distance entry
+- **Live heart rate** — connect a Bluetooth HR strap (Web Bluetooth) for a live BPM/zone badge, in-session chart, and per-set HR stats
 - **Cardio analytics & HR zones** — time-in-zone summaries on completion and in your history
 - **In-session PR toasts** — get notified immediately when you hit a new personal record
+- **Auto-progression hints** — opt-in double progression: top the rep range on every working set and the app suggests next session's weight bump
+- **AI coach (bring your own key)** — opt-in chat coach that reads your training data and drafts programs you can import in one tap; works with Anthropic, OpenAI, OpenRouter, Google AI Studio, or any OpenAI-compatible endpoint
+- **Mid-workout flexibility** — add or swap exercises on the fly without touching your program definition
+- **Plate calculator** — see exactly which plates to load per side for any target weight
 - **User profile** — configure your heart rate zones and application settings
 - **Workout history** — browse past sessions, view details, and export to CSV
 - **Workout calendar** — monthly view with workout frequency at a glance
 - **Ad-hoc workouts** — jump into a quick session without a program
 - **Modern UI system** — brand new typography (DM Sans + Outfit), slick gradient hero cards, and reactive Light/Dark mode themes
 - **Bottom navigation** — easy one-handed gym usage with an intuitive mobile-friendly fixed tab bar
-- **Offline support** — cached data available if connectivity drops
+- **Offline indicator** — a clear banner when connectivity drops, with already-loaded data still visible
 
 ## 🤖 LLM-Friendly Workflow
 
-The import/export features are designed to play nicely with LLMs. A typical workflow:
+There are two ways to put an LLM to work on your training:
+
+### Built-in AI Coach
+
+Enable the AI Coach in Settings, plug in your own API key (Anthropic, OpenAI, OpenRouter, Google AI Studio, or any OpenAI-compatible endpoint), and chat with a coach that has **read-only** access to your programs, history, and stats. Ask it to review your week, spot stalls, or build a new program — drafted programs drop straight into the standard import preview, so nothing touches your data without your confirmation. Your key and conversation stay in your browser.
+
+### Manual export/import
+
+The import/export features also play nicely with any external LLM:
 
 1. **Build a program** in the app
 2. **Export it as JSON** and paste it into ChatGPT, Claude, etc. for analysis and suggestions
@@ -102,18 +116,20 @@ npm run dev
 ```
 
 This starts:
-- **Frontend** at `http://localhost:5173`
-- **Backend** at `http://localhost:3001`
+- **Frontend** at `http://localhost:5174`
+- **Backend** at `http://localhost:3002`
 
 Alternatively, you can use the provided shell script:
 
 ```bash
 # Make the start script executable
-chmod +x start.sh
+chmod +x start-dev.sh
 
 # Run it
-./start.sh
+./start-dev.sh
 ```
+
+(`start.sh` is the production variant — it builds both apps and serves the compiled output.)
 
 ## 🌐 Accessing from the Gym
 
@@ -132,7 +148,7 @@ http://192.168.1.100:8035
 workout-tracker-v2/
 ├── frontend/            # React + Vite frontend
 │   └── src/
-│       ├── features/    # Dashboard, Programs, Progress, History, Active Session
+│       ├── features/    # Dashboard, Programs, Progress, History, Active Session, Settings, AI Coach
 │       └── shared/      # Shared UI components, hooks, context
 ├── backend/             # Express API server
 │   └── src/
@@ -142,7 +158,8 @@ workout-tracker-v2/
 ├── Dockerfile.backend   # Multi-stage backend build
 ├── Dockerfile.frontend  # Multi-stage frontend build (Nginx)
 ├── nginx.conf           # Nginx reverse proxy config
-└── start.sh             # Dev start script
+├── start-dev.sh         # Dev start script (both servers)
+└── start.sh             # Production build + start script
 ```
 
 ## 🧪 A Vibe Coding Experiment
