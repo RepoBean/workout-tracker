@@ -165,19 +165,22 @@ export default function ActiveSession() {
     });
   }, [sessionId]);
 
+  const sessionReady = !isLoading && !!session;
+
   // Exercise ordering
   const {
     orderedExercises,
     handleMoveExercise,
     insertExerciseAt,
     swapExercise,
-  } = useExerciseOrdering({ mergedExercises, sessionId, isReady: !isLoading && !!session });
+  } = useExerciseOrdering({ mergedExercises, sessionId, isReady: sessionReady });
 
   // Exercise navigation hook for focused view
   const navigation = useExerciseNavigation({
     exercises: orderedExercises,
     sets,
     sessionId,
+    isReady: sessionReady,
   });
 
   // Fires only when handleAddExercise gated on a complete current step.

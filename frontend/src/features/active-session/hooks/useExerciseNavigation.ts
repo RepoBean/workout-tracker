@@ -13,6 +13,8 @@ interface UseExerciseNavigationOptions {
     exercises: Exercise[];
     sets: Set[];
     sessionId: number;
+    /** Session data has loaded — gates the one-shot resume decision */
+    isReady: boolean;
 }
 
 export interface UseExerciseNavigationResult {
@@ -72,6 +74,7 @@ export function useExerciseNavigation({
     exercises: initialExercises,
     sets,
     sessionId,
+    isReady,
 }: UseExerciseNavigationOptions): UseExerciseNavigationResult {
     // Persist navigation state in localStorage to survive mobile tab eviction
     const { step: storageKey, superset: supersetStorageKey } = getNavStorageKeys(sessionId);
@@ -152,14 +155,19 @@ export function useExerciseNavigation({
         }
     }, [steps.length, currentStepIndex]);
 
-    // On resume: if no saved navigation state, jump to first incomplete exercise
+    // On resume: if no saved navigation state, jump to first incomplete exercise.
+    // The decision is one-shot, made as soon as session data has loaded and steps
+    // exist — and disarms on every path. A fresh session (zero sets at load) must
+    // disarm too: leaving the check armed meant logging the first set re-fired the
+    // scan and bounced the user to exercise 1 if they had skipped ahead.
     useEffect(() => {
         if (hasResumedRef.current) return;
-        if (hadSavedStepIndex.current) return;
-        if (steps.length === 0) return;
-        if (sets.length === 0) return; // Fresh session, step 0 is correct
+        if (!isReady || steps.length === 0) return;
 
         hasResumedRef.current = true;
+
+        if (hadSavedStepIndex.current) return; // saved position already restored
+        if (sets.length === 0) return; // Fresh session, step 0 is correct
 
         for (let i = 0; i < steps.length; i++) {
             const step = steps[i];
@@ -193,7 +201,7 @@ export function useExerciseNavigation({
 
         // All complete — go to last step
         setCurrentStepIndex(steps.length - 1);
-    }, [steps, sets]);
+    }, [isReady, steps, sets]);
 
     // Get sets for a specific exercise (only standard sets, sorted)
     // For ad-hoc exercises (negative ID), look up by exerciseName
