@@ -105,12 +105,17 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       // Audio not available, ignore
     }
 
-    // System notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Rest Complete', {
-        body: 'Time for your next set!',
-        tag: 'rest-timer',
-      });
+    // System notification — Chrome on Android throws "Illegal constructor"
+    // for page-scoped Notifications (needs a service worker, which we removed)
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Rest Complete', {
+          body: 'Time for your next set!',
+          tag: 'rest-timer',
+        });
+      }
+    } catch {
+      // Notification unavailable; vibration/beep already fired
     }
   }, []);
 
@@ -132,9 +137,11 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
-        triggerCompletion();
+        // Reset state before firing completion effects so a throwing
+        // sound/notification can't strand the UI on a stale countdown
         setState(initialState);
         localStorage.removeItem(STORAGE_KEY);
+        triggerCompletion();
       } else {
         // Interval runs at 100ms for drift correction, but timeRemaining only
         // changes once a second — bail with the same object so consumers
