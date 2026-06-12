@@ -1,15 +1,27 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
-import Dashboard from './features/dashboard';
-import ProgramBuilder from './features/program-builder';
-import Progress from './features/progress';
-import ActiveSession from './features/active-session';
-import History from './features/history';
-import Settings from './features/settings';
-import Coach from './features/coach';
 import { useOffline } from './shared/context/OfflineContext';
 import { useAiCoach } from './shared/context/AiCoachContext';
 import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
+
+// Route-level code splitting — each tab loads its chunk on first visit.
+const Dashboard = lazy(() => import('./features/dashboard'));
+const ProgramBuilder = lazy(() => import('./features/program-builder'));
+const Progress = lazy(() => import('./features/progress'));
+const ActiveSession = lazy(() => import('./features/active-session'));
+const History = lazy(() => import('./features/history'));
+const Settings = lazy(() => import('./features/settings'));
+const Coach = lazy(() => import('./features/coach'));
+
+function RouteFallback() {
+  return (
+    <div className="flex items-center justify-center py-12">
+      <div className="animate-spin w-8 h-8 border-4 border-primary-600
+                      border-t-transparent rounded-full" />
+    </div>
+  );
+}
 
 function TabIcon({ name, active }: { name: string; active: boolean }) {
   const color = active ? 'text-primary-600 dark:text-primary-400' : 'text-gray-400 dark:text-gray-500';
@@ -133,29 +145,31 @@ function AppContent() {
       <OfflineBanner />
       <main className={`container mx-auto px-4 py-6 ${isWorkout ? '' : 'pb-24'}`}>
         <ErrorBoundary>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/programs" element={<ProgramBuilder />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route
-              path="/workout/:id"
-              element={
-                <ErrorBoundary fallback={<WorkoutErrorFallback />}>
-                  <ActiveSession />
-                </ErrorBoundary>
-              }
-            />
-            <Route path="/history" element={<History />} />
-            <Route
-              path="/coach"
-              element={
-                <ErrorBoundary>
-                  <Coach />
-                </ErrorBoundary>
-              }
-            />
-            <Route path="/settings" element={<Settings />} />
-          </Routes>
+          <Suspense fallback={<RouteFallback />}>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/programs" element={<ProgramBuilder />} />
+              <Route path="/progress" element={<Progress />} />
+              <Route
+                path="/workout/:id"
+                element={
+                  <ErrorBoundary fallback={<WorkoutErrorFallback />}>
+                    <ActiveSession />
+                  </ErrorBoundary>
+                }
+              />
+              <Route path="/history" element={<History />} />
+              <Route
+                path="/coach"
+                element={
+                  <ErrorBoundary>
+                    <Coach />
+                  </ErrorBoundary>
+                }
+              />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
         </ErrorBoundary>
       </main>
       <BottomTabBar />

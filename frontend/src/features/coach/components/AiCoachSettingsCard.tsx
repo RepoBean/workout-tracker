@@ -3,7 +3,9 @@ import { useAiCoach, AiCoachSettings } from '../../../shared/context/AiCoachCont
 import { Button } from '../../../shared/ui/Button';
 import { Input } from '../../../shared/ui/Input';
 import { useToast } from '../../../shared/ui/Toast';
-import { createProvider, PROVIDER_ORDER, PROVIDER_PRESETS } from '../lib/providers';
+// Presets only — the provider stack (incl. @anthropic-ai/sdk) is dynamically
+// imported at call time so the Settings page doesn't ship it.
+import { PROVIDER_ORDER, PROVIDER_PRESETS } from '../lib/providers/presets';
 import type { ModelOption } from '../lib/providers/types';
 
 export function AiCoachSettingsCard() {
@@ -40,6 +42,7 @@ export function AiCoachSettingsCard() {
     }
     setLoadingModels(true);
     try {
+      const { createProvider } = await import('../lib/providers');
       const list = await createProvider(settings).listModels();
       list.sort((a, b) => a.id.localeCompare(b.id));
       setModels(list);

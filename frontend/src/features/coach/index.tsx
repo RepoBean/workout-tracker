@@ -6,7 +6,6 @@ import { Modal } from '../../shared/ui/Modal';
 import type { ProgramExportPayload } from '../../shared/api/types';
 import { useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
-import { createProvider } from './lib/providers';
 import { createCoachToolset } from './lib/tools';
 import { runCoach } from './lib/coachLoop';
 import { COACH_SYSTEM_PROMPT } from './lib/persona';
@@ -78,6 +77,8 @@ export default function Coach() {
     setToolStatus(null);
 
     try {
+      // Provider stack (incl. @anthropic-ai/sdk) loads on first send, not with the page.
+      const { createProvider } = await import('./lib/providers');
       const provider = createProvider(settings);
       const result = await runCoach({
         provider,
