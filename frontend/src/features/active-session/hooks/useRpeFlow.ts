@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import type { Exercise } from '../../../shared/api/types';
 import type { UseExerciseNavigationResult } from './useExerciseNavigation';
 
 interface UseRpeFlowParams {
+    sessionId: number;
     navigation: UseExerciseNavigationResult;
     mergedExercises: Exercise[];
     updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) => void;
@@ -17,6 +18,7 @@ interface UseRpeFlowResult {
 }
 
 export function useRpeFlow({
+    sessionId,
     navigation,
     mergedExercises,
     updateSetsEffort,
@@ -24,6 +26,11 @@ export function useRpeFlow({
 }: UseRpeFlowParams): UseRpeFlowResult {
     const [rpePromptExercise, setRpePromptExercise] = useState<{ id: number; name: string } | null>(null);
     const completedExercisesRef = useRef<Set<number>>(new Set());
+
+    // Reset completion tracking if the session changes without a remount
+    useEffect(() => {
+        completedExercisesRef.current = new Set();
+    }, [sessionId]);
 
     // Navigate after RPE prompt (shared logic)
     const navigateAfterRpe = useCallback(() => {

@@ -198,6 +198,7 @@ export default function ActiveSession() {
     handleRpeSubmit,
     handleRpeSkip,
   } = useRpeFlow({
+    sessionId,
     navigation,
     mergedExercises,
     updateSetsEffort,

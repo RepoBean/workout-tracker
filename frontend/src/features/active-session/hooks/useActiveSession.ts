@@ -18,11 +18,7 @@ interface UpdateSetRequest {
   distance?: number | null;
 }
 
-interface UseActiveSessionOptions {
-  onSetLogged?: (exerciseId: number | null, exerciseName: string) => void;
-}
-
-export function useActiveSession(sessionId: number, options?: UseActiveSessionOptions) {
+export function useActiveSession(sessionId: number) {
   const queryClient = useQueryClient();
   const toast = useToast();
   const { startTimer } = useTimer();
@@ -125,9 +121,6 @@ export function useActiveSession(sessionId: number, options?: UseActiveSessionOp
 
       // Fire-and-forget PR check (lazy fetches history, may toast).
       void checkAndCelebratePR(savedSet);
-
-      // Call the callback if provided
-      options?.onSetLogged?.(variables.exerciseId ?? null, variables.exerciseName);
     },
     onSettled: () => {
       // Refetch to ensure consistency

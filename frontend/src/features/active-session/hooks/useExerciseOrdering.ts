@@ -20,7 +20,6 @@ interface UseExerciseOrderingResult {
     handleMoveExercise: (fromIndex: number, toIndex: number) => void;
     insertExerciseAt: (exercise: Exercise, position: number) => void;
     swapExercise: (oldExerciseId: number, newExercise: Exercise) => void;
-    updateExerciseInOrder: (exerciseId: number, updates: Partial<Exercise>) => void;
 }
 
 export function useExerciseOrdering({
@@ -139,17 +138,10 @@ export function useExerciseOrdering({
         });
     }, []);
 
-    const updateExerciseInOrder = useCallback((exerciseId: number, updates: Partial<Exercise>) => {
-        setOrderedExercises(prev =>
-            prev.map(e => e.id === exerciseId ? { ...e, ...updates } : e)
-        );
-    }, []);
-
     return {
         orderedExercises,
         handleMoveExercise,
         insertExerciseAt,
         swapExercise,
-        updateExerciseInOrder,
     };
 }

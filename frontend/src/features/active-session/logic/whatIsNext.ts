@@ -1,4 +1,4 @@
-import type { Program, Workout } from '../../../shared/api/types';
+import type { Program } from '../../../shared/api/types';
 
 export interface NextWorkoutInfo {
   programId: number;
@@ -34,23 +34,4 @@ export function calculateNextWorkout(program: Program): NextWorkoutInfo | null {
     workoutIndex: index,
     totalWorkouts: sortedWorkouts.length,
   };
-}
-
-/**
- * Get workout by index (for preview/selection).
- */
-export function getWorkoutByIndex(
-  program: Program,
-  index: number
-): Workout | null {
-  if (!program.workouts || program.workouts.length === 0) {
-    return null;
-  }
-
-  const sortedWorkouts = [...program.workouts].sort(
-    (a, b) => a.orderIndex - b.orderIndex
-  );
-
-  const normalizedIndex = ((index % sortedWorkouts.length) + sortedWorkouts.length) % sortedWorkouts.length;
-  return sortedWorkouts[normalizedIndex];
 }

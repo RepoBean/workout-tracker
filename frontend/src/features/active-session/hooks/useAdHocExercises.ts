@@ -55,7 +55,6 @@ interface UseAdHocExercisesResult {
     mergedExercises: Exercise[];
 
     // Set lookups
-    setsByExercise: Map<number, SetType[]>;
     adHocSetsByName: Map<string, SetType[]>;
     getSetsForExercise: (exercise: Exercise) => SetType[];
 
@@ -212,7 +211,6 @@ export function useAdHocExercises({
         adHocProgramExercises,
         setAdHocProgramExercises,
         mergedExercises,
-        setsByExercise,
         adHocSetsByName,
         getSetsForExercise,
         allAdHocExercises,

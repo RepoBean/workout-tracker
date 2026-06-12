@@ -82,15 +82,6 @@ export interface Set {
 // API Response Types
 // ============================================
 
-export interface NextWorkoutResponse {
-  program: {
-    id: number;
-    name: string;
-    currentWorkoutIndex: number;
-  };
-  workout: Workout;
-}
-
 export interface HealthCheckResponse {
   status: 'ok';
   timestamp: string;

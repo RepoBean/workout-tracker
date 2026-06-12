@@ -135,14 +135,15 @@ export function useExerciseNavigation({
         return result;
     }, [initialExercises]);
 
-    // Persist navigation state to sessionStorage when it changes
+    // Persist navigation state to localStorage when it changes (keys in deps
+    // so a sessionId change without remount writes to the new session's keys)
     useEffect(() => {
         localStorage.setItem(storageKey, String(currentStepIndex));
-    }, [currentStepIndex]);
+    }, [currentStepIndex, storageKey]);
 
     useEffect(() => {
         localStorage.setItem(supersetStorageKey, String(supersetActiveIndex));
-    }, [supersetActiveIndex]);
+    }, [supersetActiveIndex, supersetStorageKey]);
 
     // Clamp currentStepIndex if it's out of bounds (e.g., exercises changed)
     useEffect(() => {

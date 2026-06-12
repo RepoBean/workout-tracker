@@ -112,8 +112,3 @@ export function useToast() {
   }
   return context;
 }
-
-// Re-export Toast component for backwards compatibility
-export function Toast() {
-  return null;
-}

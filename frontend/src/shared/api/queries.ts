@@ -142,9 +142,9 @@ export function useExerciseHistoryByName(name: string) {
 }
 
 /**
- * Fetch all standard sets for an exercise across all completed sessions.
- * Used by the active session PR check. Returns raw set rows so the frontend
- * can compute the best estimated 1-rep max client-side.
+ * Set row shape returned by /exercises/all-sets-by-name. Used by the active
+ * session PR check (usePrCelebration fetches via queryClient.fetchQuery with
+ * queryKeys.exerciseAllSets) to compute the best estimated 1-rep max client-side.
  */
 export interface ExerciseAllSet {
   weight: number;
@@ -153,21 +153,6 @@ export interface ExerciseAllSet {
   durationSec: number | null;
   distance: number | null;
   completedAt: string | null;
-}
-
-export function useExerciseAllSetsByName(name: string, enabled = true) {
-  return useQuery({
-    queryKey: queryKeys.exerciseAllSets(name),
-    queryFn: async () => {
-      const { data } = await api.get<{ sets: ExerciseAllSet[] }>(
-        '/exercises/all-sets-by-name',
-        { params: { name } }
-      );
-      return data;
-    },
-    enabled: enabled && name.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
 }
 
 /**
