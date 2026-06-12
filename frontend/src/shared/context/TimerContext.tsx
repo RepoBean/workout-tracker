@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
 
 interface TimerContextType {
   isRunning: boolean;
@@ -136,7 +136,10 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         setState(initialState);
         localStorage.removeItem(STORAGE_KEY);
       } else {
-        setState(prev => ({ ...prev, timeRemaining: remaining }));
+        // Interval runs at 100ms for drift correction, but timeRemaining only
+        // changes once a second — bail with the same object so consumers
+        // (the whole ActiveSession tree) don't re-render at 10 Hz.
+        setState(prev => remaining === prev.timeRemaining ? prev : { ...prev, timeRemaining: remaining });
       }
     };
 
@@ -200,23 +203,33 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  const progress = state.targetDuration > 0
-    ? Math.round(((state.targetDuration - state.timeRemaining) / state.targetDuration) * 100)
-    : 0;
+  const value = useMemo<TimerContextType>(() => ({
+    isRunning: state.isRunning,
+    timeRemaining: state.timeRemaining,
+    targetDuration: state.targetDuration,
+    progress: state.targetDuration > 0
+      ? Math.round(((state.targetDuration - state.timeRemaining) / state.targetDuration) * 100)
+      : 0,
+    startTimer,
+    stopTimer,
+    extendTimer,
+    skipTimer,
+    notificationPermission,
+    requestNotificationPermission,
+  }), [
+    state.isRunning,
+    state.timeRemaining,
+    state.targetDuration,
+    startTimer,
+    stopTimer,
+    extendTimer,
+    skipTimer,
+    notificationPermission,
+    requestNotificationPermission,
+  ]);
 
   return (
-    <TimerContext.Provider value={{
-      isRunning: state.isRunning,
-      timeRemaining: state.timeRemaining,
-      targetDuration: state.targetDuration,
-      progress,
-      startTimer,
-      stopTimer,
-      extendTimer,
-      skipTimer,
-      notificationPermission,
-      requestNotificationPermission,
-    }}>
+    <TimerContext.Provider value={value}>
       {children}
     </TimerContext.Provider>
   );

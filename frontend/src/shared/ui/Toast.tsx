@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react';
 
 interface ToastMessage {
   id: number;
@@ -28,12 +28,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }, 3000);
   }, []);
 
-  const value: ToastContextValue = {
+  // Memoized so useToast consumers don't re-render when a toast appears/expires
+  const value = useMemo<ToastContextValue>(() => ({
     success: (msg) => addToast('success', msg),
     error: (msg) => addToast('error', msg),
     info: (msg) => addToast('info', msg),
     warning: (msg) => addToast('warning', msg),
-  };
+  }), [addToast]);
 
   return (
     <ToastContext.Provider value={value}>

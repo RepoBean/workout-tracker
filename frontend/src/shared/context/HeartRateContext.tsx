@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   ReactNode,
@@ -224,22 +225,34 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
     };
   }, [isSupported, subscribeToDevice]);
 
+  const value = useMemo<HeartRateContextType>(() => ({
+    isSupported,
+    isConnected,
+    isConnecting,
+    deviceName,
+    currentBpm,
+    error,
+    connect,
+    disconnect,
+    clearSamples,
+    statsSince,
+    samplesSince,
+  }), [
+    isSupported,
+    isConnected,
+    isConnecting,
+    deviceName,
+    currentBpm,
+    error,
+    connect,
+    disconnect,
+    clearSamples,
+    statsSince,
+    samplesSince,
+  ]);
+
   return (
-    <HeartRateContext.Provider
-      value={{
-        isSupported,
-        isConnected,
-        isConnecting,
-        deviceName,
-        currentBpm,
-        error,
-        connect,
-        disconnect,
-        clearSamples,
-        statsSince,
-        samplesSince,
-      }}
-    >
+    <HeartRateContext.Provider value={value}>
       {children}
     </HeartRateContext.Provider>
   );
