@@ -60,10 +60,15 @@ Database lives at `backend/database.sqlite`. Sequelize creates tables on first r
 ```
 Program (id, name, isActive, isArchived, currentWorkoutIndex, createdAt, updatedAt)
 └─> Workout (id, programId, name, orderIndex, createdAt, updatedAt)
-    └─> Exercise (id, workoutId, name, targetSets, targetReps, orderIndex, supersetGroup, createdAt, updatedAt)
+    └─> Exercise (id, workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
+                  exerciseType, cardioModality, targetDurationSec, targetDistance,
+                  createdAt, updatedAt)
 
-Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc, createdAt, updatedAt)
-└─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort, dropIndex, createdAt, updatedAt)
+Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc,
+         heartRateAvg, heartRateMin, heartRateMax, heartRateSeries, exerciseNotes,
+         createdAt, updatedAt)
+└─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort,
+         dropIndex, heartRateAvg, heartRateMax, durationSec, distance, createdAt, updatedAt)
 ```
 
 ### Key Patterns
@@ -80,6 +85,9 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
 | **Supersets** | `supersetGroup` field (letters A-E) groups exercises that rotate together |
 | **RPE Scale** | `perceivedEffort` is 1-10 |
 | **Drop Sets** | `dropIndex` field on Sets — standard sets have `dropIndex = 0`, drops have `1, 2, 3...` |
+| **Cardio Exercises** | `exerciseType` is `'strength'` (default) or `'cardio'`. Cardio exercises may set `cardioModality` (running/cycling/treadmill/rowing/other) and targets (`targetDurationSec`, `targetDistance`). Cardio sets store `durationSec`/`distance`; weight/reps are 0. |
+| **Heart Rate** | From a BLE HR strap (Web Bluetooth). Sessions store `heartRateAvg/Min/Max` + `heartRateSeries` (JSON string of downsampled samples); Sets store per-set `heartRateAvg`/`heartRateMax`. All nullable — absent when no strap connected. |
+| **Exercise Notes** | `Session.exerciseNotes` JSON column keyed by exercise name (captured in the RPE prompt). Session-level to avoid replicating one string across every set. |
 
 ---
 
@@ -92,17 +100,20 @@ src/
 ├── features/
 │   ├── active-session/            # THE core gym experience
 │   │   ├── components/
-│   │   │   ├── SetInput.tsx       # Weight/reps/RPE input
+│   │   │   ├── SetInput.tsx       # Weight/reps input (strength)
+│   │   │   ├── CardioSetInput.tsx # Cardio logging: live timer or manual duration + distance
 │   │   │   ├── ExerciseCard.tsx   # Single exercise with all its sets
 │   │   │   ├── ExerciseNote.tsx   # Per-exercise note view/edit/clear widget
+│   │   │   ├── SwapExercise.tsx   # Swap exercise modal (session-only substitute)
 │   │   │   ├── SupersetStep.tsx   # Superset step — fixed-position cards, expand in place
 │   │   │   ├── CompletionCelebration.tsx  # Session complete animation
 │   │   │   ├── CompletedSessionSummary.tsx # Read-only view for already-completed sessions
+│   │   │   ├── LiveHRChart.tsx    # Live heart-rate chart panel (wraps SessionHRChart)
 │   │   │   ├── PlateCalculator.tsx
 │   │   │   ├── SessionHeader.tsx
 │   │   │   ├── AddExercise.tsx
 │   │   │   ├── ExerciseListDropdown.tsx  # Exercise picker + drag reorder
-│   │   │   └── RpePrompt.tsx      # Post-exercise RPE modal
+│   │   │   └── RpePrompt.tsx      # Post-exercise RPE modal (+ note capture)
 │   │   ├── hooks/
 │   │   │   ├── useActiveSession.ts    # Session state + optimistic updates
 │   │   │   ├── usePrCelebration.ts    # Session-scoped PR detection + toast
@@ -114,10 +125,16 @@ src/
 │   │   │   ├── useDiscardSession.ts   # Discard incomplete session (shared with dashboard)
 │   │   │   ├── useExerciseOrdering.ts # Single source of truth for order
 │   │   │   └── useRpeFlow.ts          # RPE prompt orchestration
+│   │   ├── lib/
+│   │   │   ├── sessionStorage.ts  # Session-scoped localStorage keys + cleanup sweep
+│   │   │   └── virtualExercise.ts # Synthetic Exercise builder for ad-hoc/swap inserts
 │   │   ├── logic/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
-│   │   │   └── plates.ts          # Plate calculator math
-│   │   └── index.tsx              # WorkoutSession page entry (~540 lines)
+│   │   │   ├── plates.ts          # Plate calculator math
+│   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress filters)
+│   │   │   ├── progression.ts     # Deterministic double-progression hint (+ tests)
+│   │   │   └── averageRpe.ts      # Working-set RPE average (+ tests)
+│   │   └── index.tsx              # WorkoutSession page entry (~580 lines)
 │   │
 │   ├── program-builder/           # Program/workout/exercise CRUD
 │   │   ├── components/
@@ -130,7 +147,8 @@ src/
 │   │
 │   ├── history/                   # Past sessions
 │   │   ├── components/
-│   │   │   └── SessionCard.tsx
+│   │   │   ├── SessionCard.tsx
+│   │   │   └── SessionHRChart.tsx # Heart-rate line chart (recharts; also used live)
 │   │   ├── hooks/
 │   │   │   └── useHistory.ts
 │   │   └── index.tsx              # History page entry
@@ -155,6 +173,9 @@ src/
 │   │   ├── hooks/
 │   │   │   └── useNextWorkoutLocal.ts  # Client-side next workout calc
 │   │   └── index.tsx              # Home page entry
+│   │
+│   ├── settings/                  # Settings page
+│   │   └── index.tsx              # Profile (DOB/sex/HR for zones), auto-progression, AI coach card
 │   │
 │   └── coach/                     # AI Coach (opt-in, BYO API key)
 │       ├── components/
@@ -181,15 +202,28 @@ src/
 │   │   ├── Toast.tsx
 │   │   ├── SwipeableRow.tsx
 │   │   ├── TimerIndicator.tsx
+│   │   ├── HeartRatePill.tsx      # Live BPM pill + HR zone badge (header)
+│   │   ├── TimeInZoneBar.tsx      # Time-in-zone bar for a session HR series
 │   │   └── ErrorBoundary.tsx      # Crash protection wrapper
 │   ├── api/
 │   │   ├── client.ts              # Axios instance, error handling
 │   │   ├── types.ts               # Shared API request/response types
-│   │   └── queries.ts             # TanStack Query definitions
+│   │   ├── queries.ts             # TanStack Query definitions
+│   │   ├── predicates.ts          # isCardioExercise / isCardioSet type guards
+│   │   └── cardio.ts              # Cardio modality display labels
+│   ├── lib/
+│   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
+│   │   └── oneRepMax.ts           # Epley 1RM estimate
+│   ├── utils/
+│   │   ├── format.ts              # formatMMSS, parseDurationToSec, etc. (+ tests)
+│   │   └── heartRate.ts           # downsampleHr — bucket HR samples for storage/charts
 │   └── context/
 │       ├── TimerContext.tsx       # Global rest timer (survives navigation)
 │       ├── OfflineContext.tsx     # Online/offline status
 │       ├── ThemeContext.tsx       # Dark mode state
+│       ├── HeartRateContext.tsx   # Web Bluetooth HR strap connection + live samples
+│       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones)
+│       ├── ProgressionContext.tsx # Auto-progression settings (enabled, increment)
 │       └── AiCoachContext.tsx     # AI Coach settings + enabled state
 │
 ├── App.tsx                        # Router setup + context providers
@@ -249,33 +283,41 @@ backend/
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | /api/programs | List all programs with workouts/exercises |
+| GET | /api/programs/:id | Get one program with workouts/exercises |
 | POST | /api/programs | Create program |
 | PUT | /api/programs/:id | Update program |
 | DELETE | /api/programs/:id | Archive program (soft delete) |
 | PUT | /api/programs/:id/set-active | Set as active program |
+| POST | /api/programs/:id/duplicate | Duplicate program (with workouts/exercises) |
 | GET | /api/programs/:id/export | Export program as JSON |
 | POST | /api/programs/import | Import program from JSON |
-| POST | /api/programs/:programId/workouts | Create workout |
+| GET | /api/workouts/:id | Get one workout with exercises |
+| POST | /api/workouts | Create workout (`programId` in body) |
 | PUT | /api/workouts/:id | Update workout |
 | DELETE | /api/workouts/:id | Delete workout (cascade) |
+| POST | /api/workouts/:id/duplicate | Duplicate workout (with exercises) |
 | POST | /api/workouts/reorder | Reorder workouts |
 | POST | /api/workouts/:id/reorder-exercises | Reorder exercises within a workout |
-| POST | /api/workouts/:workoutId/exercises | Create exercise |
+| GET | /api/exercises/:id | Get one exercise |
+| POST | /api/exercises | Create exercise (`workoutId` in body) |
 | PUT | /api/exercises/:id | Update exercise |
 | DELETE | /api/exercises/:id | Delete exercise |
 | GET | /api/exercises/suggestions | Autocomplete suggestions (name search) |
 | GET | /api/exercises/history-by-name | Previous sets by exercise name |
+| GET | /api/exercises/all-sets-by-name | All-time sets by exercise name (PR check) |
 | GET | /api/sessions/active | Find incomplete session (resume) |
 | GET | /api/sessions/history | List completed sessions |
 | GET | /api/sessions/stats | Summary statistics |
 | GET | /api/sessions/export-csv | Export history as CSV |
+| GET | /api/sessions/:id | Get one session with sets |
+| GET | /api/sessions/:id/previous | Previous session hints |
 | POST | /api/sessions/start | Start new session |
 | POST | /api/sessions/:id/sets | Log a set |
-| PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE) |
+| PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE, duration, distance) |
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
-| PUT | /api/sessions/:id/complete | Complete session |
+| PUT | /api/sessions/:id/exercise-note | Set/clear a per-exercise note |
+| POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
-| GET | /api/sessions/:id/previous | Previous session hints |
 
 ---
 
@@ -508,13 +550,14 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Perf: Kill 10 Hz re-renders from context providers — `TimerContext.tick()` now bails with the same state object when `timeRemaining` (whole seconds) hasn't changed, so the 100 ms drift-correction interval no longer re-renders every `useTimer` consumer (incl. the whole ActiveSession tree via `useActiveSession`) ten times a second during rest. Timer completion path (sound/vibration/notification, runs inside `tick()`) untouched. Provider `value` objects memoized with `useMemo` in `TimerContext`, `ToastContext` (consumers no longer re-render when a toast appears/expires), and `HeartRateContext`. No behavior changes. |
 | — | Consistency + small-fix bundle — Progress bests (per-session bestWeight/bestVolume/best1RM in `getExerciseHistory` and the Personal Records tab) now exclude drop sets, matching the PR-celebration rules in `personalRecord.ts` (drop rows still shown in set lists). PersonalRecordsTab `indigo-*` → `primary-*` (teal). Dashboard discard now uses `confirm()` with set count (same wording as the active-session Discard); custom Modal deleted from `ResumeWorkout.tsx`. ExerciseCard `isBetter` green highlight requires one metric up and the other not down (100×9 no longer "beats" 185×8). `SessionHRChart` imports shared `formatMMSS` instead of a local copy. ExerciseListDropdown long-press drag moved to the `touch-none` drag handle (enlarged hit area) so dragging from the row body no longer scrolls the page; removed the no-op `preventDefault` in passive `onTouchMove`. |
 | — | Cleanup: Dead code + hardening sweep — removed zero-caller exports: `useExerciseAllSetsByName` hook (PR check uses `queryClient.fetchQuery` directly; `ExerciseAllSet` type + `queryKeys.exerciseAllSets` kept), `getWorkoutByIndex` (whatIsNext.ts), `Toast()` stub export, `NextWorkoutResponse` type (referenced the removed `/next-workout` endpoint), `options?.onSetLogged` plumbing in `useActiveSession` (page wires completion via `logSet`'s per-call `onSuccess`), `updateExerciseInOrder` (useExerciseOrdering), `setsByExercise` dropped from `useAdHocExercises`' result interface (still used internally). Hardening: `useExerciseNavigation` persist effects include the storage keys in deps, and `useRpeFlow` now takes `sessionId` and resets `completedExercisesRef` when it changes — both guard a sessionId change without remount. No behavior changes. |
+| — | Docs: CLAUDE.md drift fix (no code changes) — API table corrected against the live routers: complete is `POST` (was PUT), workout/exercise creation are flat `POST /api/workouts` + `POST /api/exercises` with the parent id in the body (was nested paths), added missing `GET :id` routes, `duplicate` endpoints, `all-sets-by-name`, and `exercise-note`. Schema diagram now lists the cardio columns on Exercises/Sets, HR columns on Sessions/Sets, and `exerciseNotes`; Key Patterns rows added for Cardio, Heart Rate, and Exercise Notes. Architecture tree caught up (CardioSetInput, SwapExercise, LiveHRChart, SessionHRChart, active-session `lib/` + logic files, `features/settings/`, HeartRatePill, TimeInZoneBar, `shared/lib` + `shared/utils`, predicates/cardio API helpers, HR/profile/progression contexts). Style guide color line fixed: teal `primary-*`, not indigo. |
 
 ---
 
 ## Style Guide
 
 - **Tailwind**: Mobile-first, use `sm:` breakpoints for larger screens
-- **Colors**: Indigo primary (`indigo-600`)
+- **Colors**: Teal primary via the `primary-*` scale (`primary-600` = #0d9488); amber `accent-*`; dark surfaces use `surface-*` tokens (never `dark:*-gray-*`)
 - **Components**: Small and focused, <500 lines per file
 - **Types**: Strict TypeScript, no `any` unless absolutely necessary
 - **Naming**: Feature folders are `kebab-case`, components are `PascalCase`
