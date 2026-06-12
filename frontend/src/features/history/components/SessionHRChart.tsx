@@ -7,6 +7,7 @@ import {
   Tooltip,
   ReferenceLine,
 } from 'recharts';
+import { formatMMSS } from '../../../shared/utils/format';
 
 interface SetMarker {
   t: number;
@@ -17,12 +18,6 @@ interface Props {
   series: { t: number[]; b: number[] };
   setMarkers?: SetMarker[];
   mode?: 'continuous' | 'interval';
-}
-
-function formatMMSS(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 export function SessionHRChart({ series, setMarkers = [], mode = 'interval' }: Props) {

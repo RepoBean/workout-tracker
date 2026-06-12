@@ -179,14 +179,20 @@ export function useProgressData(): UseProgressDataReturn {
 
                 if (exerciseSets.length === 0) return;
 
-                const weights = exerciseSets.map(s => s.weight);
-                const bestWeight = Math.max(...weights);
+                // Bests exclude drop sets (dropIndex > 0) to match the PR
+                // celebration in active-session/logic/personalRecord.ts;
+                // the display list below keeps them.
+                const workingSets = exerciseSets.filter(s => (s.dropIndex || 0) === 0);
+
+                const bestWeight = workingSets.length > 0
+                    ? Math.max(...workingSets.map(s => s.weight))
+                    : 0;
 
                 // Calculate best volume and estimated 1RM independently
                 let bestVolume = 0;
                 let bestEstimated1RM = 0;
 
-                exerciseSets.forEach(set => {
+                workingSets.forEach(set => {
                     const volume = set.weight * set.reps;
                     if (volume > bestVolume) {
                         bestVolume = volume;
@@ -418,6 +424,8 @@ export function useProgressData(): UseProgressDataReturn {
                 if (!set.exerciseName) return;
                 // Strength PRs only
                 if (isCardioSet(set)) return;
+                // Drop sets don't count toward PRs (matches personalRecord.ts)
+                if ((set.dropIndex || 0) > 0) return;
 
                 // Track best volume set
                 const volume = set.weight * set.reps;

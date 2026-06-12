@@ -15,7 +15,7 @@ interface PRCardProps {
 function PRCard({ record }: PRCardProps) {
     return (
         <div
-            className={`card ${record.isRecentPR ? 'border-l-4 border-indigo-500' : ''}`}
+            className={`card ${record.isRecentPR ? 'border-l-4 border-primary-500' : ''}`}
         >
             <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
@@ -31,14 +31,14 @@ function PRCard({ record }: PRCardProps) {
                         Best: {record.bestVolumeWeight} lbs × {record.bestVolumeReps} = {record.bestVolume.toLocaleString()} vol
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Est. 1RM: <span className="font-semibold text-indigo-600 dark:text-indigo-400">{record.estimated1RM} lbs</span>
+                        Est. 1RM: <span className="font-semibold text-primary-600 dark:text-primary-400">{record.estimated1RM} lbs</span>
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
                         {formatDate(record.bestVolumeDate)}
                     </p>
                 </div>
                 {record.isRecentPR && (
-                    <span className="px-2 py-0.5 text-xs font-medium bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 rounded-full">
+                    <span className="px-2 py-0.5 text-xs font-medium bg-primary-100 dark:bg-primary-900 text-primary-700 dark:text-primary-300 rounded-full">
                         RECENT
                     </span>
                 )}

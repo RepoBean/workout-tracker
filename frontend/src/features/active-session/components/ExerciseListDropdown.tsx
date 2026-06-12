@@ -51,7 +51,6 @@ export function ExerciseListDropdown({
 
         // Handle drag — hit-test only this dropdown's rows
         if (draggingIndex !== null) {
-            e.preventDefault();
             const touch = e.touches[0];
             const elements = Array.from(listRef.current?.querySelectorAll('[data-exercise-row]') ?? []);
             let targetIndex = draggingIndex;
@@ -130,7 +129,6 @@ export function ExerciseListDropdown({
                             <div
                                 key={exercise.id}
                                 data-exercise-row
-                                onTouchStart={(e) => handleTouchStart(e, index)}
                                 onClick={() => handleRowClick(index)}
                                 className={`flex items-center gap-3 p-3 border-b border-gray-100 dark:border-surface-700 
                            last:border-b-0 cursor-pointer transition-all
@@ -139,8 +137,11 @@ export function ExerciseListDropdown({
                            ${isDragOver ? 'border-t-2 border-t-primary-500' : ''}
                            ${!isDragging && !isDragOver ? 'hover:bg-gray-50 dark:hover:bg-surface-700' : ''}`}
                             >
-                                {/* Drag handle */}
-                                <div className="text-gray-400 dark:text-gray-500 touch-none">
+                                {/* Drag handle — long-press here to drag; touch-none keeps the page from scrolling */}
+                                <div
+                                    className="text-gray-400 dark:text-gray-500 touch-none p-2 -m-2"
+                                    onTouchStart={(e) => handleTouchStart(e, index)}
+                                >
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                             d="M4 8h16M4 16h16" />

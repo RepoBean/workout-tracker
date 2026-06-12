@@ -184,10 +184,11 @@ export function ExerciseCard({
     setEditingCardioSet(null);
   };
 
-  // Check if this time is better than last time
+  // Check if this time is better than last time: one metric up, the other not down
   const isBetter = (current: Set, previous: { weight: number; reps: number } | undefined): boolean => {
     if (!previous) return false;
-    return current.weight > previous.weight || current.reps > previous.reps;
+    return (current.weight > previous.weight && current.reps >= previous.reps)
+      || (current.reps > previous.reps && current.weight >= previous.weight);
   };
 
   return (
