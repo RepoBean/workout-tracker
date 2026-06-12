@@ -256,7 +256,8 @@ backend/
 │   ├── middleware/
 │   │   └── validate.ts      # Zod schema validation
 │   ├── types/
-│   │   └── index.ts         # Shared types (can be imported by frontend)
+│   │   ├── index.ts         # Shared types (can be imported by frontend)
+│   │   └── associations.ts  # Typed Sequelize include shapes (ProgramWithWorkouts, etc.)
 │   └── index.ts             # Express app setup
 ├── database.sqlite              # SQLite database
 ├── package.json
