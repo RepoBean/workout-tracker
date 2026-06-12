@@ -1,5 +1,8 @@
 import { getNavStorageKeys } from '../hooks/useExerciseNavigation';
-import { getAdHocStorageKey } from '../hooks/useAdHocExercises';
+import {
+    getAdHocStorageKey,
+    getAdHocBlankStorageKey,
+} from '../hooks/useAdHocExercises';
 import {
     getOrderStorageKey,
     getHiddenStorageKey,
@@ -55,6 +58,7 @@ export function clearSessionLocalState(sessionId: number): void {
         localStorage.removeItem(navKeys.step);
         localStorage.removeItem(navKeys.superset);
         localStorage.removeItem(getAdHocStorageKey(sessionId));
+        localStorage.removeItem(getAdHocBlankStorageKey(sessionId));
         localStorage.removeItem(getOrderStorageKey(sessionId));
         localStorage.removeItem(getHiddenStorageKey(sessionId));
         localStorage.removeItem(getHrChartStorageKey(sessionId));

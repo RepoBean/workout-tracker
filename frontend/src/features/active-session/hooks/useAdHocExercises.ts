@@ -7,9 +7,15 @@ export function getAdHocStorageKey(sessionId: number): string {
     return `adhoc-exercises-${sessionId}`;
 }
 
-function loadAdHocExercises(sessionId: number): Exercise[] {
+// Blank-session ad-hoc list — separate key from the program flavor above,
+// which already owns `adhoc-exercises-${id}` with a different shape.
+export function getAdHocBlankStorageKey(sessionId: number): string {
+    return `wt:adhoc-blank:${sessionId}`;
+}
+
+function loadStoredList<T>(key: string): T[] {
     try {
-        const stored = localStorage.getItem(getAdHocStorageKey(sessionId));
+        const stored = localStorage.getItem(key);
         if (!stored) return [];
         return JSON.parse(stored);
     } catch {
@@ -17,12 +23,12 @@ function loadAdHocExercises(sessionId: number): Exercise[] {
     }
 }
 
-function saveAdHocExercises(sessionId: number, exercises: Exercise[]): void {
+function saveStoredList<T>(key: string, items: T[]): void {
     try {
-        if (exercises.length === 0) {
-            localStorage.removeItem(getAdHocStorageKey(sessionId));
+        if (items.length === 0) {
+            localStorage.removeItem(key);
         } else {
-            localStorage.setItem(getAdHocStorageKey(sessionId), JSON.stringify(exercises));
+            localStorage.setItem(key, JSON.stringify(items));
         }
     } catch {
         // silently fail
@@ -71,17 +77,25 @@ export function useAdHocExercises({
     exercises,
     sets,
 }: UseAdHocExercisesParams): UseAdHocExercisesResult {
-    // State for blank ad-hoc sessions
-    const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>([]);
+    // State for blank ad-hoc sessions (initialized from localStorage so
+    // exercises with no logged sets — e.g. a seeded cardio card mid-run —
+    // survive a reload; reconstruction-from-sets can't recover those)
+    const [adHocExercises, setAdHocExercises] = useState<AdHocExercise[]>(
+        () => loadStoredList<AdHocExercise>(getAdHocBlankStorageKey(sessionId))
+    );
 
     // State for ad-hoc exercises added to program workouts (initialized from localStorage)
     const [adHocProgramExercises, setAdHocProgramExercises] = useState<Exercise[]>(
-        () => loadAdHocExercises(sessionId)
+        () => loadStoredList<Exercise>(getAdHocStorageKey(sessionId))
     );
 
     // Persist ad-hoc exercises to localStorage when they change
     useEffect(() => {
-        saveAdHocExercises(sessionId, adHocProgramExercises);
+        saveStoredList(getAdHocBlankStorageKey(sessionId), adHocExercises);
+    }, [sessionId, adHocExercises]);
+
+    useEffect(() => {
+        saveStoredList(getAdHocStorageKey(sessionId), adHocProgramExercises);
     }, [sessionId, adHocProgramExercises]);
 
     // Group sets by exercise ID
