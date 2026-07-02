@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { sequelize } from './models/index.js';
+import { runMigrations } from './migrations.js';
 import programsRouter from './routes/programs.js';
 import workoutsRouter from './routes/workouts.js';
 import exercisesRouter from './routes/exercises.js';
@@ -57,62 +58,7 @@ async function start() {
     await sequelize.sync();
     console.log('Database synced successfully');
 
-    // Safe migration: add dropIndex column if it doesn't exist
-    try {
-      await sequelize.query('ALTER TABLE Sets ADD COLUMN dropIndex INTEGER NOT NULL DEFAULT 0');
-      console.log('Added dropIndex column to Sets table');
-    } catch {
-      // Column already exists, ignore
-    }
-
-    // Safe migration: add heart rate columns (nullable)
-    const hrMigrations: Array<[string, string]> = [
-      ['Sets', 'heartRateAvg'],
-      ['Sets', 'heartRateMax'],
-      ['Sessions', 'heartRateAvg'],
-      ['Sessions', 'heartRateMin'],
-      ['Sessions', 'heartRateMax'],
-    ];
-    for (const [table, column] of hrMigrations) {
-      try {
-        await sequelize.query(`ALTER TABLE ${table} ADD COLUMN ${column} INTEGER`);
-        console.log(`Added ${column} column to ${table} table`);
-      } catch {
-        // Column already exists, ignore
-      }
-    }
-
-    // Safe migration: add cardio columns
-    const cardioMigrations: Array<[string, string, string]> = [
-      ['Exercises', 'exerciseType', `VARCHAR(16) NOT NULL DEFAULT 'strength'`],
-      ['Exercises', 'cardioModality', 'VARCHAR(16)'],
-      ['Exercises', 'targetDurationSec', 'INTEGER'],
-      ['Exercises', 'targetDistance', 'DECIMAL(6,2)'],
-      ['Sets', 'durationSec', 'INTEGER'],
-      ['Sets', 'distance', 'DECIMAL(6,2)'],
-    ];
-    for (const [table, column, type] of cardioMigrations) {
-      try {
-        await sequelize.query(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
-        console.log(`Added ${column} column to ${table} table`);
-      } catch {
-        // Column already exists, ignore
-      }
-    }
-
-    try {
-      await sequelize.query('ALTER TABLE Sessions ADD COLUMN heartRateSeries TEXT');
-      console.log('Added heartRateSeries column to Sessions table');
-    } catch {
-      // Column already exists, ignore
-    }
-
-    try {
-      await sequelize.query('ALTER TABLE Sessions ADD COLUMN exerciseNotes JSON');
-      console.log('Added exerciseNotes column to Sessions table');
-    } catch {
-      // Column already exists, ignore
-    }
+    await runMigrations(sequelize);
 
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);

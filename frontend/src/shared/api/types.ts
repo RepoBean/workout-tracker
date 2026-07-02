@@ -164,7 +164,6 @@ export interface CreateProgramRequest {
 
 export interface UpdateProgramRequest {
   name?: string;
-  isActive?: boolean;
   isArchived?: boolean;
   currentWorkoutIndex?: number;
 }

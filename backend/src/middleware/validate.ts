@@ -1,13 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
-import { ZodSchema, ZodError } from 'zod';
+import { z, ZodSchema, ZodError } from 'zod';
 
 /**
- * Middleware factory for Zod schema validation
+ * Middleware factory for Zod schema validation.
+ * Replaces req.body with the parsed output so defaults, transforms,
+ * and unknown-key stripping actually take effect in handlers.
  */
 export const validate = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
     try {
-      schema.parse(req.body);
+      req.body = schema.parse(req.body);
       next();
     } catch (error) {
       if (error instanceof ZodError) {
@@ -26,31 +28,8 @@ export const validate = (schema: ZodSchema) => {
 };
 
 /**
- * Middleware factory for validating query parameters
- */
-export const validateQuery = (schema: ZodSchema) => {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    try {
-      schema.parse(req.query);
-      next();
-    } catch (error) {
-      if (error instanceof ZodError) {
-        res.status(400).json({
-          error: 'Invalid query parameters',
-          details: error.errors.map(e => ({
-            path: e.path.join('.'),
-            message: e.message
-          }))
-        });
-        return;
-      }
-      next(error);
-    }
-  };
-};
-
-/**
- * Middleware factory for validating URL parameters
+ * Middleware factory for validating URL parameters.
+ * Validation only — params stay strings; routes convert with Number().
  */
 export const validateParams = (schema: ZodSchema) => {
   return (req: Request, res: Response, next: NextFunction): void => {
@@ -77,17 +56,15 @@ export const validateParams = (schema: ZodSchema) => {
 // Validation Schemas
 // ============================================
 
-import { z } from 'zod';
-
 // Numeric ID param schema
 export const idParamSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid ID').transform(Number),
+  id: z.string().regex(/^\d+$/, 'Invalid ID'),
 });
 
 // Session + Set ID params schema
 export const sessionSetParamsSchema = z.object({
-  id: z.string().regex(/^\d+$/, 'Invalid session ID').transform(Number),
-  setId: z.string().regex(/^\d+$/, 'Invalid set ID').transform(Number),
+  id: z.string().regex(/^\d+$/, 'Invalid session ID'),
+  setId: z.string().regex(/^\d+$/, 'Invalid set ID'),
 });
 
 // Pagination query schema
@@ -95,12 +72,3 @@ export const paginationQuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)).optional(),
   offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)).optional(),
 });
-
-// Helper to validate and parse params
-export function parseParams<T>(schema: z.ZodSchema<T>, data: unknown): { success: true; data: T } | { success: false; error: string } {
-  const result = schema.safeParse(data);
-  if (!result.success) {
-    return { success: false, error: result.error.errors[0]?.message || 'Invalid parameters' };
-  }
-  return { success: true, data: result.data };
-}

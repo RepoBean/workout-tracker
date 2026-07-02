@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Workout, Exercise, Program, sequelize } from '../models/index.js';
-import { validate } from '../middleware/validate.js';
+import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -35,7 +35,7 @@ const reorderWorkoutsSchema = z.object({
 // ============================================
 
 // GET /api/workouts/:id - Get single workout with exercises
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const workout = await Workout.findByPk(Number(req.params.id), {
       include: [{
@@ -79,7 +79,7 @@ router.post('/', validate(createWorkoutSchema), async (req: Request, res: Respon
 });
 
 // PUT /api/workouts/:id - Update workout
-router.put('/:id', validate(updateWorkoutSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateWorkoutSchema), async (req: Request, res: Response) => {
   try {
     const workout = await Workout.findByPk(Number(req.params.id));
     if (!workout) {
@@ -100,7 +100,7 @@ router.put('/:id', validate(updateWorkoutSchema), async (req: Request, res: Resp
 });
 
 // DELETE /api/workouts/:id - Delete workout
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const workout = await Workout.findByPk(Number(req.params.id));
     if (!workout) {
@@ -117,7 +117,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 });
 
 // POST /api/workouts/:id/duplicate - Duplicate workout with exercises
-router.post('/:id/duplicate', async (req: Request, res: Response) => {
+router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const original = await Workout.findByPk(Number(req.params.id), {
       include: [{
@@ -153,6 +153,10 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
           targetReps: e.targetReps as string,
           orderIndex: e.orderIndex as number,
           supersetGroup: (e.supersetGroup as string) || null,
+          exerciseType: (e.exerciseType as 'strength' | 'cardio') || 'strength',
+          cardioModality: (e.cardioModality as 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other' | null) || null,
+          targetDurationSec: (e.targetDurationSec as number | null) ?? null,
+          targetDistance: (e.targetDistance as number | null) ?? null,
         }, { transaction: t });
       }
 
@@ -198,7 +202,7 @@ router.post('/reorder', validate(reorderWorkoutsSchema), async (req: Request, re
 });
 
 // POST /api/workouts/:id/reorder-exercises - Reorder exercises within a workout
-router.post('/:id/reorder-exercises', validate(reorderExercisesSchema), async (req: Request, res: Response) => {
+router.post('/:id/reorder-exercises', validateParams(idParamSchema), validate(reorderExercisesSchema), async (req: Request, res: Response) => {
   try {
     const workoutId = Number(req.params.id);
     const { exerciseIds } = req.body;

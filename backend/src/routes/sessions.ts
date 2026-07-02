@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Session, Set as SetModel, Program, Workout, Exercise, sequelize } from '../models/index.js';
-import { validate, paginationQuerySchema } from '../middleware/validate.js';
+import { validate, validateParams, idParamSchema, sessionSetParamsSchema, paginationQuerySchema } from '../middleware/validate.js';
 import { Op } from 'sequelize';
 import type {
   ProgramWithWorkouts,
@@ -288,7 +288,7 @@ router.get('/stats', async (req: Request, res: Response) => {
 });
 
 // GET /api/sessions/:id - Get session by ID (includes exercises from workout)
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const session = await Session.findByPk(Number(req.params.id), {
       include: [{
@@ -329,7 +329,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // GET /api/sessions/:id/previous - Get previous session data for hints
 // Looks up history by exercise NAME (not workoutId) so ad-hoc and cross-workout history is visible
-router.get('/:id/previous', async (req: Request, res: Response) => {
+router.get('/:id/previous', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
 
@@ -478,7 +478,7 @@ router.post('/start', validate(startSessionSchema), async (req: Request, res: Re
 });
 
 // POST /api/sessions/:id/sets - Log a set
-router.post('/:id/sets', validate(logSetSchema), async (req: Request, res: Response) => {
+router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
 
@@ -533,7 +533,7 @@ const updateSetSchema = z.object({
 });
 
 // PUT /api/sessions/:id/sets/:setId - Update a set (weight, reps, RPE)
-router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, res: Response) => {
+router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(updateSetSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
     const setId = Number(req.params.setId);
@@ -580,7 +580,7 @@ router.put('/:id/sets/:setId', validate(updateSetSchema), async (req: Request, r
 });
 
 // PUT /api/sessions/:id/exercise-note - Set or clear a per-exercise note on a session
-router.put('/:id/exercise-note', validate(setExerciseNoteSchema), async (req: Request, res: Response) => {
+router.put('/:id/exercise-note', validateParams(idParamSchema), validate(setExerciseNoteSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
     const { exerciseName, note } = req.body as { exerciseName: string; note: string | null };
@@ -611,7 +611,7 @@ router.put('/:id/exercise-note', validate(setExerciseNoteSchema), async (req: Re
 });
 
 // POST /api/sessions/:id/complete - Complete session
-router.post('/:id/complete', validate(completeSessionSchema), async (req: Request, res: Response) => {
+router.post('/:id/complete', validateParams(idParamSchema), validate(completeSessionSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
     const { heartRateAvg, heartRateMin, heartRateMax } = req.body;
@@ -668,7 +668,7 @@ router.post('/:id/complete', validate(completeSessionSchema), async (req: Reques
 });
 
 // DELETE /api/sessions/:id/sets/:setId - Delete a single set
-router.delete('/:id/sets/:setId', async (req: Request, res: Response) => {
+router.delete('/:id/sets/:setId', validateParams(sessionSetParamsSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
     const setId = Number(req.params.setId);
@@ -704,7 +704,7 @@ router.delete('/:id/sets/:setId', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/sessions/:id - Delete session
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const sessionId = Number(req.params.id);
 

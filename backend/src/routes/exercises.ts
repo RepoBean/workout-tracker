@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Exercise, Workout, Set as SetModel, Session } from '../models/index.js';
-import { validate } from '../middleware/validate.js';
+import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 import { Op } from 'sequelize';
 import type { SetWithSession } from '../types/associations.js';
 
@@ -224,7 +224,7 @@ router.get('/suggestions', async (req: Request, res: Response) => {
 });
 
 // GET /api/exercises/:id - Get single exercise
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const exercise = await Exercise.findByPk(Number(req.params.id));
 
@@ -275,7 +275,7 @@ router.post('/', validate(createExerciseSchema), async (req: Request, res: Respo
 });
 
 // PUT /api/exercises/:id - Update exercise
-router.put('/:id', validate(updateExerciseSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema), async (req: Request, res: Response) => {
   try {
     const exercise = await Exercise.findByPk(Number(req.params.id));
     if (!exercise) {
@@ -306,7 +306,7 @@ router.put('/:id', validate(updateExerciseSchema), async (req: Request, res: Res
 });
 
 // DELETE /api/exercises/:id - Delete exercise
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const exercise = await Exercise.findByPk(Number(req.params.id));
     if (!exercise) {

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { Program, Workout, Exercise, sequelize } from '../models/index.js';
-import { validate } from '../middleware/validate.js';
+import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
 
@@ -13,9 +13,10 @@ const createProgramSchema = z.object({
   name: z.string().min(1).max(255),
 });
 
+// isActive is deliberately not updatable here — /set-active is the only
+// path that changes it, preserving the single-active-program invariant.
 const updateProgramSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  isActive: z.boolean().optional(),
   isArchived: z.boolean().optional(),
   currentWorkoutIndex: z.number().int().min(0).optional(),
 }).refine(data => Object.keys(data).length > 0, {
@@ -84,7 +85,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // GET /api/programs/:id - Get single program with workouts and exercises
-router.get('/:id', async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const program = await Program.findByPk(Number(req.params.id), {
       include: [{
@@ -114,7 +115,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 });
 
 // GET /api/programs/:id/export - Export program as JSON
-router.get('/:id/export', async (req: Request, res: Response) => {
+router.get('/:id/export', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const program = await Program.findByPk(Number(req.params.id), {
       include: [{
@@ -246,7 +247,7 @@ router.post('/import', validate(importProgramSchema), async (req: Request, res: 
 });
 
 // PUT /api/programs/:id - Update program
-router.put('/:id', validate(updateProgramSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateProgramSchema), async (req: Request, res: Response) => {
   try {
     const program = await Program.findByPk(Number(req.params.id));
     if (!program) {
@@ -254,9 +255,8 @@ router.put('/:id', validate(updateProgramSchema), async (req: Request, res: Resp
       return;
     }
 
-    const { name, isActive, isArchived, currentWorkoutIndex } = req.body;
+    const { name, isArchived, currentWorkoutIndex } = req.body;
     if (name !== undefined) program.name = name;
-    if (isActive !== undefined) program.isActive = isActive;
     if (isArchived !== undefined) program.isArchived = isArchived;
     if (currentWorkoutIndex !== undefined) program.currentWorkoutIndex = currentWorkoutIndex;
 
@@ -269,7 +269,7 @@ router.put('/:id', validate(updateProgramSchema), async (req: Request, res: Resp
 });
 
 // PUT /api/programs/:id/set-active - Set program as active
-router.put('/:id/set-active', async (req: Request, res: Response) => {
+router.put('/:id/set-active', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const programId = Number(req.params.id);
 
@@ -315,7 +315,7 @@ router.put('/:id/set-active', async (req: Request, res: Response) => {
 });
 
 // POST /api/programs/:id/duplicate - Duplicate program with workouts and exercises
-router.post('/:id/duplicate', async (req: Request, res: Response) => {
+router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const original = await Program.findByPk(Number(req.params.id), {
       include: [{
@@ -395,7 +395,7 @@ router.post('/:id/duplicate', async (req: Request, res: Response) => {
 });
 
 // DELETE /api/programs/:id - Archive program (soft delete)
-router.delete('/:id', async (req: Request, res: Response) => {
+router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
     const program = await Program.findByPk(Number(req.params.id));
     if (!program) {
