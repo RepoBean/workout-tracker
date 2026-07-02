@@ -105,3 +105,44 @@ describe('useExerciseNavigation resume behavior', () => {
         expect(result.current.currentStepIndex).toBe(1);
     });
 });
+
+describe('useExerciseNavigation with ad-hoc (negative id) exercises', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    // Blank ad-hoc exercises have negative ids; their sets carry exerciseId null
+    // and are resolved by exerciseName.
+    const running = makeExercise(-101, 'Running', 0);
+    const squat = makeExercise(-102, 'Squat', 1);
+    const adHocList = [running, squat];
+
+    function makeAdHocSet(id: number, name: string, setNumber: number): Set {
+        return { ...makeSet(id, running, setNumber), exerciseId: null, exerciseName: name };
+    }
+
+    it('resolves sets, completion, and progress by name for negative ids', () => {
+        const sets = [1, 2, 3].map(n => makeAdHocSet(n, 'Running', n));
+        const { result } = renderNavigation({ exercises: adHocList, sets, isReady: true });
+
+        expect(result.current.getSetsForExercise(-101)).toHaveLength(3);
+        expect(result.current.isExerciseComplete(-101)).toBe(true);
+        expect(result.current.getExerciseProgress(-101)).toEqual({ logged: 3, target: 3 });
+        expect(result.current.isExerciseComplete(-102)).toBe(false);
+    });
+
+    it('resumes to the first incomplete negative-id exercise', () => {
+        const sets = [1, 2, 3].map(n => makeAdHocSet(n, 'Running', n)); // Running complete
+        const { result } = renderNavigation({ exercises: adHocList, sets, isReady: true });
+        expect(result.current.currentStepIndex).toBe(1);
+    });
+
+    it('goToNext no-ops on a single all-complete negative-id list', () => {
+        const sets = [1, 2, 3].map(n => makeAdHocSet(n, 'Running', n));
+        const { result } = renderNavigation({ exercises: [running], sets, isReady: true });
+
+        expect(result.current.nextIncompleteExercise).toBeNull();
+        act(() => result.current.goToNext());
+        expect(result.current.currentStepIndex).toBe(0);
+    });
+});

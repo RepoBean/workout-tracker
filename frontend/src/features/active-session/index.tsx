@@ -12,7 +12,7 @@ import { useExerciseHistoryByName } from '../../shared/api/queries';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
-import { AddExercise } from './components/AddExercise';
+import { AddExercise, type AdHocExercise } from './components/AddExercise';
 import { SwapExercise } from './components/SwapExercise';
 import { SupersetStep } from './components/SupersetStep';
 import { CompletedSessionSummary } from './components/CompletedSessionSummary';
@@ -115,7 +115,6 @@ export default function ActiveSession() {
     setAdHocExercises,
     setAdHocProgramExercises,
     mergedExercises,
-    adHocSetsByName,
     getSetsForExercise,
     allAdHocExercises,
   } = useAdHocExercises({
@@ -350,6 +349,23 @@ export default function ActiveSession() {
     setSwapTarget(null);
   };
 
+  // Add an exercise from either the focused view or the empty state. Blank
+  // sessions (no program exercises) append to the blank ad-hoc list — which
+  // flows through mergedExercises → ordering (appended at the end) → navigation
+  // — so focus stays on the current exercise. Program sessions use the existing
+  // insert-after-current path.
+  const handleAddExerciseUnified = (ex: AdHocExercise) => {
+    if (exercises.length === 0) {
+      setAdHocExercises(prev =>
+        prev.some(e => e.name.toLowerCase() === ex.name.toLowerCase())
+          ? prev
+          : [...prev, ex]
+      );
+    } else {
+      handleAddExercise(ex.name);
+    }
+  };
+
   // Shared ExerciseCard wiring for the focused view (single + superset steps)
   const renderExerciseCard = (exercise: Exercise) => {
     const isExerciseAdHoc = exercise.id < 0;
@@ -366,7 +382,7 @@ export default function ActiveSession() {
         onDeleteSet={deleteSet}
         onUpdateSet={updateSet}
         onSetNote={(note) => setExerciseNote(exercise.name, note)}
-        onSwapExercise={() => setSwapTarget(exercise)}
+        onSwapExercise={exercises.length > 0 ? () => setSwapTarget(exercise) : undefined}
         isLogging={isLoggingSet}
       />
     );
@@ -441,8 +457,12 @@ export default function ActiveSession() {
         />
       )}
 
-      {/* Focused exercise view (when session has workout exercises) */}
-      {exercises.length > 0 && (
+      {/* Focused exercise view — shared by program workouts and blank ad-hoc
+          sessions (blank exercises flow through the same ordering/navigation
+          pipeline). Empty blank session shows just the Add Exercise card. The
+          transient frame where merged exercises exist but ordering hasn't synced
+          yet renders nothing rather than flashing the empty state. */}
+      {orderedExercises.length > 0 ? (
         <>
           {/* Current step exercises */}
           <div className="space-y-4">
@@ -485,51 +505,20 @@ export default function ActiveSession() {
             />
           </div>
 
-          {/* Add Exercise for program workouts */}
+          {/* Add Exercise */}
           <div className="mt-4">
-            <AddExercise onAdd={(ex) => handleAddExercise(ex.name)} />
+            <AddExercise onAdd={handleAddExerciseUnified} />
           </div>
         </>
-      )}
-
-      {/* Blank ad-hoc sessions: show all exercises */}
-      {exercises.length === 0 && (
+      ) : mergedExercises.length === 0 ? (
+        /* Empty blank ad-hoc session — no exercises yet */
         <div className="space-y-4">
-          {allAdHocExercises.map((adHocEx) => {
-            const adHocSets = adHocSetsByName.get(adHocEx.name.toLowerCase()) || [];
-            const isCardio = isCardioExercise(adHocEx, adHocSets);
-
-            const virtualExercise = makeVirtualExercise({
-              id: -Math.abs(adHocEx.tempId.split('').reduce((h, c) => Math.imul(31, h) + c.charCodeAt(0), 0)) - 1,
-              name: adHocEx.name,
-              targetSets: isCardio ? 1 : 3,
-              exerciseType: isCardio ? 'cardio' : 'strength',
-              cardioModality: adHocEx.cardioModality ?? null,
-              targetDurationSec: adHocEx.targetDurationSec ?? null,
-              targetDistance: adHocEx.targetDistance ?? null,
-            });
-
-            return (
-              <ExerciseCard
-                key={adHocEx.tempId}
-                exercise={virtualExercise}
-                loggedSets={adHocSets}
-                note={session?.exerciseNotes?.[virtualExercise.name] ?? null}
-                onLogSet={(data, opts) => handleLogSet({ ...data, exerciseId: null }, opts)}
-                onDeleteSet={deleteSet}
-                onUpdateSet={updateSet}
-                onSetNote={(note) => setExerciseNote(virtualExercise.name, note)}
-                isLogging={isLoggingSet}
-              />
-            );
-          })}
-
-          {/* Add Exercise button for ad-hoc sessions */}
-          <AddExercise
-            onAdd={(exercise) => setAdHocExercises(prev => [...prev, exercise])}
-          />
+          <p className="text-sm text-center text-gray-500 dark:text-gray-400 pt-2">
+            Add an exercise to get started.
+          </p>
+          <AddExercise onAdd={handleAddExerciseUnified} />
         </div>
-      )}
+      ) : null}
 
       {/* Discard session — escape hatch without going Home → Resume card */}
       <div className="mt-8 text-center">

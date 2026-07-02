@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import type { Set as SetType, Exercise } from '../../../shared/api/types';
-import { isCardioSet } from '../../../shared/api/predicates';
+import { isCardioSet, isCardioExercise } from '../../../shared/api/predicates';
+import { makeVirtualExercise } from '../lib/virtualExercise';
 import type { AdHocExercise } from '../components/AddExercise';
 
 export function getAdHocStorageKey(sessionId: number): string {
@@ -62,7 +63,7 @@ interface UseAdHocExercisesResult {
     allAdHocExercises: AdHocExercise[];
 }
 
-function hashName(name: string): number {
+export function hashName(name: string): number {
     let hash = 0;
     for (let i = 0; i < name.length; i++) {
         hash = Math.imul(31, hash) + name.charCodeAt(i);
@@ -165,25 +166,10 @@ export function useAdHocExercises({
         return result;
     }, [exercises, adHocSetsByName, session?.workoutId, adHocProgramExercises]);
 
-    // Merge all exercises
-    const mergedExercises = useMemo(() => {
-        const reconstructedNames = new Set(reconstructedAdHocExercises.map(e => e.name.toLowerCase()));
-        const programNames = new Set(exercises.map(e => e.name.toLowerCase()));
-        const newAdHoc = adHocProgramExercises.filter(
-            e => !reconstructedNames.has(e.name.toLowerCase()) && !programNames.has(e.name.toLowerCase())
-        );
-        return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
-    }, [exercises, reconstructedAdHocExercises, adHocProgramExercises]);
-
-    // Get sets for an exercise (case-insensitive for ad-hoc)
-    const getSetsForExercise = (exercise: Exercise): SetType[] => {
-        if (exercise.id < 0) {
-            return adHocSetsByName.get(exercise.name.toLowerCase()) || [];
-        }
-        return setsByExercise.get(exercise.id) || [];
-    };
-
-    // All ad-hoc exercises for blank session UI (case-insensitive deduplication)
+    // All ad-hoc exercises for blank session UI (case-insensitive deduplication).
+    // Canonical deduped, display-cased list: logged-set reconstruction first,
+    // then the blank list. Also the source for blankMergedExercises below, so
+    // declared before mergedExercises.
     const allAdHocExercises = useMemo(() => {
         const seenNames = new Set<string>(); // lowercase for deduplication
         const result: AdHocExercise[] = [];
@@ -204,6 +190,48 @@ export function useAdHocExercises({
         }
         return result;
     }, [adHocSetsByName, adHocExercises]);
+
+    // Blank-session exercises as full virtual Exercises so they flow through the
+    // same ordering → navigation → focused-view pipeline as program workouts.
+    // Keyed by hashName(name) — deterministic (survives reload so persisted order
+    // ids re-match) and matching the reconstruction path, since ad-hoc sets are
+    // resolved by name, not by numeric id.
+    const blankMergedExercises = useMemo(() => {
+        return allAdHocExercises.map((adHocEx, i) => {
+            const setsForName = adHocSetsByName.get(adHocEx.name.toLowerCase());
+            const isCardio = isCardioExercise(adHocEx, setsForName);
+            return makeVirtualExercise({
+                id: hashName(adHocEx.name),
+                name: adHocEx.name,
+                orderIndex: i,
+                targetSets: isCardio ? 1 : 3,
+                exerciseType: isCardio ? 'cardio' : 'strength',
+                cardioModality: adHocEx.cardioModality ?? null,
+                targetDurationSec: adHocEx.targetDurationSec ?? null,
+                targetDistance: adHocEx.targetDistance ?? null,
+            });
+        });
+    }, [allAdHocExercises, adHocSetsByName]);
+
+    // Merge all exercises. Blank sessions (no program exercises) use the virtual
+    // list above; program sessions keep program + reconstructed + new ad-hoc.
+    const mergedExercises = useMemo(() => {
+        if (exercises.length === 0) return blankMergedExercises;
+        const reconstructedNames = new Set(reconstructedAdHocExercises.map(e => e.name.toLowerCase()));
+        const programNames = new Set(exercises.map(e => e.name.toLowerCase()));
+        const newAdHoc = adHocProgramExercises.filter(
+            e => !reconstructedNames.has(e.name.toLowerCase()) && !programNames.has(e.name.toLowerCase())
+        );
+        return [...exercises, ...reconstructedAdHocExercises, ...newAdHoc];
+    }, [exercises, reconstructedAdHocExercises, adHocProgramExercises, blankMergedExercises]);
+
+    // Get sets for an exercise (case-insensitive for ad-hoc)
+    const getSetsForExercise = (exercise: Exercise): SetType[] => {
+        if (exercise.id < 0) {
+            return adHocSetsByName.get(exercise.name.toLowerCase()) || [];
+        }
+        return setsByExercise.get(exercise.id) || [];
+    };
 
     return {
         adHocExercises,
