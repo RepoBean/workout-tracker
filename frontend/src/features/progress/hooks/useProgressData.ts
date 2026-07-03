@@ -82,7 +82,9 @@ export interface UseProgressDataReturn {
 }
 
 export function useProgressData(): UseProgressDataReturn {
-    const { data: sessions, isLoading: historyLoading, error: historyError } = useHistory(200, 0);
+    // All-time records/trends need effectively every session, not a page — the
+    // backend clamps limit at 2000, so 1000 covers a personal lifetime of data.
+    const { data: sessions, isLoading: historyLoading, error: historyError } = useHistory(1000, 0);
     const { data: programs, isLoading: programsLoading } = usePrograms();
 
     // Derive unique exercise names from history

@@ -68,7 +68,11 @@ export const sessionSetParamsSchema = z.object({
 });
 
 // Pagination query schema
+// Invariant: out-of-range limits clamp toward the request, never below it — a
+// numeric limit above the cap yields the cap (2000, a personal lifetime of
+// sessions), NOT a fallback to the default. Only non-numeric input fails the
+// safeParse and falls back to the route's default.
 export const paginationQuerySchema = z.object({
-  limit: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(1).max(100)).optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).transform(n => Math.min(Math.max(n, 1), 2000)).optional(),
   offset: z.string().regex(/^\d+$/).transform(Number).pipe(z.number().min(0)).optional(),
 });

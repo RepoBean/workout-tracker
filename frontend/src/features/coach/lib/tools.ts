@@ -129,7 +129,7 @@ async function getStats(): Promise<string> {
 }
 
 async function getPersonalRecords(): Promise<string> {
-  const { data } = await api.get<Session[]>('/sessions/history', { params: { limit: 100 } });
+  const { data } = await api.get<Session[]>('/sessions/history', { params: { limit: 1000 } });
   const best = new Map<string, { e1rm: number; topWeight: number; topReps: number }>();
   for (const session of data) {
     for (const set of session.sets ?? []) {

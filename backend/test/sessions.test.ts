@@ -193,6 +193,51 @@ describe('POST /api/sessions/start', () => {
   });
 });
 
+describe('GET /api/sessions/history — limit contract', () => {
+  // Create `count` completed sessions directly (the route only returns rows with
+  // a non-null completedAt). No sets needed — we assert on list length only.
+  async function seedCompletedSessions(count: number) {
+    const rows = Array.from({ length: count }, (_, i) => ({
+      programId: null,
+      programName: 'PPL',
+      workoutId: null,
+      workoutName: `Session ${i}`,
+      completedAt: new Date(Date.now() - i * 86_400_000),
+    }));
+    await Session.bulkCreate(rows);
+  }
+
+  it('honors a limit above the old 100 cap instead of falling back to 50', async () => {
+    await seedCompletedSessions(55);
+    const res = await request(app).get('/api/sessions/history?limit=200');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(55);
+  });
+
+  it('clamps an over-cap limit to the request rather than falling back', async () => {
+    await seedCompletedSessions(55);
+    const res = await request(app).get('/api/sessions/history?limit=5000');
+    expect(res.status).toBe(200);
+    // Clamped to the 2000 cap (> 55 available), so all rows come back — never
+    // the old 50-row fallback.
+    expect(res.body).toHaveLength(55);
+  });
+
+  it('falls back to the default 50 for a non-numeric limit', async () => {
+    await seedCompletedSessions(55);
+    const res = await request(app).get('/api/sessions/history?limit=abc');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(50);
+  });
+
+  it('defaults to 50 when no limit is provided', async () => {
+    await seedCompletedSessions(55);
+    const res = await request(app).get('/api/sessions/history');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveLength(50);
+  });
+});
+
 describe('param validation', () => {
   it('returns 400 (not 500) for non-numeric session ids', async () => {
     const res = await request(app).get('/api/sessions/abc');

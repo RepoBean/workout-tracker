@@ -70,10 +70,12 @@ const completeSessionSchema = z.object({
 // GET /api/sessions/history - Get session history with pagination and optional date range
 router.get('/history', async (req: Request, res: Response) => {
   try {
-    // Soft validation — invalid params fall back to defaults rather than returning 400
+    // Soft validation — invalid params fall back to defaults rather than returning 400.
+    // The schema clamps out-of-range numeric limits toward the request (up to 2000),
+    // so a large limit is honored, not silently shrunk to the default.
     const limitParam = paginationQuerySchema.shape.limit.safeParse(req.query.limit);
     const offsetParam = paginationQuerySchema.shape.offset.safeParse(req.query.offset);
-    const limit = limitParam.success ? Math.min(limitParam.data ?? 50, 100) : 50;
+    const limit = limitParam.success ? (limitParam.data ?? 50) : 50;
     const offset = offsetParam.success ? (offsetParam.data ?? 0) : 0;
     const from = req.query.from as string | undefined;
     const to = req.query.to as string | undefined;
