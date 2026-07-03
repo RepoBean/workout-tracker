@@ -33,11 +33,18 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [nextOrderIndex, setNextOrderIndex] = useState(orderIndex);
 
-  const { createExercise, updateExercise } = useProgramMutations();
+  const { createExercise, updateExercise, deleteExercise } = useProgramMutations();
   const { data: suggestions } = useExerciseSuggestions(name);
 
   const isEditing = !!exercise;
   const isSubmitting = createExercise.isPending || updateExercise.isPending;
+
+  const handleDelete = () => {
+    if (!exercise) return;
+    if (confirm(`Delete exercise "${exercise.name}"?`)) {
+      deleteExercise.mutate(exercise.id, { onSuccess: onClose });
+    }
+  };
   const isCardio = exerciseType === 'cardio';
 
   // Dynamic superset group logic
@@ -314,6 +321,14 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
               </Button>
               <Button variant="secondary" onClick={onClose} className="w-full sm:w-auto">
                 Cancel
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleDelete}
+                disabled={deleteExercise.isPending}
+                className="w-full sm:w-auto sm:ml-auto text-red-600 dark:text-red-400"
+              >
+                Delete
               </Button>
             </>
           ) : (

@@ -88,6 +88,7 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
   const nextWorkout = workouts.length > 0
     ? workouts[program.currentWorkoutIndex % workouts.length]
     : null;
+  const totalExercises = workouts.reduce((n, w) => n + (w.exercises?.length ?? 0), 0);
 
   return (
     <div
@@ -155,25 +156,29 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
               )}
             </div>
 
-            {isHero && (
-              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            {isHero ? (
+              <div className="mt-1 text-sm text-gray-600 dark:text-gray-400 truncate">
                 {nextWorkout ? (
                   <>
                     <span className="text-xs uppercase tracking-wider text-primary-700 dark:text-primary-400 font-semibold">Up next</span>
                     <span className="mx-1.5">·</span>
                     <span className="font-medium text-gray-800 dark:text-gray-200">{nextWorkout.name}</span>
+                    <span className="mx-1.5">·</span>
+                    <span>{workouts.length} workout{workouts.length !== 1 ? 's' : ''}</span>
                   </>
                 ) : (
                   <span className="italic">No workouts yet — add one below</span>
                 )}
               </div>
+            ) : (
+              <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400 truncate">
+                {workouts.length === 0
+                  ? 'No workouts yet'
+                  : `${workouts.length} workout${workouts.length !== 1 ? 's' : ''} · ${totalExercises} exercise${totalExercises !== 1 ? 's' : ''}`}
+              </p>
             )}
           </div>
         </div>
-
-        <span className={`${isHero ? 'text-xs uppercase tracking-wider' : 'text-sm'} text-gray-500 flex-shrink-0 ml-2 mt-1`}>
-          {workouts.length} workout{workouts.length !== 1 ? 's' : ''}
-        </span>
       </div>
 
       {/* Expanded Content */}
@@ -223,6 +228,7 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
               <WorkoutCard
                 key={workout.id}
                 workout={workout}
+                isUpNext={program.isActive && nextWorkout?.id === workout.id}
                 onMoveUp={() => handleMoveWorkout(index, 'up')}
                 onMoveDown={() => handleMoveWorkout(index, 'down')}
                 canMoveUp={index > 0}

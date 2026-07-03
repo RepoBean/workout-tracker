@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { ExerciseForm } from './ExerciseForm';
+import { CARDIO_MODALITY_INFO } from '../../../shared/api/cardio';
 import type { Workout, Exercise } from '../../../shared/api/types';
 
 const SUPERSET_COLORS: Record<string, string> = {
@@ -12,15 +13,29 @@ const SUPERSET_COLORS: Record<string, string> = {
   E: 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300',
 };
 
+// Target summary for an exercise row — cardio shows modality + duration/distance
+// targets instead of the placeholder "1 × 1" sets/reps it stores.
+function targetSummary(exercise: Exercise): string {
+  if (exercise.exerciseType === 'cardio') {
+    const parts: string[] = [CARDIO_MODALITY_INFO[exercise.cardioModality ?? 'other'].long];
+    if (exercise.targetDurationSec) parts.push(`${Math.round(exercise.targetDurationSec / 60)} min`);
+    if (exercise.targetDistance != null && exercise.targetDistance > 0) parts.push(`${exercise.targetDistance} mi`);
+    return parts.join(' · ');
+  }
+  return `${exercise.targetSets} × ${exercise.targetReps}`;
+}
+
 interface WorkoutCardProps {
   workout: Workout;
+  /** True when this workout is where the active program's rotation resumes. */
+  isUpNext?: boolean;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
   canMoveUp?: boolean;
   canMoveDown?: boolean;
 }
 
-export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: WorkoutCardProps) {
+export function WorkoutCard({ workout, isUpNext, onMoveUp, onMoveDown, canMoveUp, canMoveDown }: WorkoutCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(workout.name);
@@ -29,7 +44,7 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
     exercise?: Exercise;
   }>({ open: false });
 
-  const { updateWorkout, deleteWorkout, duplicateWorkout, deleteExercise, reorderExercises } = useProgramMutations();
+  const { updateWorkout, deleteWorkout, duplicateWorkout, reorderExercises } = useProgramMutations();
   const exercises = workout.exercises || [];
 
   const handleSaveName = () => {
@@ -45,12 +60,6 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
     }
   };
 
-  const handleDeleteExercise = (exercise: Exercise) => {
-    if (confirm(`Delete exercise "${exercise.name}"?`)) {
-      deleteExercise.mutate(exercise.id);
-    }
-  };
-
   const handleMoveExercise = (index: number, direction: 'up' | 'down') => {
     const newIndex = direction === 'up' ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= exercises.length) return;
@@ -63,24 +72,28 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
     });
   };
 
+  const metaLine = exercises.length === 0
+    ? 'No exercises yet'
+    : `${exercises.length} exercise${exercises.length !== 1 ? 's' : ''} · ${exercises.map(e => e.name).join(', ')}`;
+
   return (
     <div className="border dark:border-surface-700 rounded-lg overflow-hidden">
-      {/* Workout Header */}
+      {/* Workout Header — name and meta stack so the name gets the full width */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-surface-800 cursor-pointer"
+        className="flex items-center gap-2 px-3 py-2.5 bg-gray-50 dark:bg-surface-800 cursor-pointer"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <svg
-            className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
+        <svg
+          className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
 
+        <div className="flex-1 min-w-0">
           {isEditingName ? (
             <input
-              className="flex-1 px-2 py-0.5 text-sm border rounded dark:bg-surface-900 dark:border-surface-800"
+              className="w-full px-2 py-0.5 text-sm border rounded dark:bg-surface-900 dark:border-surface-800"
               value={editName}
               onChange={(e) => setEditName(e.target.value)}
               onBlur={handleSaveName}
@@ -95,21 +108,27 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
               autoFocus
             />
           ) : (
-            <span
-              className="font-medium text-sm truncate"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditName(workout.name);
-                setIsEditingName(true);
-              }}
-            >
-              {workout.name}
-            </span>
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className="font-semibold text-sm truncate"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditName(workout.name);
+                  setIsEditingName(true);
+                }}
+              >
+                {workout.name}
+              </span>
+              {isUpNext && (
+                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-primary-100 text-primary-700 dark:bg-primary-900/60 dark:text-primary-300 flex-shrink-0">
+                  Up next
+                </span>
+              )}
+            </div>
           )}
-
-          <span className="text-xs text-gray-500 flex-shrink-0">
-            {exercises.length} exercise{exercises.length !== 1 ? 's' : ''}
-          </span>
+          <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+            {metaLine}
+          </p>
         </div>
 
         {onMoveUp && onMoveDown && (
@@ -140,106 +159,71 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
               </svg>
             </button>
-            <div className="w-px h-6 bg-gray-200 dark:bg-surface-700 self-center mx-0.5 flex-shrink-0" />
           </>
         )}
-        <button
-          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            duplicateWorkout.mutate(workout.id);
-          }}
-          title="Duplicate workout"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-        </button>
-        <button
-          className="p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center text-red-500 hover:text-red-700 flex-shrink-0"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDelete();
-          }}
-          title="Delete workout"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
       </div>
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-3 py-2 space-y-1">
+        <div className="px-3 py-2">
           {exercises.length === 0 && (
             <p className="text-sm text-gray-500 py-2">No exercises yet</p>
           )}
 
-          {exercises.map((exercise, index) => (
-            <div
-              key={exercise.id}
-              className="flex items-center gap-1 py-1 border-b dark:border-surface-700 last:border-0"
-            >
-              {/* Exercise info */}
-              <div className="flex-1 min-w-0 pr-1">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-sm font-medium truncate">{exercise.name}</span>
-                  {exercise.supersetGroup && (
-                    <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${SUPERSET_COLORS[exercise.supersetGroup] || ''}`}>
-                      {exercise.supersetGroup}
+          <div className="space-y-0.5">
+            {exercises.map((exercise, index) => (
+              <div
+                key={exercise.id}
+                className="flex items-center gap-1 border-b dark:border-surface-700 last:border-0"
+              >
+                {/* Whole row is the tap-to-edit target (pencil hint at row end) */}
+                <button
+                  className="flex-1 min-w-0 flex items-center gap-2 py-1.5 min-h-[44px] text-left"
+                  onClick={() => setExerciseFormState({ open: true, exercise })}
+                  title="Edit exercise"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-sm font-medium truncate">{exercise.name}</span>
+                      {exercise.supersetGroup && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium flex-shrink-0 ${SUPERSET_COLORS[exercise.supersetGroup] || ''}`}>
+                          {exercise.supersetGroup}
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+                      {targetSummary(exercise)}
                     </span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-500 tabular-nums">
-                  {exercise.targetSets} × {exercise.targetReps}
-                </span>
+                  </div>
+                  <svg className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                </button>
+
+                {/* Compact reorder */}
+                <button
+                  className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+                  disabled={index === 0}
+                  onClick={() => handleMoveExercise(index, 'up')}
+                  title="Move up"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                  </svg>
+                </button>
+                <button
+                  className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
+                  disabled={index === exercises.length - 1}
+                  onClick={() => handleMoveExercise(index, 'down')}
+                  title="Move down"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
               </div>
-
-              {/* Compact reorder */}
-              <button
-                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
-                disabled={index === 0}
-                onClick={() => handleMoveExercise(index, 'up')}
-                title="Move up"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                </svg>
-              </button>
-              <button
-                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30 disabled:hover:text-gray-400 flex-shrink-0"
-                disabled={index === exercises.length - 1}
-                onClick={() => handleMoveExercise(index, 'down')}
-                title="Move down"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              <div className="w-px h-6 bg-gray-200 dark:bg-surface-700 self-center mx-0.5 flex-shrink-0" />
-
-              {/* Edit / Delete */}
-              <button
-                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-primary-600 flex-shrink-0"
-                onClick={() => setExerciseFormState({ open: true, exercise })}
-                title="Edit exercise"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-              </button>
-              <button
-                className="p-2 min-w-[40px] min-h-[44px] flex items-center justify-center text-gray-400 hover:text-red-600 flex-shrink-0"
-                onClick={() => handleDeleteExercise(exercise)}
-                title="Delete exercise"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          ))}
+            ))}
+          </div>
 
           <Button
             variant="ghost"
@@ -249,6 +233,28 @@ export function WorkoutCard({ workout, onMoveUp, onMoveDown, canMoveUp, canMoveD
           >
             + Add Exercise
           </Button>
+
+          {/* Workout-level actions — out of the header so the name keeps its room */}
+          <div className="flex justify-end gap-1 mt-1 pt-1 border-t border-gray-100 dark:border-white/[0.06]">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => duplicateWorkout.mutate(workout.id)}
+              disabled={duplicateWorkout.isPending}
+              className="text-gray-500 dark:text-gray-400"
+            >
+              Duplicate workout
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDelete}
+              disabled={deleteWorkout.isPending}
+              className="text-red-600 dark:text-red-400"
+            >
+              Delete workout
+            </Button>
+          </div>
         </div>
       )}
 
