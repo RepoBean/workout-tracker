@@ -6,6 +6,7 @@ import { useExerciseNavigation } from './hooks/useExerciseNavigation';
 import { useAdHocExercises } from './hooks/useAdHocExercises';
 import { useExerciseOrdering } from './hooks/useExerciseOrdering';
 import { useRpeFlow } from './hooks/useRpeFlow';
+import { useHrPersistence } from './hooks/useHrPersistence';
 import { useDiscardSession } from './hooks/useDiscardSession';
 import { clearSessionLocalState } from './lib/sessionStorage';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
@@ -60,14 +61,7 @@ export default function ActiveSession() {
   const { exerciseHints } = usePreviousData(sessionId);
 
   const { stopTimer } = useTimer();
-  const { clearSamples: clearHrSamples, samplesSince } = useHeartRate();
-
-  // Reset HR sample buffer once per session mount so per-set/session windows
-  // are scoped to this workout.
-  useEffect(() => {
-    clearHrSamples();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  const { samplesSince } = useHeartRate();
 
   // Seed an ad-hoc cardio exercise when the picker passed ?cardio=<modality>.
   // Strip the param after seeding so refresh doesn't re-add.
@@ -106,6 +100,15 @@ export default function ActiveSession() {
 
   // Swap exercise state
   const [swapTarget, setSwapTarget] = useState<Exercise | null>(null);
+
+  // Persist HR samples per session (reload/tab-discard recovery). The
+  // !showCelebration gate stops flushes the instant completion succeeds —
+  // clearSessionLocalState has already swept the storage key by then.
+  useHrPersistence({
+    sessionId,
+    sessionStartMs: session?.createdAt ? new Date(session.createdAt).getTime() : null,
+    isSessionActive: !!session && !session.completedAt && !showCelebration,
+  });
 
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];

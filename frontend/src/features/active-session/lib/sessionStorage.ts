@@ -15,6 +15,12 @@ export function getHrChartStorageKey(sessionId: number): string {
     return `wt:livehr:visible:${sessionId}`;
 }
 
+// Persisted HR samples for the session (page-reload / tab-discard recovery).
+// Written by useHrPersistence, restored into the HeartRateContext buffer.
+export function getHrSamplesStorageKey(sessionId: number): string {
+    return `wt:hrsamples:${sessionId}`;
+}
+
 // SetInput weight/reps overrides — one pair of keys per (exercise, setNumber),
 // scoped per session so a dirty override from an abandoned session can't leak
 // into the next session of the same exercise and beat fresh hints.
@@ -62,6 +68,7 @@ export function clearSessionLocalState(sessionId: number): void {
         localStorage.removeItem(getOrderStorageKey(sessionId));
         localStorage.removeItem(getHiddenStorageKey(sessionId));
         localStorage.removeItem(getHrChartStorageKey(sessionId));
+        localStorage.removeItem(getHrSamplesStorageKey(sessionId));
 
         // Cardio in-progress state and SetInput overrides are one key per
         // (exercise, setNumber); scan-and-delete by shared prefix to catch all.

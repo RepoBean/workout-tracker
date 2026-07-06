@@ -25,6 +25,36 @@ export function downsampleHr(
   };
 }
 
+// Persisted-sample codec — raw samples delta-encoded against a base timestamp
+// so the per-session localStorage payload stays compact (~100 KB for 2 h at
+// 1 Hz). Raw, not downsampled: the completion avg/min/max must stay exact.
+export function encodeHrSamples(
+  samples: { ts: number; bpm: number }[],
+  base: number,
+): string {
+  return JSON.stringify({ v: 1, base, s: samples.map((s) => [s.ts - base, s.bpm]) });
+}
+
+export function decodeHrSamples(json: string | null): { ts: number; bpm: number }[] | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    if (parsed?.v !== 1 || !Number.isFinite(parsed?.base) || !Array.isArray(parsed?.s)) {
+      return null;
+    }
+    const out: { ts: number; bpm: number }[] = [];
+    for (const entry of parsed.s) {
+      if (!Array.isArray(entry) || entry.length < 2) continue;
+      const [dt, bpm] = entry;
+      if (!Number.isFinite(dt) || !Number.isFinite(bpm)) continue;
+      out.push({ ts: parsed.base + dt, bpm });
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
 export function parseSeries(json: string | null): { t: number[]; b: number[] } | null {
   if (!json) return null;
   try {

@@ -20,6 +20,17 @@ export function LiveHRChart({ sessionStartMs, onClose }: Props) {
   const samples = samplesSince(sessionStartMs);
   const series = downsampleHr(samples, sessionStartMs);
 
+  // Live tail: pin the newest point to the latest raw reading so the chart
+  // tip tracks the header pill instead of lagging a partial 5 s bucket average.
+  if (series && samples.length > 0) {
+    const last = samples[samples.length - 1];
+    const t = Math.floor((last.ts - sessionStartMs) / 1000);
+    if (t > series.t[series.t.length - 1]) {
+      series.t.push(t);
+      series.b.push(last.bpm);
+    }
+  }
+
   if (!isConnected || !series || series.t.length < 2) return null;
 
   const handleDisconnect = () => {

@@ -24,7 +24,7 @@ interface HeartRateContextType {
   error: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
-  clearSamples: () => void;
+  restoreSamples: (samples: { ts: number; bpm: number }[]) => void;
   statsSince: (ts: number) => HeartRateStats | null;
   samplesSince: (ts: number) => { ts: number; bpm: number }[];
 }
@@ -166,8 +166,21 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
     setDeviceName(null);
   }, [cleanupListeners, handleDisconnected]);
 
-  const clearSamples = useCallback(() => {
-    samplesRef.current = [];
+  // Merge previously persisted samples back into the buffer (page-reload /
+  // tab-discard recovery). Skips timestamps already present, keeps the buffer
+  // sorted, and applies the same validity + retention rules as live samples.
+  const restoreSamples = useCallback((samples: { ts: number; bpm: number }[]) => {
+    const cutoff = Date.now() - SAMPLE_RETENTION_MS;
+    const seen = new Set(samplesRef.current.map((s) => s.ts));
+    const incoming = samples.filter((s) => {
+      if (!Number.isFinite(s?.ts) || !Number.isFinite(s?.bpm)) return false;
+      if (s.bpm <= 0 || s.bpm > 250) return false;
+      if (s.ts < cutoff || seen.has(s.ts)) return false;
+      seen.add(s.ts);
+      return true;
+    });
+    if (incoming.length === 0) return;
+    samplesRef.current = [...samplesRef.current, ...incoming].sort((a, b) => a.ts - b.ts);
   }, []);
 
   const statsSince = useCallback((ts: number): HeartRateStats | null => {
@@ -234,7 +247,7 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
     error,
     connect,
     disconnect,
-    clearSamples,
+    restoreSamples,
     statsSince,
     samplesSince,
   }), [
@@ -246,7 +259,7 @@ export function HeartRateProvider({ children }: { children: ReactNode }) {
     error,
     connect,
     disconnect,
-    clearSamples,
+    restoreSamples,
     statsSince,
     samplesSince,
   ]);
