@@ -52,6 +52,7 @@ export default function ActiveSession() {
     isLoggingSet,
     updateSet,
     updateSetsEffort,
+    moveSets,
     setExerciseNote,
     deleteSet,
     completeSession,
@@ -329,7 +330,7 @@ export default function ActiveSession() {
   };
 
   // Handler for swapping an exercise mid-workout
-  const handleSwapExercise = (exercise: Exercise, newName: string) => {
+  const handleSwapExercise = (exercise: Exercise, newName: string, moveLoggedSets: boolean) => {
     const replacementExercise = makeVirtualExercise({
       id: -Date.now(),
       name: newName,
@@ -346,6 +347,18 @@ export default function ActiveSession() {
     // Always in-place replacement — original's logged sets are preserved
     // in the database (history-independent via exerciseName on Set rows)
     swapExercise(exercise.id, replacementExercise);
+
+    // Carry already-logged sets over to the new exercise (default) — they
+    // re-point to exerciseId null + the new name, so they group under the
+    // swapped-in virtual exercise. Unchecked = machine-broke case: real sets
+    // of the old exercise keep their original name in history.
+    if (moveLoggedSets && getSetsForExercise(exercise).length > 0) {
+      moveSets({
+        fromExerciseId: exercise.id,
+        fromExerciseName: exercise.name,
+        toExerciseName: newName,
+      });
+    }
 
     // Persist the replacement as ad-hoc
     setAdHocProgramExercises(prev => [...prev, replacementExercise]);
@@ -539,8 +552,9 @@ export default function ActiveSession() {
       <SwapExercise
         isOpen={swapTarget !== null}
         currentExerciseName={swapTarget?.name || ''}
-        onSwap={(newName) => {
-          if (swapTarget) handleSwapExercise(swapTarget, newName);
+        loggedSetCount={swapTarget ? getSetsForExercise(swapTarget).length : 0}
+        onSwap={(newName, moveLoggedSets) => {
+          if (swapTarget) handleSwapExercise(swapTarget, newName, moveLoggedSets);
         }}
         onCancel={() => setSwapTarget(null)}
       />

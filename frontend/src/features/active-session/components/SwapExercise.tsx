@@ -6,13 +6,17 @@ import { Button } from '../../../shared/ui/Button';
 interface SwapExerciseProps {
   isOpen: boolean;
   currentExerciseName: string;
-  onSwap: (newName: string) => void;
+  // Sets already logged for the outgoing exercise — when > 0 the modal offers
+  // to carry them over to the new exercise (default on).
+  loggedSetCount: number;
+  onSwap: (newName: string, moveSets: boolean) => void;
   onCancel: () => void;
 }
 
-export function SwapExercise({ isOpen, currentExerciseName, onSwap, onCancel }: SwapExerciseProps) {
+export function SwapExercise({ isOpen, currentExerciseName, loggedSetCount, onSwap, onCancel }: SwapExerciseProps) {
   const [name, setName] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [moveSets, setMoveSets] = useState(true);
   const { data: suggestions } = useExerciseSuggestions(name);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -21,6 +25,7 @@ export function SwapExercise({ isOpen, currentExerciseName, onSwap, onCancel }: 
     if (isOpen) {
       setName('');
       setShowSuggestions(false);
+      setMoveSets(true);
       // Focus input after modal renders
       setTimeout(() => inputRef.current?.focus(), 100);
     }
@@ -37,7 +42,7 @@ export function SwapExercise({ isOpen, currentExerciseName, onSwap, onCancel }: 
   const handleSwap = (exerciseName?: string) => {
     const finalName = (exerciseName || name).trim();
     if (!finalName) return;
-    onSwap(finalName);
+    onSwap(finalName, loggedSetCount > 0 && moveSets);
   };
 
   return (
@@ -81,6 +86,20 @@ export function SwapExercise({ isOpen, currentExerciseName, onSwap, onCancel }: 
           </div>
         )}
       </div>
+
+      {loggedSetCount > 0 && (
+        <label className="flex items-center gap-3 mt-4 min-h-[44px] cursor-pointer">
+          <input
+            type="checkbox"
+            checked={moveSets}
+            onChange={(e) => setMoveSets(e.target.checked)}
+            className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500"
+          />
+          <span className="text-sm text-gray-700 dark:text-gray-300">
+            Move {loggedSetCount} logged set{loggedSetCount !== 1 ? 's' : ''} to the new exercise
+          </span>
+        </label>
+      )}
 
       <div className="flex gap-3 mt-4">
         <Button

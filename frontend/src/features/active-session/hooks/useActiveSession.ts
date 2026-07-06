@@ -16,6 +16,16 @@ interface UpdateSetRequest {
   perceivedEffort?: number | null;
   durationSec?: number | null;
   distance?: number | null;
+  // Swap carry-over: re-point a set at a new exercise. Backend only accepts
+  // null for exerciseId — moved sets become name-keyed ad-hoc sets.
+  exerciseName?: string;
+  exerciseId?: null;
+}
+
+interface MoveSetsParams {
+  fromExerciseId: number;
+  fromExerciseName: string;
+  toExerciseName: string;
 }
 
 export function useActiveSession(sessionId: number) {
@@ -214,6 +224,59 @@ export function useActiveSession(sessionId: number) {
     },
   });
 
+  // Move all sets of an exercise to a new exercise name (swap carry-over).
+  // Same id-sign convention as updateSetsEffort: negative fromExerciseId means
+  // ad-hoc, whose sets are stored with exerciseId null and matched by name.
+  const matchesMoveSource = (s: Set, { fromExerciseId, fromExerciseName }: MoveSetsParams) =>
+    fromExerciseId < 0
+      ? s.exerciseId === null && s.exerciseName === fromExerciseName
+      : s.exerciseId === fromExerciseId;
+
+  const moveSetsMutation = useMutation({
+    mutationFn: async (params: MoveSetsParams) => {
+      const currentSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+      const setsToMove = currentSession?.sets?.filter(s => matchesMoveSource(s, params)) || [];
+
+      const results = await Promise.all(
+        setsToMove.map(set =>
+          api.put<Set>(`/sessions/${sessionId}/sets/${set.id}`, {
+            exerciseName: params.toExerciseName,
+            exerciseId: null,
+          })
+        )
+      );
+
+      return results.map(r => r.data);
+    },
+    onMutate: async (params) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+
+      const previousSession = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+
+      if (previousSession) {
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previousSession,
+          sets: previousSession.sets?.map(s =>
+            matchesMoveSource(s, params)
+              ? { ...s, exerciseName: params.toExerciseName, exerciseId: null, updatedAt: new Date().toISOString() }
+              : s
+          ) || [],
+        });
+      }
+
+      return { previousSession };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousSession) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previousSession);
+      }
+      toast.error('Failed to move sets. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+    },
+  });
+
   // Delete Set Mutation with Optimistic Update
   const deleteSetMutation = useMutation({
     mutationFn: async (setId: number) => {
@@ -288,6 +351,7 @@ export function useActiveSession(sessionId: number) {
     updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) =>
       updateSetsEffortMutation.mutate({ exerciseId, effort, exerciseName }),
     isUpdatingSetsEffort: updateSetsEffortMutation.isPending,
+    moveSets: moveSetsMutation.mutate,
     setExerciseNote: (exerciseName: string, note: string | null) =>
       setExerciseNoteMutation.mutate({ exerciseName, note }),
     deleteSet: deleteSetMutation.mutate,

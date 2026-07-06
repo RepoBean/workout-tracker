@@ -523,7 +523,10 @@ router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), 
   }
 });
 
-// Update set schema
+// Update set schema. exerciseName/exerciseId support re-pointing a set at a
+// different exercise (swap carry-over); only null is accepted for exerciseId —
+// re-pointed sets become name-keyed ad-hoc, never attached to another program
+// exercise's positive id.
 const updateSetSchema = z.object({
   weight: z.number().min(0).optional(),
   reps: z.number().int().min(0).optional(),
@@ -532,6 +535,8 @@ const updateSetSchema = z.object({
   heartRateMax: z.number().int().min(20).max(250).nullable().optional(),
   durationSec: z.number().int().min(1).nullable().optional(),
   distance: z.number().min(0).nullable().optional(),
+  exerciseName: z.string().min(1).max(255).optional(),
+  exerciseId: z.null().optional(),
 });
 
 // PUT /api/sessions/:id/sets/:setId - Update a set (weight, reps, RPE)
@@ -539,7 +544,7 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
   try {
     const sessionId = Number(req.params.id);
     const setId = Number(req.params.setId);
-    const { weight, reps, perceivedEffort, heartRateAvg, heartRateMax, durationSec, distance } = req.body;
+    const { weight, reps, perceivedEffort, heartRateAvg, heartRateMax, durationSec, distance, exerciseName, exerciseId } = req.body;
 
     const session = await Session.findByPk(sessionId);
     if (!session) {
@@ -571,6 +576,8 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
     if (heartRateMax !== undefined) set.heartRateMax = heartRateMax;
     if (durationSec !== undefined) set.durationSec = durationSec;
     if (distance !== undefined) set.distance = distance;
+    if (exerciseName !== undefined) set.exerciseName = exerciseName;
+    if (exerciseId !== undefined) set.exerciseId = exerciseId;
 
     await set.save();
 

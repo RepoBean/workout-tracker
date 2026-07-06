@@ -115,6 +115,48 @@ describe('PUT /api/sessions/:id/sets/:setId', () => {
     const res = await request(app).put('/api/sessions/1/sets/abc').send({ weight: 100 });
     expect(res.status).toBe(400);
   });
+
+  it('re-points a program set at a different exercise (swap carry-over)', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    const exercise = await Exercise.findOne({ where: { workoutId: push.id } });
+
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseId: exercise!.id,
+      exerciseName: 'Bench Press',
+      weight: 185,
+      reps: 8,
+      setNumber: 1,
+    });
+    expect(logged.body.exerciseId).toBe(exercise!.id);
+
+    const res = await request(app)
+      .put(`/api/sessions/${session.id}/sets/${logged.body.id}`)
+      .send({ exerciseName: 'Dumbbell Press', exerciseId: null });
+
+    expect(res.status).toBe(200);
+    expect(res.body.exerciseName).toBe('Dumbbell Press');
+    expect(res.body.exerciseId).toBeNull();
+    expect(res.body.weight).toBe(185);
+  });
+
+  it('rejects re-pointing a set at a positive exerciseId', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseName: 'Bench Press',
+      weight: 185,
+      reps: 8,
+      setNumber: 1,
+    });
+
+    const res = await request(app)
+      .put(`/api/sessions/${session.id}/sets/${logged.body.id}`)
+      .send({ exerciseName: 'Dumbbell Press', exerciseId: 7 });
+
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('POST /api/sessions/:id/complete', () => {
