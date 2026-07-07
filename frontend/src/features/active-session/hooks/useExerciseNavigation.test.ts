@@ -106,6 +106,42 @@ describe('useExerciseNavigation resume behavior', () => {
     });
 });
 
+describe('useExerciseNavigation Up-next wrap-around', () => {
+    beforeEach(() => {
+        localStorage.clear();
+    });
+
+    it('wraps Up next back to an earlier incomplete exercise after skipping ahead', () => {
+        // User skipped exercise 1 (occupied machine) and finished 2 and 3.
+        // The old forward-only scan returned null here.
+        const sets = [
+            ...[1, 2, 3].map(n => makeSet(n, inclinePress, n)),
+            ...[4, 5, 6].map((id, i) => makeSet(id, cableFly, i + 1)),
+        ];
+        localStorage.setItem(getNavStorageKeys(SESSION_ID).step, '2');
+        const { result } = renderNavigation({ exercises, sets, isReady: true });
+
+        expect(result.current.currentStepIndex).toBe(2);
+        expect(result.current.nextIncompleteExercise?.name).toBe('Bench Press');
+
+        act(() => result.current.goToNext());
+        expect(result.current.currentStepIndex).toBe(0);
+    });
+
+    it('returns null when only the current step is incomplete', () => {
+        const sets = [
+            ...[1, 2, 3].map(n => makeSet(n, benchPress, n)),
+            ...[4, 5, 6].map((id, i) => makeSet(id, inclinePress, i + 1)),
+        ];
+        localStorage.setItem(getNavStorageKeys(SESSION_ID).step, '2');
+        const { result } = renderNavigation({ exercises, sets, isReady: true });
+
+        expect(result.current.nextIncompleteExercise).toBeNull();
+        act(() => result.current.goToNext());
+        expect(result.current.currentStepIndex).toBe(2);
+    });
+});
+
 describe('useExerciseNavigation with ad-hoc (negative id) exercises', () => {
     beforeEach(() => {
         localStorage.clear();

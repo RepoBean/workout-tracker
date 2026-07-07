@@ -88,7 +88,10 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
   }, [session.sets]);
 
   const exerciseGroups = useMemo((): ExerciseGroup[] => {
-    const sets = session.sets || [];
+    // Sort by id (insertion = performed order) before first-seen grouping so
+    // exercise groups appear in the order actually performed even if a cache
+    // path hands us sets unsorted (the backend also orders by id ASC).
+    const sets = [...(session.sets || [])].sort((a, b) => a.id - b.id);
     const groups: Map<string, Set[]> = new Map();
     const order: string[] = [];
 

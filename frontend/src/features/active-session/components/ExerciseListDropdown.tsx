@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useMemo } from 'react';
 import type { Exercise } from '../../../shared/api/types';
 
 interface ExerciseListDropdownProps {
@@ -22,11 +22,26 @@ export function ExerciseListDropdown({
     onMoveExercise,
 }: ExerciseListDropdownProps) {
     const [isOpen, setIsOpen] = useState(false);
+    // Drag state holds DISPLAY indices (positions in displayList); the
+    // parent's select/move callbacks speak underlying indices into
+    // `exercises` — translate via entry.idx before calling out.
     const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
     const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
     const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const touchStartY = useRef(0);
     const listRef = useRef<HTMLDivElement>(null);
+
+    // Display-only partition: completed exercises pinned to the top with
+    // their check, remaining work below. Each entry keeps its underlying
+    // index, so navigation order and drag persistence are untouched.
+    const { displayList, doneCount } = useMemo(() => {
+        const done: { ex: Exercise; idx: number }[] = [];
+        const todo: { ex: Exercise; idx: number }[] = [];
+        exercises.forEach((ex, idx) => {
+            (isExerciseComplete(ex.id) ? done : todo).push({ ex, idx });
+        });
+        return { displayList: [...done, ...todo], doneCount: done.length };
+    }, [exercises, isExerciseComplete]);
 
     const handleTouchStart = useCallback((e: React.TouchEvent, index: number) => {
         touchStartY.current = e.touches[0].clientY;
@@ -62,9 +77,11 @@ export function ExerciseListDropdown({
                 }
             });
 
-            setDragOverIndex(targetIndex);
+            // Incomplete rows are a contiguous suffix of the display list —
+            // clamp so dragging over the pinned completed block can't target it.
+            setDragOverIndex(Math.max(targetIndex, doneCount));
         }
-    }, [draggingIndex]);
+    }, [draggingIndex, doneCount]);
 
     const handleTouchEnd = useCallback(() => {
         if (longPressTimer.current) {
@@ -73,21 +90,24 @@ export function ExerciseListDropdown({
         }
 
         if (draggingIndex !== null && dragOverIndex !== null && draggingIndex !== dragOverIndex) {
-            onMoveExercise(draggingIndex, dragOverIndex);
+            const from = displayList[draggingIndex]?.idx;
+            const to = displayList[dragOverIndex]?.idx;
+            if (from !== undefined && to !== undefined) {
+                onMoveExercise(from, to);
+            }
         }
 
         setDraggingIndex(null);
         setDragOverIndex(null);
-    }, [draggingIndex, dragOverIndex, onMoveExercise]);
+    }, [draggingIndex, dragOverIndex, displayList, onMoveExercise]);
 
-    const handleRowClick = useCallback((index: number) => {
+    // Takes the UNDERLYING exercise index (pre-translated at the call site)
+    const handleRowClick = useCallback((exerciseIndex: number) => {
         if (draggingIndex === null) {
-            onSelectExercise(index);
+            onSelectExercise(exerciseIndex);
             setIsOpen(false);
         }
     }, [draggingIndex, onSelectExercise]);
-
-    const completedCount = exercises.filter(ex => isExerciseComplete(ex.id)).length;
 
     return (
         <div className="mb-4">
@@ -98,7 +118,7 @@ export function ExerciseListDropdown({
                    rounded-lg hover:bg-gray-200 dark:hover:bg-surface-700 transition-colors"
             >
                 <span className="font-medium">
-                    All Exercises ({completedCount}/{exercises.length})
+                    All Exercises ({doneCount}/{exercises.length})
                 </span>
                 <svg
                     className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`}
@@ -118,18 +138,18 @@ export function ExerciseListDropdown({
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
                 >
-                    {exercises.map((exercise, index) => {
+                    {displayList.map(({ ex: exercise, idx: exerciseIndex }, displayIndex) => {
                         const progress = getExerciseProgress(exercise.id);
-                        const isComplete = isExerciseComplete(exercise.id);
-                        const isCurrent = index === currentStepIndex;
-                        const isDragging = index === draggingIndex;
-                        const isDragOver = index === dragOverIndex && draggingIndex !== null;
+                        const isComplete = displayIndex < doneCount;
+                        const isCurrent = exerciseIndex === currentStepIndex;
+                        const isDragging = displayIndex === draggingIndex;
+                        const isDragOver = displayIndex === dragOverIndex && draggingIndex !== null;
 
                         return (
                             <div
                                 key={exercise.id}
                                 data-exercise-row
-                                onClick={() => handleRowClick(index)}
+                                onClick={() => handleRowClick(exerciseIndex)}
                                 className={`flex items-center gap-3 p-3 border-b border-gray-100 dark:border-surface-700 
                            last:border-b-0 cursor-pointer transition-all
                            ${isCurrent ? 'bg-primary-50 dark:bg-primary-900/20' : ''}
@@ -137,16 +157,22 @@ export function ExerciseListDropdown({
                            ${isDragOver ? 'border-t-2 border-t-primary-500' : ''}
                            ${!isDragging && !isDragOver ? 'hover:bg-gray-50 dark:hover:bg-surface-700' : ''}`}
                             >
-                                {/* Drag handle — long-press here to drag; touch-none keeps the page from scrolling */}
-                                <div
-                                    className="text-gray-400 dark:text-gray-500 touch-none p-2 -m-2"
-                                    onTouchStart={(e) => handleTouchStart(e, index)}
-                                >
-                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                            d="M4 8h16M4 16h16" />
-                                    </svg>
-                                </div>
+                                {/* Drag handle — long-press here to drag; touch-none keeps the
+                                    page from scrolling. Completed rows are pinned to the top and
+                                    not draggable: spacer keeps the text column aligned. */}
+                                {isComplete ? (
+                                    <div className="w-5 p-2 -m-2" aria-hidden="true" />
+                                ) : (
+                                    <div
+                                        className="text-gray-400 dark:text-gray-500 touch-none p-2 -m-2"
+                                        onTouchStart={(e) => handleTouchStart(e, displayIndex)}
+                                    >
+                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                                d="M4 8h16M4 16h16" />
+                                        </svg>
+                                    </div>
+                                )}
 
                                 {/* Exercise info */}
                                 <div className="flex-1 min-w-0">

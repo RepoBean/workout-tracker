@@ -159,6 +159,37 @@ describe('PUT /api/sessions/:id/sets/:setId', () => {
   });
 });
 
+describe('sets ordering — performed order', () => {
+  it('returns sets in insertion (id) order on GET /:id and /history', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+
+    // Interleaved logging: Bench 1 → Row 1 → Bench 2 (out of program order)
+    const performed = [
+      { exerciseName: 'Bench Press', setNumber: 1 },
+      { exerciseName: 'Barbell Row', setNumber: 1 },
+      { exerciseName: 'Bench Press', setNumber: 2 },
+    ];
+    for (const set of performed) {
+      const res = await request(app)
+        .post(`/api/sessions/${session.id}/sets`)
+        .send({ ...set, weight: 135, reps: 8 });
+      expect(res.status).toBe(201);
+    }
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+
+    const one = await request(app).get(`/api/sessions/${session.id}`);
+    expect(one.body.sets.map((s: { exerciseName: string }) => s.exerciseName))
+      .toEqual(['Bench Press', 'Barbell Row', 'Bench Press']);
+
+    const history = await request(app).get('/api/sessions/history');
+    const ids = history.body[0].sets.map((s: { id: number }) => s.id);
+    expect(ids).toEqual([...ids].sort((a, b) => a - b));
+    expect(history.body[0].sets.map((s: { exerciseName: string }) => s.exerciseName))
+      .toEqual(['Bench Press', 'Barbell Row', 'Bench Press']);
+  });
+});
+
 describe('POST /api/sessions/:id/complete', () => {
   it('advances currentWorkoutIndex modulo the workout count', async () => {
     const { program, push } = await seedProgram();

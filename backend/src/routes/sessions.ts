@@ -90,7 +90,9 @@ router.get('/history', async (req: Request, res: Response) => {
         model: SetModel,
         as: 'sets'
       }],
-      order: [['completedAt', 'DESC']],
+      // Sets in id order = insertion order = the order actually performed
+      // (frontend history groups by first-seen exerciseName)
+      order: [['completedAt', 'DESC'], [{ model: SetModel, as: 'sets' }, 'id', 'ASC']],
       limit,
       offset
     });
@@ -113,7 +115,7 @@ router.get('/active', async (req: Request, res: Response) => {
         createdAt: { [Op.gte]: twentyFourHoursAgo },
       },
       include: [{ model: SetModel, as: 'sets' }],
-      order: [['createdAt', 'DESC']],
+      order: [['createdAt', 'DESC'], [{ model: SetModel, as: 'sets' }, 'id', 'ASC']],
     });
 
     if (!session) {
@@ -152,7 +154,7 @@ router.get('/export-csv', async (req: Request, res: Response) => {
     const sessions = await Session.findAll({
       where: { completedAt: { [Op.ne]: null } },
       include: [{ model: SetModel, as: 'sets' }],
-      order: [['completedAt', 'DESC']],
+      order: [['completedAt', 'DESC'], [{ model: SetModel, as: 'sets' }, 'id', 'ASC']],
     });
 
     // CSV field escaping to prevent formula injection
@@ -296,7 +298,8 @@ router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Resp
       include: [{
         model: SetModel,
         as: 'sets'
-      }]
+      }],
+      order: [[{ model: SetModel, as: 'sets' }, 'id', 'ASC']]
     });
 
     if (!session) {
@@ -666,7 +669,8 @@ router.post('/:id/complete', validateParams(idParamSchema), validate(completeSes
 
     // Fetch updated session with sets
     const updatedSession = await Session.findByPk(sessionId, {
-      include: [{ model: SetModel, as: 'sets' }]
+      include: [{ model: SetModel, as: 'sets' }],
+      order: [[{ model: SetModel, as: 'sets' }, 'id', 'ASC']]
     });
 
     res.json(updatedSession);

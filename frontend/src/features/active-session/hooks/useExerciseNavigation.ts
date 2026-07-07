@@ -285,10 +285,14 @@ export function useExerciseNavigation({
         }
     }, [currentStep, supersetActiveIndex]);
 
-    // First incomplete step after the current one (-1 if none). Drives both
-    // goToNext and the "Up next" preview so they always agree.
+    // First incomplete step other than the current one, scanning forward and
+    // wrapping past the end (-1 if none). Drives both goToNext and the
+    // "Up next" preview so they always agree. The wrap matters when the user
+    // skips ahead (occupied machine) and finishes later exercises first —
+    // without it, "Up next" went blind to the earlier incomplete ones.
     const nextIncompleteStepIndex = useMemo(() => {
-        for (let i = currentStepIndex + 1; i < steps.length; i++) {
+        for (let offset = 1; offset < steps.length; offset++) {
+            const i = (currentStepIndex + offset) % steps.length;
             const step = steps[i];
             const complete = step.type === 'single'
                 ? isExerciseComplete(step.exercise.id)
