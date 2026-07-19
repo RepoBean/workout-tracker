@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { ExerciseForm } from './ExerciseForm';
-import { CARDIO_MODALITY_INFO } from '../../../shared/api/cardio';
+import { exerciseTargetSummary } from '../../../shared/api/cardio';
 import type { Workout, Exercise } from '../../../shared/api/types';
 
 const SUPERSET_COLORS: Record<string, string> = {
@@ -13,17 +13,6 @@ const SUPERSET_COLORS: Record<string, string> = {
   E: 'bg-pink-100 text-pink-700 dark:bg-pink-900 dark:text-pink-300',
 };
 
-// Target summary for an exercise row — cardio shows modality + duration/distance
-// targets instead of the placeholder "1 × 1" sets/reps it stores.
-function targetSummary(exercise: Exercise): string {
-  if (exercise.exerciseType === 'cardio') {
-    const parts: string[] = [CARDIO_MODALITY_INFO[exercise.cardioModality ?? 'other'].long];
-    if (exercise.targetDurationSec) parts.push(`${Math.round(exercise.targetDurationSec / 60)} min`);
-    if (exercise.targetDistance != null && exercise.targetDistance > 0) parts.push(`${exercise.targetDistance} mi`);
-    return parts.join(' · ');
-  }
-  return `${exercise.targetSets} × ${exercise.targetReps}`;
-}
 
 interface WorkoutCardProps {
   workout: Workout;
@@ -192,7 +181,7 @@ export function WorkoutCard({ workout, isUpNext, onMoveUp, onMoveDown, canMoveUp
                       )}
                     </div>
                     <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-                      {targetSummary(exercise)}
+                      {exerciseTargetSummary(exercise)}
                     </span>
                   </div>
                   <svg className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

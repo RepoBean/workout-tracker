@@ -4,7 +4,7 @@ import { useTheme } from '../../shared/context/ThemeContext';
 import { NextWorkout } from './components/NextWorkout';
 import { Calendar } from './components/Calendar';
 import { ResumeWorkout } from './components/ResumeWorkout';
-import { StatsCard } from './components/StatsCard';
+import { ThisWeek } from './components/ThisWeek';
 import { AdHocWorkoutPicker } from './components/AdHocWorkoutPicker';
 import { Button } from '../../shared/ui/Button';
 import { HeartRatePill } from '../../shared/ui/HeartRatePill';
@@ -17,11 +17,22 @@ export default function Dashboard() {
     setTheme(theme === 'dark' ? 'light' : 'dark');
   };
 
+  // Date-led header: the training-relevant fact is what day it is, not the
+  // app's own name (that's on the icon you just tapped).
+  const today = new Date();
+  const weekday = today.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateLabel = today.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Header row */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-display font-bold">Workout Tracker</h1>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-display font-extrabold tracking-tight leading-tight">
+            {weekday}
+          </h1>
+          <p className="text-sm text-gray-500 dark:text-gray-400">{dateLabel}</p>
+        </div>
         <div className="flex items-center gap-2">
           <HeartRatePill />
           <button
@@ -62,15 +73,20 @@ export default function Dashboard() {
       {/* Quick Workout */}
       <Button
         variant="secondary"
-        size="lg"
+        size="md"
         className="w-full"
         onClick={() => setShowWorkoutPicker(true)}
       >
-        Quick Workout (Ad-hoc)
+        <span className="flex items-center justify-center gap-2">
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+          </svg>
+          Quick Workout
+        </span>
       </Button>
 
-      {/* Stats */}
-      <StatsCard />
+      {/* This Week */}
+      <ThisWeek />
 
       {/* Calendar */}
       <Calendar />

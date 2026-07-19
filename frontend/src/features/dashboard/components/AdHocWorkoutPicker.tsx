@@ -56,7 +56,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Start Quick Workout">
+        <Modal isOpen={isOpen} onClose={onClose} title="Quick Workout">
             <div className="space-y-4">
                 {/* Blank workout option */}
                 <Button
@@ -71,7 +71,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
                                 d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
-                        <span>Blank Workout</span>
+                        <span>Start from Scratch</span>
                     </div>
                 </Button>
 
@@ -85,15 +85,15 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                         disabled={startCardioSession.isPending}
                     >
                         <div className="flex items-center gap-3">
-                            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
+                            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12h4l3 8 4-16 3 8h4" />
                             </svg>
-                            <span>Quick Cardio</span>
+                            <span>Cardio</span>
                         </div>
                     </Button>
                 ) : (
                     <div className="rounded-lg border border-gray-200 dark:border-surface-700 p-3 space-y-2">
-                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300">Pick a cardio type</div>
+                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300">What kind of cardio?</div>
                         <div className="grid grid-cols-2 gap-2">
                             {CARDIO_MODALITY_OPTIONS.map(({ value, label }) => (
                                 <button
@@ -112,7 +112,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                         <button
                             type="button"
                             onClick={() => setShowCardioPicker(false)}
-                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline"
+                            className="text-xs text-gray-500 dark:text-gray-400 hover:underline py-2 min-h-[36px]"
                         >
                             Cancel
                         </button>
@@ -122,7 +122,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                 {/* Divider */}
                 <div className="flex items-center gap-3">
                     <div className="flex-1 border-t border-gray-200 dark:border-surface-700" />
-                    <span className="text-sm text-gray-500 dark:text-gray-400">or from a program</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">or pick from a program</span>
                     <div className="flex-1 border-t border-gray-200 dark:border-surface-700" />
                 </div>
 
@@ -198,7 +198,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                     </div>
                 ) : (
                     <p className="text-center text-gray-500 dark:text-gray-400 py-4">
-                        No programs found. Create a program first.
+                        No programs yet — create one in the Programs tab.
                     </p>
                 )}
             </div>

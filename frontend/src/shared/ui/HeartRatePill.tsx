@@ -21,7 +21,7 @@ export function HeartRatePill({ onTogglePanel }: HeartRatePillProps = {}) {
 
   if (isConnecting) {
     return (
-      <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-surface-800 text-xs text-gray-600 dark:text-gray-300">
+      <div className="flex items-center gap-1.5 px-3 min-h-[40px] rounded-full bg-gray-100 dark:bg-surface-800 text-xs text-gray-600 dark:text-gray-300">
         <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
           <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
           <path fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
@@ -35,7 +35,7 @@ export function HeartRatePill({ onTogglePanel }: HeartRatePillProps = {}) {
     return (
       <button
         onClick={connect}
-        className="flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 dark:bg-surface-800 hover:bg-gray-200 dark:hover:bg-surface-700 text-xs text-gray-600 dark:text-gray-300 transition-colors"
+        className="flex items-center gap-1.5 px-3 min-h-[40px] rounded-full bg-gray-100 dark:bg-surface-800 hover:bg-gray-200 dark:hover:bg-surface-700 text-xs text-gray-600 dark:text-gray-300 transition-colors"
         aria-label="Connect heart rate monitor"
         type="button"
       >
@@ -61,14 +61,14 @@ export function HeartRatePill({ onTogglePanel }: HeartRatePillProps = {}) {
   return (
     <button
       onClick={handleClick}
-      className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-50 dark:bg-red-950/40 text-xs text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors tabular-nums"
+      className="flex items-center gap-1.5 px-3 min-h-[40px] rounded-full bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-950/60 transition-colors tabular-nums"
       aria-label={ariaLabel}
       type="button"
     >
       <svg className="w-3.5 h-3.5 animate-pulse" viewBox="0 0 24 24" fill="currentColor">
         <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
       </svg>
-      <span className="font-semibold">{currentBpm ?? '—'}</span>
+      <span className="font-semibold text-sm leading-none">{currentBpm ?? '—'}</span>
     </button>
   );
 }

@@ -27,23 +27,24 @@ export function ResumeWorkout() {
   };
 
   return (
-    <div className="card border-2 border-amber-500 dark:border-amber-400">
+    <div className="card border border-amber-400/60 dark:border-amber-400/40 bg-amber-50/60 dark:bg-amber-950/20">
       <div className="flex items-center gap-2 mb-2">
-        <div className="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse" />
-        <h2 className="text-sm font-medium text-amber-600 dark:text-amber-400">
-          Workout In Progress
-        </h2>
+        <span className="relative flex w-2 h-2" aria-hidden>
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+          <span className="relative inline-flex rounded-full w-2 h-2 bg-amber-500" />
+        </span>
+        <p className="eyebrow text-amber-600 dark:text-amber-400">In progress</p>
+        <span className="ml-auto text-xs text-gray-500 dark:text-gray-400 tabular-nums">
+          {timeLabel}
+        </span>
       </div>
-      <div className="mb-3">
+      <div className="mb-4">
         <p className="text-xl font-display font-bold">{activeSession.workoutName}</p>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          {activeSession.programName} &middot; Started {timeLabel}
-        </p>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          {setsLogged} set{setsLogged !== 1 ? 's' : ''} logged
+          {activeSession.programName} &middot; {setsLogged} set{setsLogged !== 1 ? 's' : ''} logged
         </p>
       </div>
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <Button
           variant="primary"
           size="lg"
@@ -53,8 +54,9 @@ export function ResumeWorkout() {
           Resume Workout
         </Button>
         <Button
-          variant="danger"
+          variant="ghost"
           size="lg"
+          className="shrink-0 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30"
           onClick={handleDiscard}
           disabled={discardMutation.isPending}
         >

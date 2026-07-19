@@ -2,11 +2,15 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCalendarSessions } from '../../../shared/api/queries';
 
-const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Sunday-first, matching the This Week strip above.
+const DAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+const TODAY_RING =
+  'ring-2 ring-primary-500 ring-offset-2 ring-offset-white dark:ring-offset-surface-800';
 
 export function Calendar() {
   const now = new Date();
@@ -39,33 +43,13 @@ export function Calendar() {
   const calendarDays = useMemo(() => {
     const firstDay = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    const days: Array<{ day: number; isCurrentMonth: boolean }> = [];
-
-    // Previous month padding
-    for (let i = firstDay - 1; i >= 0; i--) {
-      days.push({ day: daysInPrevMonth - i, isCurrentMonth: false });
-    }
-
-    // Current month
-    for (let i = 1; i <= daysInMonth; i++) {
-      days.push({ day: i, isCurrentMonth: true });
-    }
-
-    // Next month padding (fill to complete 6 rows max)
-    const remaining = 42 - days.length; // 6 weeks * 7 days
-    for (let i = 1; i <= remaining; i++) {
-      days.push({ day: i, isCurrentMonth: false });
-    }
-
-    // Only show 5 rows if possible
-    if (days.length > 35) {
-      const lastRow = days.slice(35);
-      if (lastRow.every(d => !d.isCurrentMonth)) {
-        days.splice(35);
-      }
-    }
+    // Adjacent-month days render as blank cells — the grid aligns without them
+    // competing with the month's own numbers.
+    const days: Array<number | null> = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let i = 1; i <= daysInMonth; i++) days.push(i);
+    while (days.length % 7 !== 0) days.push(null);
 
     return days;
   }, [year, month]);
@@ -88,8 +72,8 @@ export function Calendar() {
     }
   };
 
-  const isToday = (day: number, isCurrentMonth: boolean) => {
-    return isCurrentMonth && day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
+  const isToday = (day: number) => {
+    return day === now.getDate() && month === now.getMonth() && year === now.getFullYear();
   };
 
   return (
@@ -98,7 +82,8 @@ export function Calendar() {
       <div className="flex items-center justify-between mb-3">
         <button
           onClick={goToPrevMonth}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-800 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+          aria-label="Previous month"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center text-gray-500 dark:text-gray-400"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -109,7 +94,8 @@ export function Calendar() {
         </h3>
         <button
           onClick={goToNextMonth}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-800 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+          aria-label="Next month"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-surface-700 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center text-gray-500 dark:text-gray-400"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -118,52 +104,50 @@ export function Calendar() {
       </div>
 
       {/* Day Headers */}
-      <div className="grid grid-cols-7 gap-0 mb-1">
-        {DAYS_OF_WEEK.map(day => (
-          <div key={day} className="text-center text-xs font-medium text-gray-400 dark:text-gray-500 py-1">
+      <div className="grid grid-cols-7 mb-1">
+        {DAY_INITIALS.map((day, i) => (
+          <div
+            key={i}
+            className="text-center text-[11px] font-medium text-gray-400 dark:text-gray-500 py-1"
+          >
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-0">
-        {calendarDays.map(({ day, isCurrentMonth }, index) => {
-          const hasWorkout = isCurrentMonth && workoutDays.has(day);
-          const today = isToday(day, isCurrentMonth);
+      <div className="grid grid-cols-7">
+        {calendarDays.map((day, index) => {
+          if (day === null) {
+            return <div key={index} className="py-1" aria-hidden />;
+          }
+
+          const hasWorkout = workoutDays.has(day);
+          const today = isToday(day);
+          const cellBase = 'w-9 h-9 flex items-center justify-center rounded-full text-sm';
 
           return (
-            <div
-              key={index}
-              className={`relative flex flex-col items-center py-1.5 text-sm ${isCurrentMonth
-                ? 'text-gray-900 dark:text-gray-100'
-                : 'text-gray-300 dark:text-gray-600'
-                }`}
-            >
+            <div key={index} className="flex items-center justify-center py-1">
               {hasWorkout ? (
                 <button
                   onClick={() => navigate(`/history?sessionId=${sessionByDay.get(day)}`)}
                   aria-label={`View workout on ${MONTH_NAMES[month]} ${day}`}
-                  className={`w-9 h-9 flex items-center justify-center rounded-full transition-colors ${today
-                    ? 'bg-primary-600 text-white font-bold'
-                    : 'hover:bg-primary-50 dark:hover:bg-primary-900/30'
-                    }`}
+                  className={`${cellBase} bg-primary-600 text-white font-semibold hover:bg-primary-700 transition-colors ${
+                    today ? TODAY_RING : ''
+                  }`}
                 >
                   {day}
                 </button>
               ) : (
                 <span
-                  className={`w-9 h-9 flex items-center justify-center rounded-full ${today ? 'bg-primary-600 text-white font-bold' : ''
-                    }`}
+                  className={`${cellBase} ${
+                    today
+                      ? `font-bold text-primary-600 dark:text-primary-400 ${TODAY_RING}`
+                      : 'text-gray-700 dark:text-gray-300'
+                  }`}
                 >
                   {day}
                 </span>
-              )}
-              {hasWorkout && !today && (
-                <div className="w-1.5 h-1.5 rounded-full bg-primary-500 mt-0.5" />
-              )}
-              {hasWorkout && today && (
-                <div className="w-1.5 h-1.5 rounded-full bg-primary-300 mt-0.5" />
               )}
             </div>
           );
@@ -172,8 +156,8 @@ export function Calendar() {
 
       {/* Session count for month */}
       {!isLoading && (
-        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 text-center">
-          {workoutDays.size} workout{workoutDays.size !== 1 ? 's' : ''} this month
+        <div className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+          {workoutDays.size} workout{workoutDays.size !== 1 ? 's' : ''} in {MONTH_NAMES[month]}
         </div>
       )}
     </div>

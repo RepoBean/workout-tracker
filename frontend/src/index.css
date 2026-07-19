@@ -20,6 +20,12 @@
     @apply bg-white dark:bg-surface-800 rounded-card shadow-card p-4;
     @apply dark:border dark:border-white/[0.06];
   }
+
+  /* Section label: one shared treatment so the page scans as a system.
+     Color is left to context (e.g. text-gray-400, text-primary-200). */
+  .eyebrow {
+    @apply text-[11px] font-semibold uppercase tracking-[0.14em];
+  }
 }
 
 @layer utilities {

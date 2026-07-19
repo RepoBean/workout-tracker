@@ -27,6 +27,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    // Keep the browser/PWA status bar on the page surface (surface-50 / surface-900)
+    // instead of the static teal from index.html, which clashes in dark mode.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'dark' ? '#0F0F12' : '#FAFAF8');
   }, [theme]);
 
   // Listen for system theme changes when no explicit preference is stored

@@ -1,4 +1,4 @@
-import type { CardioModality } from './types';
+import type { CardioModality, Exercise } from './types';
 
 /**
  * Display labels for each cardio modality. Two vocabularies are kept side
@@ -24,3 +24,17 @@ export const CARDIO_MODALITY_OPTIONS: { value: CardioModality; label: string }[]
     value,
     label: CARDIO_MODALITY_INFO[value].long,
   }));
+
+/**
+ * Target summary for an exercise row — cardio shows modality + duration/distance
+ * targets instead of the placeholder "1 × 1" sets/reps it stores.
+ */
+export function exerciseTargetSummary(exercise: Exercise): string {
+  if (exercise.exerciseType === 'cardio') {
+    const parts: string[] = [CARDIO_MODALITY_INFO[exercise.cardioModality ?? 'other'].long];
+    if (exercise.targetDurationSec) parts.push(`${Math.round(exercise.targetDurationSec / 60)} min`);
+    if (exercise.targetDistance != null && exercise.targetDistance > 0) parts.push(`${exercise.targetDistance} mi`);
+    return parts.join(' · ');
+  }
+  return `${exercise.targetSets} × ${exercise.targetReps}`;
+}
