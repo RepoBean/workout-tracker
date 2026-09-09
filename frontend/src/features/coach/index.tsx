@@ -9,6 +9,7 @@ import { CoachMarkdown } from './components/CoachMarkdown';
 import { createCoachToolset } from './lib/tools';
 import { runCoach } from './lib/coachLoop';
 import { COACH_SYSTEM_PROMPT } from './lib/persona';
+import { useCoachDossier } from './hooks/useCoachDossier';
 import {
   DisplayMessage,
   clearThread,
@@ -50,6 +51,12 @@ export default function Coach() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  const { dossier } = useCoachDossier();
+  // Pinned on the first send of a thread. The dossier is assembled from live queries, and a
+  // background refetch mid-conversation would change it byte-for-byte and silently kill every
+  // prompt-cache hit. Stability has to be structural, not a matter of discipline.
+  const pinnedDossierRef = useRef<string | null>(null);
+
   const toolset = useMemo(
     () => createCoachToolset({ onProposeProgram: setImportPreview }),
     []
@@ -80,9 +87,11 @@ export default function Coach() {
       // Provider stack (incl. @anthropic-ai/sdk) loads on first send, not with the page.
       const { createProvider } = await import('./lib/providers');
       const provider = createProvider(settings);
+      if (pinnedDossierRef.current === null && dossier) pinnedDossierRef.current = dossier;
       const result = await runCoach({
         provider,
         system: COACH_SYSTEM_PROMPT,
+        systemCacheable: pinnedDossierRef.current ?? undefined,
         messages: toCoachMessages(base),
         tools: toolset.defs,
         executeTool: toolset.execute,
@@ -103,6 +112,8 @@ export default function Coach() {
 
   function handleNewChat() {
     if (busy) return;
+    // New conversation, new prefix — let the next send pin a fresh dossier.
+    pinnedDossierRef.current = null;
     clearThread();
     setThread([]);
     setDraft('');

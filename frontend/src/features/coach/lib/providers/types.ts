@@ -42,7 +42,14 @@ export type CoachMessage =
   | { role: 'tool'; toolCallId: string; name: string; content: string };
 
 export interface RunTurnArgs {
+  /** Stable persona/instructions. Small and unchanging. */
   system: string;
+  /**
+   * Large, stable context (the training dossier) placed at the END of the system prefix so
+   * a cache breakpoint can sit behind it. Must be byte-identical across turns within a
+   * conversation or caching never hits — see lib/dossier.ts.
+   */
+  systemCacheable?: string;
   messages: CoachMessage[];
   tools: ChatToolDef[];
   onTextDelta: (delta: string) => void;

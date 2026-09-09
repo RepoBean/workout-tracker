@@ -134,6 +134,7 @@ src/
 │   │   │   ├── plates.ts          # Plate calculator math
 │   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress filters)
 │   │   │   ├── progression.ts     # Deterministic double-progression hint (+ tests)
+│   │   │   ├── suggestReps.ts     # Per-set rep prefill rules + parseRepTarget (+ tests)
 │   │   │   └── averageRpe.ts      # Working-set RPE average (+ tests)
 │   │   └── index.tsx              # WorkoutSession page entry (~580 lines)
 │   │
@@ -182,7 +183,10 @@ src/
 │       ├── components/
 │       │   ├── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
 │       │   └── CoachMarkdown.tsx        # Markdown renderer for assistant bubbles
+│       ├── hooks/
+│       │   └── useCoachDossier.ts     # Assembles the preloaded dossier (memoized all-time block)
 │       ├── lib/
+│       │   ├── dossier.ts             # Pure dossier builders — the coach's whole view (+ tests)
 │       │   ├── providers/
 │       │   │   ├── types.ts           # Provider interface
 │       │   │   ├── presets.ts         # Known providers (Anthropic, OpenAI, etc.)
@@ -190,7 +194,7 @@ src/
 │       │   │   ├── openaiCompatible.ts # OpenAI-compatible fetch adapter
 │       │   │   └── index.ts           # createProvider factory
 │       │   ├── coachLoop.ts           # Neutral agentic loop (tool calls)
-│       │   ├── tools.ts               # Read-only tools over existing /api endpoints
+│       │   ├── tools.ts               # get_workout_history + propose_program (read-only)
 │       │   ├── persona.ts             # System prompt
 │       │   └── thread.ts              # localStorage thread persistence
 │       └── index.tsx                  # Coach page entry
@@ -425,6 +429,22 @@ backend/
 - Settings card: provider selector, model picker with live `listModels` fetch + free-text fallback, API key input, thread clear button
 - Config in `shared/context/AiCoachContext.tsx`; backend untouched
 
+### 17. Coach Dossier (preloaded context)
+- The coach's data is **pushed into the system prompt**, not pulled through tools. Measured on
+  live data: the whole 88-session history is 6,692 tokens, a tiered dossier is ~3,100, and tool
+  definitions alone cost ~1,000 tokens on *every* request while each round trip re-sends the
+  conversation. The data is smaller than the machinery built to query it.
+- `lib/dossier.ts` builds it (pure, tested): today's date, an athlete line (age/sex/resting HR +
+  auto-progression settings), stats, the active program, all-time per-exercise rollups with
+  stall/dropped flags, **every exercise note ever written**, and the last 20 sessions in full
+  per-set detail. Never emits `heartRateSeries`, ids or timestamps.
+- **Stability is load-bearing**: the text sits behind a prompt-cache breakpoint, so it must be
+  byte-identical across turns. All builders are pure and take `today` explicitly, and the page
+  pins the assembled string in a ref on first send (cleared by New Chat) so a background
+  refetch cannot change it mid-conversation.
+- Toolset is 2: `get_workout_history` (the tail past the 20-session window; prefer `monthsBack`)
+  and `propose_program`. The coach remains strictly read-only — no POST/PUT/DELETE anywhere.
+
 ---
 
 ## Established Patterns
@@ -567,6 +587,8 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Fix: HR samples survive navigation and reloads — the session page's clear-on-mount effect wiped the app-root HR buffer on every remount, so navigating Home and back emptied the live chart AND truncated the `heartRateAvg/Min/Max` + `heartRateSeries` saved at completion (both read the same buffer). Effect deleted — every consumer already windows by session start; `clearSamples` dropped from HeartRateContext (zero callers), replaced by `restoreSamples` (validate/dedupe/sort merge + retention trim). New `useHrPersistence` hook flushes the session window to `wt:hrsamples:${sessionId}` (delta-encoded `encodeHrSamples`/`decodeHrSamples` in `shared/utils/heartRate.ts`) every 25 s while connected plus on visibilitychange-hidden/pagehide, restoring before the first flush on load — reload or tab discard mid-workout no longer loses the series. Deliberately no cleanup-flush (it would race `clearSessionLocalState`'s sweep on complete/discard and resurrect the key; the page's active gate includes `!showCelebration` for the same reason). HR lag: LiveHRChart pins a live tail point at the latest raw reading so the chart tip tracks the header pill instead of lagging the partial 5 s bucket average (the pill itself was never delayed — it renders every strap notification). Tests: codec round-trip/garbage, restoreSamples merge semantics, persistence restore/flush/inactive gating. |
 | — | Feature: Swap carries logged sets to the new exercise — swapping an exercise that already had sets logged used to orphan them (still in the DB under the old name, rendered under no card, uncounted toward the new card's targets, wrong name in history). The swap modal now shows a default-ON checkbox ("Move N logged sets to the new exercise") when sets exist; checked, the new `moveSets` mutation in `useActiveSession` re-points each set to `{ exerciseName: newName, exerciseId: null }` (optimistic, RPE-bulk-update pattern) so they regroup under the swapped-in virtual exercise via `adHocSetsByName`. Unchecked covers the machine-broke case — real sets of the old exercise keep their name in history. Backend `updateSetSchema` gains `exerciseName` + `exerciseId` (null only — a re-pointed set can never claim another program exercise's positive id; positive ids 400). Known edge (pre-existing for plain swaps): swapping to a name that collides with a program exercise in the same workout leaves null-id sets unresolvable after reload. Tests: 2 new PUT-set re-pointing cases in `backend/test/sessions.test.ts`. |
 | — | UX: Out-of-order workout support — three fixes for the skip-ahead flow (occupied machine). (1) "Up next" now wraps: `nextIncompleteStepIndex` scans forward with modulo instead of stopping at the last step, so finishing a later exercise points back at earlier incomplete ones (previously the label vanished and `goToNext` went dead). (2) All-Exercises dropdown pins completed exercises to the top with their check — display-only partition in `ExerciseListDropdown` (`displayList` of `{ex, idx}` entries); underlying order, navigation steps, and drag persistence untouched. Drag state uses display indices, translated back to underlying indices at the callbacks; completed rows lose the drag handle (spacer keeps alignment) and the hit-test clamps to the incomplete suffix. Trap for future edits: the parent speaks flat/underlying indices — never leak display indices without translating via `entry.idx`. (3) History performed-order is now guaranteed, not accidental: all five `sets` includes in the sessions router order by `id ASC` (insertion = performed; `createdAt` is 1 s resolution), and `SessionCard.exerciseGroups` sorts by id before first-seen grouping as a cache-path tiebreak. Tests: 2 wrap-around hook cases (regression-verified against the old scan) + 1 backend performed-order contract case. |
+| — | Fix: Rep prefill is realistic — new `logic/suggestReps.ts` anchors each set on last session's SAME-numbered set instead of aiming at the top of the rep range. `computeProgression`'s not-topped-out branch returned `suggestedReps: high`, which backtested worst of every rule tried over 1103 real working sets (set-1 MAE 2.32, 28% exact); it now delegates to `suggestReps` and keeps only the WEIGHT decision. Rules, in normative order: base on previous set N → reset to range bottom if the weight went up (double progression) → +1 on set 1 only when fresh and below the range top → clamp (set 1 to `[low, high]`, **sets 2+ top-only, no floor**) → decay cap at what was just logged. The no-floor rule is the point: last session's `8/6/6` on an 8-12 target pre-fills `9/6/6`, not `9/8/8` — aspirational when fresh, honest when fatigued. `parseRepTarget` moved into `suggestReps.ts` (re-exported from `progression.ts`; dependency is one-directional) and ExerciseCard's third rep parser deleted. 28 tests. |
+| — | Feature: Coach dossier + 6→2 tools — the AI coach's data is now preloaded into the system prompt instead of fetched a piece at a time (see Key Features §17). New `lib/dossier.ts` (pure, 27 tests) and `hooks/useCoachDossier.ts`; the ~618 KB all-time fetch runs once behind a 60 s timeout override and its *computed text* is memoized to `wt:coach-dossier-alltime`, keyed by newest session id + count + date. Deleted `get_active_program`, `list_recent_sessions`, `get_stats`, `get_personal_records`; `get_exercise_history` replaced by `get_workout_history({monthsBack?, from?, to?, exerciseName?})`. That tool takes `monthsBack` as its primary form (no model calendar arithmetic), **sends `to` as `${date}T23:59:59.999Z`** (verified live: a bare `to=2026-09-07` returns 0 sessions, the suffixed form returns the session on that day), rejects unparseable dates rather than forwarding them (`?from=garbage` silently returns 0), and matches `exerciseName` as a case-insensitive **substring** so renamed lifts stay whole (live: "Low Incline Dumbbell Press" → "Low Incline DB Press" on 2026-06-26; exact matching returned half the history and read as if the lift began in June). Prompt caching added: `systemCacheable` on `RunTurnArgs`, an Anthropic `cache_control` breakpoint at the end of the stable prefix, concatenation for OpenAI-compatible. Persona rewritten off "call a tool first". Backend untouched. |
 | — | UX: Dashboard design pass — first focused pass since the April overhaul. Header is date-led (weekday + date; app name dropped — it's on the PWA icon), with a shared `.eyebrow` label class (index.css) used by every dashboard section. Hero: decorative blob removed, workout name to 3xl/extrabold, meta line shows rotation position ("Workout 2 of 3"), targets via new shared `exerciseTargetSummary` (moved from WorkoutCard to `shared/api/cardio.ts` — cardio no longer shows the "1 × 1" placeholder), expanded rows prefix "last", cardio rows skip the meaningless 0×0 history fetch, skeleton matches the teal surface (no white flash), empty state links to Programs. `StatsCard` (3-tile KPI row; giant teal 0 for a dead streak) replaced by `ThisWeek.tsx`: Sun–Sat disc strip (filled+check = trained, ring = today, dashed = future) fed by the calendar-month queries, streak as amber flame chip only when > 0, counts as one quiet text line. Calendar: workout days are filled tappable discs (dots-under-numbers removed, rows now constant height), today ringed to match the strip, adjacent-month cells blank, single-letter day headers, aria-labels on month nav, count reads "N workouts in July". ResumeWorkout: amber-tinted card + "In progress" eyebrow + elapsed right-aligned; Discard demoted from lg danger button to quiet red ghost (still 48px, still `confirm()`). Quick Workout button demoted to md secondary, "(Ad-hoc)" jargon dropped; picker modal copy pass ("Start from Scratch", "Cardio" with activity-pulse icon — heart glyph stays reserved for HR). HeartRatePill hit targets 28→40px (all three states; renders in dashboard + session headers). ThemeContext now syncs `meta[name=theme-color]` to the page surface (#FAFAF8/#0F0F12) — status bar no longer bright teal over a dark page. |
 
 ---

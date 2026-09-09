@@ -1,14 +1,12 @@
 import { api } from '../../../shared/api/client';
-import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import type {
-  Program,
   Session,
   Set as WorkoutSet,
-  StatsResponse,
   ProgramExportPayload,
   ProgramExportWorkout,
   ProgramExportExercise,
 } from '../../../shared/api/types';
+import { renderSessions } from './dossier';
 import type { ChatToolCall, ChatToolDef } from './providers/types';
 
 export interface CoachToolset {
@@ -21,132 +19,172 @@ export interface CoachToolset {
 const SUPERSET_GROUPS = new Set(['A', 'B', 'C', 'D', 'E']);
 
 // ---------------------------------------------------------------------------
-// Data formatting — keep payloads compact so small models stay cheap & on-task
+// get_workout_history
+//
+// The only data tool. Everything a static dossier can hold is already in the system
+// prompt; this covers the one thing it structurally cannot — the unbounded tail past
+// the 20-session window.
 // ---------------------------------------------------------------------------
 
-function isStrengthSet(s: WorkoutSet): boolean {
-  return (s.durationSec ?? 0) <= 0 && (s.distance ?? 0) <= 0;
+/** A personal lifetime; the backend clamps limit to [1, 2000]. */
+const HISTORY_LIMIT = 2000;
+/**
+ * Result cap. Nothing in coachLoop.ts or either adapter truncates tool results, so an
+ * oversized one surfaces as a raw provider 400. A safety net, not a live constraint:
+ * the entire 88-session history renders to ~27k chars.
+ */
+const MAX_RESULT_CHARS = 40000;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isValidIsoDate(value: string): boolean {
+  return ISO_DATE.test(value) && !isNaN(Date.parse(`${value}T00:00:00Z`));
 }
 
-function summarizeSession(session: Session) {
-  const byExercise = new Map<string, { topWeight: number; topReps: number; sets: number }>();
-  for (const set of session.sets ?? []) {
-    if (set.dropIndex !== 0) continue;
-    const entry = byExercise.get(set.exerciseName) ?? { topWeight: 0, topReps: 0, sets: 0 };
-    entry.sets += 1;
-    if (set.weight > entry.topWeight) {
-      entry.topWeight = set.weight;
-      entry.topReps = set.reps;
+function localIsoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/**
+ * Resolve the requested window to concrete dates.
+ *
+ * `monthsBack` is the preferred form: the model does no calendar arithmetic, which removes
+ * the entire class of "last month" -> garbage-string bugs. A raw unparseable date is an
+ * ERROR, never a silent pass-through — the backend compares query strings directly against
+ * ISO timestamps, so `?from=garbage` returns zero sessions with a 200, and a model would
+ * conclude the user has never trained.
+ */
+function resolveRange(input: Record<string, unknown>):
+  | { ok: true; from?: string; to?: string; label: string }
+  | { ok: false; error: string } {
+  const monthsBackRaw = input.monthsBack;
+  if (monthsBackRaw != null && monthsBackRaw !== '') {
+    const months = Number(monthsBackRaw);
+    if (!Number.isFinite(months) || months <= 0 || months > 600) {
+      return { ok: false, error: `monthsBack must be a positive number of months, got "${String(monthsBackRaw)}".` };
     }
-    byExercise.set(set.exerciseName, entry);
-  }
-  return {
-    date: session.completedAt,
-    workout: session.workoutName,
-    exercises: [...byExercise.entries()].map(([name, e]) => ({
-      name,
-      sets: e.sets,
-      topSet: `${e.topWeight}lb x ${e.topReps}`,
-    })),
-  };
-}
-
-async function getActiveProgram(): Promise<string> {
-  const { data } = await api.get<Program[]>('/programs');
-  const active = data.find((p) => p.isActive);
-  if (!active) return 'No active program is set.';
-  const workouts = (active.workouts ?? [])
-    .slice()
-    .sort((a, b) => a.orderIndex - b.orderIndex)
-    .map((w, i) => ({
-      index: i,
-      isNext: i === active.currentWorkoutIndex,
-      name: w.name,
-      exercises: (w.exercises ?? [])
-        .slice()
-        .sort((a, b) => a.orderIndex - b.orderIndex)
-        .map((e) => ({
-          name: e.name,
-          target: `${e.targetSets} x ${e.targetReps}`,
-          type: e.exerciseType,
-          superset: e.supersetGroup ?? undefined,
-        })),
-    }));
-  return JSON.stringify({
-    name: active.name,
-    currentWorkoutIndex: active.currentWorkoutIndex,
-    note: 'currentWorkoutIndex marks the workout that is up next.',
-    workouts,
-  });
-}
-
-async function listRecentSessions(limit: number): Promise<string> {
-  const capped = Math.max(1, Math.min(limit || 10, 30));
-  const { data } = await api.get<Session[]>('/sessions/history', { params: { limit: capped } });
-  if (data.length === 0) return 'No completed sessions yet.';
-  return JSON.stringify(data.map(summarizeSession));
-}
-
-async function getExerciseHistory(name: string): Promise<string> {
-  if (!name.trim()) return 'Provide an exercise name.';
-  const { data } = await api.get<{
-    sets: Array<{
-      weight: number;
-      reps: number;
-      dropIndex: number;
-      durationSec: number | null;
-      distance: number | null;
-      completedAt: string | null;
-    }>;
-  }>('/exercises/all-sets-by-name', { params: { name } });
-
-  const sets = data.sets.filter((s) => s.dropIndex === 0);
-  if (sets.length === 0) return `No history found for "${name}".`;
-
-  let best1RM = 0;
-  // Best (heaviest) set per session date
-  const byDate = new Map<string, { weight: number; reps: number }>();
-  for (const s of sets) {
-    if (s.weight > 0 && s.reps > 0) {
-      best1RM = Math.max(best1RM, epleyOneRepMax(s.weight, s.reps));
-    }
-    const key = s.completedAt ? s.completedAt.slice(0, 10) : 'unknown';
-    const cur = byDate.get(key);
-    if (!cur || s.weight > cur.weight) byDate.set(key, { weight: s.weight, reps: s.reps });
+    const now = new Date();
+    const start = new Date(now);
+    start.setMonth(start.getMonth() - Math.round(months));
+    return {
+      ok: true,
+      from: localIsoDate(start),
+      to: localIsoDate(now),
+      label: `last ${Math.round(months)} month(s) (${localIsoDate(start)} to ${localIsoDate(now)})`,
+    };
   }
 
-  const recent = [...byDate.entries()]
-    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
-    .slice(0, 10)
-    .map(([date, v]) => ({ date, topSet: `${v.weight}lb x ${v.reps}` }));
+  const from = typeof input.from === 'string' && input.from.trim() ? input.from.trim() : undefined;
+  const to = typeof input.to === 'string' && input.to.trim() ? input.to.trim() : undefined;
 
-  return JSON.stringify({ exercise: name, bestEstimated1RM: best1RM, recentTopSets: recent });
-}
-
-async function getStats(): Promise<string> {
-  const { data } = await api.get<StatsResponse>('/sessions/stats');
-  return JSON.stringify(data);
-}
-
-async function getPersonalRecords(): Promise<string> {
-  const { data } = await api.get<Session[]>('/sessions/history', { params: { limit: 1000 } });
-  const best = new Map<string, { e1rm: number; topWeight: number; topReps: number }>();
-  for (const session of data) {
-    for (const set of session.sets ?? []) {
-      if (set.dropIndex !== 0 || !isStrengthSet(set)) continue;
-      if (set.weight <= 0 || set.reps <= 0) continue;
-      const e1rm = epleyOneRepMax(set.weight, set.reps);
-      const cur = best.get(set.exerciseName);
-      if (!cur || e1rm > cur.e1rm) {
-        best.set(set.exerciseName, { e1rm, topWeight: set.weight, topReps: set.reps });
-      }
+  for (const [name, value] of [['from', from], ['to', to]] as const) {
+    if (value && !isValidIsoDate(value)) {
+      return {
+        ok: false,
+        error: `${name}="${value}" is not a valid date. Use YYYY-MM-DD, or pass monthsBack instead (e.g. monthsBack: 3 for the last three months). Do not pass relative phrases.`,
+      };
     }
   }
-  if (best.size === 0) return 'No strength PRs recorded yet.';
-  const records = [...best.entries()]
-    .sort((a, b) => b[1].e1rm - a[1].e1rm)
-    .map(([name, r]) => ({ exercise: name, estimated1RM: r.e1rm, bestSet: `${r.topWeight}lb x ${r.topReps}` }));
-  return JSON.stringify(records);
+
+  if (!from && !to) return { ok: true, label: 'all time' };
+  return { ok: true, from, to, label: `${from ?? 'the beginning'} to ${to ?? 'today'}` };
+}
+
+/**
+ * Case-insensitive SUBSTRING match, never exact equality.
+ *
+ * Lifts get renamed and an exact match silently returns half the history while looking
+ * complete: live, "Low Incline Dumbbell Press" (63 sets, Apr-Jun) became "Low Incline DB
+ * Press" (44 sets, Jun-Sep). Exact matching on the new name reads as if the lift began in
+ * June. The caller reports which names matched so the model can say so.
+ */
+function matchesExercise(setName: string, query: string): boolean {
+  return setName.toLowerCase().includes(query.toLowerCase());
+}
+
+async function suggestNames(query: string): Promise<string> {
+  try {
+    const { data } = await api.get<string[] | { name: string }[]>('/exercises/suggestions', {
+      params: { q: query },
+    });
+    const names = (data as Array<string | { name: string }>)
+      .map((d) => (typeof d === 'string' ? d : d?.name))
+      .filter(Boolean)
+      .slice(0, 10);
+    if (names.length === 0) return '';
+    return ` Closest names on record: ${names.join(', ')}.`;
+  } catch {
+    return '';
+  }
+}
+
+async function getWorkoutHistory(input: Record<string, unknown>): Promise<string> {
+  const range = resolveRange(input);
+  if (!range.ok) return `Error: ${range.error}`;
+
+  const params: Record<string, string | number> = { limit: HISTORY_LIMIT };
+  if (range.from) params.from = range.from;
+  // The backend compares raw strings against full ISO timestamps, so a bare YYYY-MM-DD
+  // would exclude every session ON the end date.
+  if (range.to) params.to = `${range.to}T23:59:59.999Z`;
+
+  const { data } = await api.get<Session[]>('/sessions/history', { params });
+
+  const exerciseName =
+    typeof input.exerciseName === 'string' && input.exerciseName.trim()
+      ? input.exerciseName.trim()
+      : '';
+
+  let sessions = data;
+  let matchedNote = '';
+
+  if (exerciseName) {
+    const matchedNames = new Set<string>();
+    sessions = data
+      .map((session) => {
+        const sets = (session.sets ?? []).filter((s: WorkoutSet) => {
+          const hit = matchesExercise(s.exerciseName, exerciseName);
+          if (hit) matchedNames.add(s.exerciseName);
+          return hit;
+        });
+        return { ...session, sets };
+      })
+      .filter((session) => (session.sets ?? []).length > 0);
+
+    if (sessions.length === 0) {
+      const suggestions = await suggestNames(exerciseName);
+      return `No sets found for "${exerciseName}" in ${range.label}.${suggestions}`;
+    }
+    const names = [...matchedNames].sort();
+    matchedNote =
+      names.length > 1
+        ? `Matched ${names.length} exercise names (likely the same lift renamed): ${names.join(', ')}.\n`
+        : `Matched exercise: ${names[0]}.\n`;
+  }
+
+  if (sessions.length === 0) {
+    return `No completed sessions in ${range.label}.`;
+  }
+
+  const scope = exerciseName ? `"${exerciseName}"` : 'all exercises';
+  const head = `${sessions.length} session(s), ${scope}, ${range.label}, newest first.\n${matchedNote}`;
+
+  // Overflow: keep the newest, drop the oldest, and say so.
+  let kept = sessions;
+  let body = renderSessions(kept);
+  let omitted = 0;
+  while (body.length > MAX_RESULT_CHARS && kept.length > 1) {
+    const drop = Math.max(1, Math.ceil(kept.length * 0.1));
+    kept = kept.slice(0, kept.length - drop);
+    omitted += drop;
+    body = renderSessions(kept);
+  }
+  const footer = omitted
+    ? `\n[${omitted} older session(s) omitted — narrow the range]`
+    : '';
+
+  return `${head}${body}${footer}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -223,48 +261,37 @@ function normalizeProgram(input: Record<string, unknown>): ProgramExportPayload 
 export function createCoachToolset(opts: {
   onProposeProgram: (payload: ProgramExportPayload) => void;
 }): CoachToolset {
+  // Two tools, down from six. The active program, stats, PRs, per-exercise all-time numbers
+  // and the last 20 sessions are all preloaded in the system prompt — keeping tools for them
+  // just invites the model to spend a round trip re-fetching what it already has, and every
+  // tool definition costs ~1,000 tokens on EVERY request.
   const defs: ChatToolDef[] = [
     {
-      name: 'get_active_program',
+      name: 'get_workout_history',
       description:
-        "Call this whenever the user asks about their current plan, today's workout, what's next, or which exercises/sets/reps they should do. Returns the active program with its workouts and the index of the workout that is up next.",
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-    {
-      name: 'list_recent_sessions',
-      description:
-        'Call this to review what the user actually did recently — for "review my week", "how have I been training", progress questions, or before giving a next-workout prescription. Returns completed sessions newest-first with each exercise\'s top set.',
+        'Fetch raw session history beyond what is already in your dossier. The dossier already contains the active program, all-time per-exercise numbers, every note, and the last 20 sessions in full — do NOT call this for anything answerable from those. Call it when the user asks about a period or a lift that reaches further back: "my progress over the last 3 months", "compare June vs August", "every set of bench I have ever done". Prefer monthsBack over computing dates yourself. Returns sessions newest-first with full per-set detail.',
       parameters: {
         type: 'object',
         properties: {
-          limit: { type: 'number', description: 'How many recent sessions to return (1-30, default 10).' },
+          monthsBack: {
+            type: 'number',
+            description:
+              'Preferred. How many months back from today, e.g. 3 for "the last 3 months". Do not also pass from/to.',
+          },
+          from: {
+            type: 'string',
+            description:
+              'Start date as YYYY-MM-DD. Only use for an explicit calendar range. Never pass a relative phrase like "last month".',
+          },
+          to: { type: 'string', description: 'End date as YYYY-MM-DD, inclusive.' },
+          exerciseName: {
+            type: 'string',
+            description:
+              'Optional. Filter to one lift. Matched as a case-insensitive substring, so "incline press" catches renamed variants; the result names every variant it matched.',
+          },
         },
         required: [],
       },
-    },
-    {
-      name: 'get_exercise_history',
-      description:
-        'Call this when the user asks about a specific lift (e.g. "how is my bench doing", "what should I squat today"). Returns that exercise\'s best estimated 1RM and recent top sets by date.',
-      parameters: {
-        type: 'object',
-        properties: {
-          name: { type: 'string', description: 'Exercise name, e.g. "Bench Press".' },
-        },
-        required: ['name'],
-      },
-    },
-    {
-      name: 'get_stats',
-      description:
-        'Call this for summary numbers: total sessions, sessions in the last 30 days, and current week streak.',
-      parameters: { type: 'object', properties: {}, required: [] },
-    },
-    {
-      name: 'get_personal_records',
-      description:
-        'Call this when the user asks about PRs, maxes, or their strongest lifts. Returns best estimated 1RM and best set per exercise.',
-      parameters: { type: 'object', properties: {}, required: [] },
     },
     {
       name: 'propose_program',
@@ -315,16 +342,8 @@ export function createCoachToolset(opts: {
   async function execute(call: ChatToolCall): Promise<string> {
     try {
       switch (call.name) {
-        case 'get_active_program':
-          return await getActiveProgram();
-        case 'list_recent_sessions':
-          return await listRecentSessions(Number(call.input.limit) || 10);
-        case 'get_exercise_history':
-          return await getExerciseHistory(String(call.input.name ?? ''));
-        case 'get_stats':
-          return await getStats();
-        case 'get_personal_records':
-          return await getPersonalRecords();
+        case 'get_workout_history':
+          return await getWorkoutHistory(call.input);
         case 'propose_program': {
           const payload = normalizeProgram(call.input);
           if (!payload) {
@@ -345,16 +364,13 @@ export function createCoachToolset(opts: {
 
   function describe(call: ChatToolCall): string {
     switch (call.name) {
-      case 'get_active_program':
-        return 'Checking your active program…';
-      case 'list_recent_sessions':
-        return 'Reading your recent sessions…';
-      case 'get_exercise_history':
-        return `Looking up ${String(call.input.name ?? 'exercise')} history…`;
-      case 'get_stats':
-        return 'Pulling your stats…';
-      case 'get_personal_records':
-        return 'Checking your PRs…';
+      case 'get_workout_history': {
+        const name = call.input.exerciseName;
+        if (typeof name === 'string' && name.trim()) return `Looking up ${name.trim()} history…`;
+        const months = call.input.monthsBack;
+        if (months) return `Reading the last ${months} months…`;
+        return 'Reading your history…';
+      }
       case 'propose_program':
         return 'Drafting a workout plan…';
       default:

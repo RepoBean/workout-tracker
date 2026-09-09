@@ -5,15 +5,22 @@
 // reset the rep target to the bottom of the range. Otherwise keep the weight and
 // aim for the top of the range. Pure functions — session-time hint only, never
 // mutates the program definition.
+//
+// The rep half of the suggestion is delegated to `suggestReps` so the pre-fill obeys one
+// set of rules everywhere. This module keeps ownership of the WEIGHT decision.
 
-export interface RepRange {
-  low: number;
-  high: number;
-}
+import { parseRepTarget, suggestReps } from './suggestReps';
+
+export type { RepRange } from './suggestReps';
+export { parseRepTarget } from './suggestReps';
 
 export interface ProgressionInput {
-  /** Previous session's working sets for this exercise (standard sets only). */
-  previousSets: Array<{ weight: number; reps: number; dropIndex?: number }>;
+  /**
+   * Previous session's working sets for this exercise (standard sets only), in performed
+   * order. `setNumber` is optional — callers that have it (PreviousSetData) should pass it;
+   * otherwise position in the array is used.
+   */
+  previousSets: Array<{ weight: number; reps: number; dropIndex?: number; setNumber?: number }>;
   /** Exercise's target reps string, e.g. "8-12" or "5". */
   targetReps: string;
   /** How much to bump the weight when the range is topped out. */
@@ -27,19 +34,6 @@ export interface ProgressionResult {
   ready: boolean;
   /** Human-readable explanation, e.g. "Last: 100×12 → Try: 105 ↑". */
   reason: string;
-}
-
-/**
- * Parse a target-reps string into a low/high range.
- * "8-12" → {8,12}; "5" → {5,5}; unparseable → {10,10}.
- */
-export function parseRepTarget(targetReps: string): RepRange {
-  const matches = targetReps.match(/\d+/g);
-  if (!matches || matches.length === 0) return { low: 10, high: 10 };
-  const nums = matches.map((n) => parseInt(n, 10));
-  const low = Math.min(...nums);
-  const high = Math.max(...nums);
-  return { low, high };
 }
 
 /**
@@ -74,10 +68,23 @@ export function computeProgression({
     };
   }
 
-  // Not yet — keep the weight, aim for the top of the range.
+  // Not yet — keep the weight. The rep target stays the goal in the copy below, but the
+  // PRE-FILL comes from `suggestReps`: aiming the input at `high` backtested worst of every
+  // rule tried (set-1 MAE 2.32, 28% exact) because it ignores what actually happened.
+  // Weight is unchanged in this branch, so this is exactly suggestReps for set 1.
   return {
     suggestedWeight: weight,
-    suggestedReps: high,
+    suggestedReps: suggestReps({
+      setNumber: 1,
+      targetReps,
+      previousSets: working.map((s, i) => ({
+        setNumber: s.setNumber ?? i + 1,
+        weight: s.weight,
+        reps: s.reps,
+      })),
+      currentSessionSets: [],
+      plannedWeight: weight,
+    }),
     ready: false,
     reason: `Aim for ${weight}×${high} to level up`,
   };

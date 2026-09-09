@@ -105,11 +105,24 @@ export function createOpenAiCompatibleProvider(opts: {
       });
     },
 
-    async runTurn({ system, messages, tools, onTextDelta }: RunTurnArgs): Promise<RunTurnResult> {
+    async runTurn({
+      system,
+      systemCacheable,
+      messages,
+      tools,
+      onTextDelta,
+    }: RunTurnArgs): Promise<RunTurnResult> {
       const body = {
         model: opts.model,
         stream: true,
-        messages: toOpenAiMessages(system, messages),
+        // No explicit cache directive: OpenAI caches 1024+ token prefixes automatically and
+        // Google's caching is implicit, so persona + dossier (~2,900 tokens) qualifies as-is.
+        // Note Anthropic-via-OpenRouter gets no caching this way — it needs cache_control,
+        // which only the native adapter above sends.
+        messages: toOpenAiMessages(
+          systemCacheable ? `${system}\n\n${systemCacheable}` : system,
+          messages
+        ),
         tools: tools.map((t) => ({
           type: 'function' as const,
           function: { name: t.name, description: t.description, parameters: t.parameters },

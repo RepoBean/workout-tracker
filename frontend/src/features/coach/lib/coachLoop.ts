@@ -5,6 +5,8 @@ const MAX_ITERATIONS = 6;
 export interface RunCoachArgs {
   provider: ChatProvider;
   system: string;
+  /** Large stable context appended behind the prompt-cache breakpoint. */
+  systemCacheable?: string;
   /** Conversation so far (user/assistant/tool messages), oldest first. */
   messages: CoachMessage[];
   tools: ChatToolDef[];
@@ -37,6 +39,7 @@ export async function runCoach(args: RunCoachArgs): Promise<RunCoachResult> {
     args.onTurnStart?.();
     const { text, toolCalls } = await args.provider.runTurn({
       system: args.system,
+      systemCacheable: args.systemCacheable,
       messages: convo,
       tools: args.tools,
       onTextDelta: args.onTextDelta,

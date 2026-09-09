@@ -49,7 +49,7 @@ describe('computeProgression', () => {
     expect(result).toMatchObject({ suggestedWeight: 110, ready: true });
   });
 
-  it('keeps weight and aims for the top when partially topped', () => {
+  it('keeps the weight when only some sets topped the range', () => {
     const result = computeProgression({
       previousSets: [
         { weight: 100, reps: 12 },
@@ -58,7 +58,40 @@ describe('computeProgression', () => {
       targetReps: '8-12',
       incrementLbs: 5,
     });
+    // Set 1 already topped the range, so the +1 bump is suppressed and the pre-fill is 12.
     expect(result).toMatchObject({ suggestedWeight: 100, suggestedReps: 12, ready: false });
+    expect(result?.reason).toBe('Aim for 100×12 to level up');
+  });
+
+  it('pre-fills set 1 from last performance, not the top of the range', () => {
+    // Regression: this branch used to return `suggestedReps: high` (12 here) regardless of
+    // what was actually done — the worst-scoring rule tested (set-1 MAE 2.32).
+    const result = computeProgression({
+      previousSets: [
+        { weight: 100, reps: 8 },
+        { weight: 100, reps: 8 },
+        { weight: 100, reps: 7 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ suggestedWeight: 100, suggestedReps: 9, ready: false });
+    // The goal copy still names the top of the range — only the pre-filled number changed.
+    expect(result?.reason).toBe('Aim for 100×12 to level up');
+  });
+
+  it('respects explicit setNumber when the caller supplies it', () => {
+    // Sets arriving out of order must still anchor set 1 on the real set 1.
+    const result = computeProgression({
+      previousSets: [
+        { weight: 100, reps: 6, setNumber: 3 },
+        { weight: 100, reps: 9, setNumber: 1 },
+        { weight: 100, reps: 7, setNumber: 2 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result?.suggestedReps).toBe(10);
   });
 
   it('does not bump when sets used different weights', () => {

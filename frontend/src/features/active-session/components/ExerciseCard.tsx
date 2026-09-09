@@ -9,6 +9,7 @@ import { isCardioExercise } from '../../../shared/api/predicates';
 import { formatMMSS, parseDurationToSec } from '../../../shared/utils/format';
 import { useProgression } from '../../../shared/context/ProgressionContext';
 import { computeProgression } from '../logic/progression';
+import { suggestReps } from '../logic/suggestReps';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
 interface ExerciseCardProps {
@@ -94,12 +95,6 @@ export function ExerciseCard({
     return previousHint?.sets?.find(s => s.setNumber === setNumber);
   };
 
-  // Parse target reps (handle "8-10" format)
-  const hintReps = useMemo(() => {
-    const match = exercise.targetReps.match(/(\d+)/);
-    return match ? parseInt(match[1], 10) : 10;
-  }, [exercise.targetReps]);
-
   // Auto-progression: deterministic double-progression suggestion from last session.
   // Off by default, never for cardio. Only influences the pre-fill before the first
   // set is logged this session — once you've logged a set, that wins (see chain below).
@@ -123,11 +118,20 @@ export function ExerciseCard({
     ?? matchingPreviousSet?.weight
     ?? previousHint?.lastWeight
     ?? 0;
-  // For reps: progression suggestion first (pre-first-set), then previous session's
-  // matching set reps, or target reps from exercise
-  const hintRepsForInput = (noSetsLoggedYet ? progressionResult?.suggestedReps : undefined)
-    ?? matchingPreviousSet?.reps
-    ?? hintReps;
+  // Reps come from one rule for every set, not a fallback chain. Progression still owns the
+  // WEIGHT above; passing that weight in as `plannedWeight` is what makes a weight bump
+  // automatically reset reps to the bottom of the range (double progression).
+  const hintRepsForInput = useMemo(
+    () =>
+      suggestReps({
+        setNumber: nextSetNumber,
+        targetReps: exercise.targetReps,
+        previousSets: previousHint?.sets ?? [],
+        currentSessionSets: standardSets,
+        plannedWeight: hintWeight,
+      }),
+    [nextSetNumber, exercise.targetReps, previousHint, standardSets, hintWeight]
+  );
 
   // Get drop sets for display (grouped by setNumber)
   const dropSetsBySetNumber = useMemo(() => {

@@ -69,13 +69,33 @@ export function createAnthropicProvider(opts: { apiKey: string; model: string })
       return page.data.map((m) => ({ id: m.id, label: m.display_name }));
     },
 
-    async runTurn({ system, messages, tools, onTextDelta }: RunTurnArgs): Promise<RunTurnResult> {
+    async runTurn({
+      system,
+      systemCacheable,
+      messages,
+      tools,
+      onTextDelta,
+    }: RunTurnArgs): Promise<RunTurnResult> {
       // Deliberately omit `thinking`: it is model-gated and 400s on some
       // user-selectable models (e.g. Haiku). Omitting it maximizes compatibility.
       const stream = client.messages.stream({
         model: opts.model,
         max_tokens: MAX_TOKENS,
-        system,
+        // The breakpoint goes at the END of the stable prefix so persona + dossier cache
+        // together. Anthropic's cached prefix covers tools -> system -> messages, so the
+        // tool definitions ride along for free. Ephemeral TTL is ~5 min, which matches a
+        // sit-down review conversation. Without this the dossier costs ~2,800 tokens on
+        // every single turn instead of ~250.
+        system: systemCacheable
+          ? [
+              { type: 'text' as const, text: system },
+              {
+                type: 'text' as const,
+                text: systemCacheable,
+                cache_control: { type: 'ephemeral' as const },
+              },
+            ]
+          : system,
         messages: toAnthropicMessages(messages),
         tools: tools.map((t) => ({
           name: t.name,
