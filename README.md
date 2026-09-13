@@ -95,8 +95,9 @@ cd workout-tracker
 # Copy the example env file
 cp .env.example .env
 
-# Build and start
-docker compose up -d
+# Build and start (the `main` profile — see docker-compose.yml for the
+# wife/staging profiles and scripts/ship.sh for the tested deploy path)
+docker compose --profile main up -d --build
 ```
 
 The app will be available at **http://localhost:8035**.
@@ -154,7 +155,8 @@ workout-tracker-v2/
 │   └── src/
 │       ├── models/      # Sequelize models (SQLite)
 │       └── routes/      # REST API endpoints
-├── docker-compose.yml   # Docker orchestration
+├── docker-compose.yml   # Docker orchestration (main / wife / staging profiles)
+├── scripts/             # backup, restore, ship, rollback (see CLAUDE.md)
 ├── Dockerfile.backend   # Multi-stage backend build
 ├── Dockerfile.frontend  # Multi-stage frontend build (Nginx)
 ├── nginx.conf           # Nginx reverse proxy config

@@ -49,7 +49,7 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 ## Database
 
-Database lives at `backend/database.sqlite`. Sequelize creates tables on first run.
+Local dev database lives at `backend/database.sqlite` (throwaway). In Docker each instance has its own named volume (see Development Setup). Sequelize creates tables on first run.
 
 ## Database Schema
 
@@ -488,24 +488,57 @@ Reference: `shared/ui/ErrorBoundary.tsx`, `App.tsx`
 
 ### Production / Self-Hosted (Docker) — primary deployment
 
-This is how the app actually runs day-to-day. `docker-compose up -d` from the repo root brings up two containers:
+One checkout, one `docker-compose.yml`, **three instances as compose profiles**. All three run the
+same two images (backend + frontend), tagged by git commit (`TAG`, set by `scripts/ship.sh`).
 
-| Container | Host Port | Internal Port | Notes |
-|-----------|-----------|---------------|-------|
-| `workout-tracker-frontend` | 8035 | 80 (nginx) | Serves the built React bundle and proxies `/api/*` to the backend |
-| `workout-tracker-backend`  | — (not exposed) | 3001 | Reachable only on the docker network |
+| Instance | Profile | Frontend container (host port) | Backend container | Data volume |
+|----------|---------|--------------------------------|-------------------|-------------|
+| Jason | `main` | `workout-tracker-frontend` (**8035**) | `workout-tracker-backend` | `workout-tracker-data` |
+| Wife | `wife` | `workout-tracker-wife-frontend` (**8036**) | `workout-tracker-wife-backend` | `workout-tracker-wife-data` |
+| Staging | `staging` | `workout-tracker-staging-frontend` (**8037**) | `workout-tracker-staging-backend` | `workout-tracker-staging-data` |
 
-The backend reads `DB_PATH=/data/database.sqlite`, mounted from the named volume `workout-tracker-data` (host: `/var/lib/docker/volumes/workout-tracker-data/_data/`). **This volume is the real database** — not anything in the repo.
+Each pair sits on its own private network with the backend aliased `backend` (nginx proxies
+`/api/*` to `http://backend:3001`). Backends read `DB_PATH=/data/database.sqlite` from their named
+volume. **The volumes are the real databases** — not anything in the repo — and are declared
+`external` so compose can never create or remove them. Staging is a throwaway copy of main's data.
+
+**Deploy loop** (every change, in this order — the wife stack lags main by days, never leads):
+
+```bash
+scripts/ship.sh staging && scripts/seed-staging.sh   # tests → build → up; then copy main's data in
+scripts/ship.sh main                                 # canary: you
+scripts/ship.sh wife                                 # same commit, a few days later
+```
+
+`ship.sh` runs `tsc --noEmit` + both vitest suites, **refuses if `/api/sessions/active` is
+non-null** on that instance (`--force` overrides), backs up that instance, then
+`TAG=<short sha> docker compose --profile X up -d --build --wait`. A clean tag whose images already
+exist is reused (build once, run three times); a dirty tree tags `<sha>-dirty` and always rebuilds.
+Deploys are logged to `~/backups/workout-tracker/deploys.log`.
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/backup.sh <inst>` | Consistent snapshot (`VACUUM INTO` inside the container via the `sqlite3` npm module, no CLI in the image) → `~/backups/workout-tracker/<inst>-<stamp>.sqlite`, integrity-checked twice |
+| `scripts/backup-cron.sh` | Nightly (crontab `30 3 * * *`): main + wife, 60-day local retention, rsync mirror to `/mnt/faster/backups/workout-tracker-db/` (NAS, 365 days), log in `backup.log` |
+| `scripts/restore.sh <inst> <file>` | Replace an instance's DB (pre-restore backup, typed confirmation, `--yes`/`--force`) |
+| `scripts/seed-staging.sh` | backup main → restore into staging |
+| `scripts/rollback.sh <inst> <tag>` | Redeploy an existing image tag, never builds; `--restore <file>` optional |
+| `scripts/prune-images.sh [keep]` | Drop old image tags beyond the newest N (default 5) |
+
+Manual equivalent for a quick rebuild of one instance (images tagged `latest`):
+`docker compose --profile main up -d --build`. **With no `--profile`, `docker compose up` starts
+nothing** — deliberate. Never run `docker compose down -v`.
 
 To inspect live data:
 ```bash
-# Hit the API from inside the container
-docker exec workout-tracker-backend node -e \
-  'require("http").get("http://localhost:3001/api/programs", r=>{let d="";r.on("data",c=>d+=c);r.on("end",()=>console.log(d))})'
+# Hit the API through the instance's port
+curl -s http://127.0.0.1:8035/api/programs
 
-# Or copy the live DB out for ad-hoc sqlite queries
-docker cp workout-tracker-backend:/data/database.sqlite /tmp/live.sqlite
+# Or take a consistent copy for ad-hoc sqlite queries (never query the volume file directly)
+scripts/backup.sh main        # prints the path; open it with python3's sqlite3 module
 ```
+
+CI: `.github/workflows/test.yml` runs both suites + typecheck on every push (second opinion; `ship.sh` is the gate).
 
 ### Local dev (npm) — for code changes
 
@@ -590,6 +623,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Fix: Rep prefill is realistic — new `logic/suggestReps.ts` anchors each set on last session's SAME-numbered set instead of aiming at the top of the rep range. `computeProgression`'s not-topped-out branch returned `suggestedReps: high`, which backtested worst of every rule tried over 1103 real working sets (set-1 MAE 2.32, 28% exact); it now delegates to `suggestReps` and keeps only the WEIGHT decision. Rules, in normative order: base on previous set N → reset to range bottom if the weight went up (double progression) → +1 on set 1 only when fresh and below the range top → clamp (set 1 to `[low, high]`, **sets 2+ top-only, no floor**) → decay cap at what was just logged. The no-floor rule is the point: last session's `8/6/6` on an 8-12 target pre-fills `9/6/6`, not `9/8/8` — aspirational when fresh, honest when fatigued. `parseRepTarget` moved into `suggestReps.ts` (re-exported from `progression.ts`; dependency is one-directional) and ExerciseCard's third rep parser deleted. 28 tests. |
 | — | Feature: Coach dossier + 6→2 tools — the AI coach's data is now preloaded into the system prompt instead of fetched a piece at a time (see Key Features §17). New `lib/dossier.ts` (pure, 27 tests) and `hooks/useCoachDossier.ts`; the ~618 KB all-time fetch runs once behind a 60 s timeout override and its *computed text* is memoized to `wt:coach-dossier-alltime`, keyed by newest session id + count + date. Deleted `get_active_program`, `list_recent_sessions`, `get_stats`, `get_personal_records`; `get_exercise_history` replaced by `get_workout_history({monthsBack?, from?, to?, exerciseName?})`. That tool takes `monthsBack` as its primary form (no model calendar arithmetic), **sends `to` as `${date}T23:59:59.999Z`** (verified live: a bare `to=2026-09-07` returns 0 sessions, the suffixed form returns the session on that day), rejects unparseable dates rather than forwarding them (`?from=garbage` silently returns 0), and matches `exerciseName` as a case-insensitive **substring** so renamed lifts stay whole (live: "Low Incline Dumbbell Press" → "Low Incline DB Press" on 2026-06-26; exact matching returned half the history and read as if the lift began in June). Prompt caching added: `systemCacheable` on `RunTurnArgs`, an Anthropic `cache_control` breakpoint at the end of the stable prefix, concatenation for OpenAI-compatible. Persona rewritten off "call a tool first". Backend untouched. |
 | — | UX: Dashboard design pass — first focused pass since the April overhaul. Header is date-led (weekday + date; app name dropped — it's on the PWA icon), with a shared `.eyebrow` label class (index.css) used by every dashboard section. Hero: decorative blob removed, workout name to 3xl/extrabold, meta line shows rotation position ("Workout 2 of 3"), targets via new shared `exerciseTargetSummary` (moved from WorkoutCard to `shared/api/cardio.ts` — cardio no longer shows the "1 × 1" placeholder), expanded rows prefix "last", cardio rows skip the meaningless 0×0 history fetch, skeleton matches the teal surface (no white flash), empty state links to Programs. `StatsCard` (3-tile KPI row; giant teal 0 for a dead streak) replaced by `ThisWeek.tsx`: Sun–Sat disc strip (filled+check = trained, ring = today, dashed = future) fed by the calendar-month queries, streak as amber flame chip only when > 0, counts as one quiet text line. Calendar: workout days are filled tappable discs (dots-under-numbers removed, rows now constant height), today ringed to match the strip, adjacent-month cells blank, single-letter day headers, aria-labels on month nav, count reads "N workouts in July". ResumeWorkout: amber-tinted card + "In progress" eyebrow + elapsed right-aligned; Discard demoted from lg danger button to quiet red ghost (still 48px, still `confirm()`). Quick Workout button demoted to md secondary, "(Ad-hoc)" jargon dropped; picker modal copy pass ("Start from Scratch", "Cardio" with activity-pulse icon — heart glyph stays reserved for HR). HeartRatePill hit targets 28→40px (all three states; renders in dashboard + session headers). ThemeContext now syncs `meta[name=theme-color]` to the page surface (#FAFAF8/#0F0F12) — status bar no longer bright teal over a dark page. |
+| — | Ops: Step Zero (v3 Bundle 0) — single-checkout `docker-compose.yml` with `main`/`wife`/`staging` profiles (8035/8036/8037), one image pair tagged by git sha (`TAG`), private network per pair with the backend aliased `backend`, all volumes `external`. Wife stack migrated in from its separate clone (zero data movement; old clone removed). New `scripts/`: `backup.sh` (VACUUM INTO via in-container node), `backup-cron.sh` (nightly, 60 d local / 365 d NAS mirror at `/mnt/faster/backups/workout-tracker-db/`), `restore.sh`, `seed-staging.sh`, `ship.sh` (tests → active-session gate → backup → tagged build → wait healthy → `deploys.log`), `rollback.sh`, `prune-images.sh`. CI workflow `.github/workflows/test.yml`; dead `lint` script removed. v3 plan copied to `docs/v3-plan.md` (canonical). No product change. |
 
 ---
 
