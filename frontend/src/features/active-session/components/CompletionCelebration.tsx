@@ -97,7 +97,7 @@ export function CompletionCelebration({
     >
       <canvas
         ref={canvasRef}
-        className="fixed inset-0 pointer-events-none z-[51] w-full h-full"
+        className="fixed inset-0 pointer-events-none z-[60] w-full h-full"
       />
       <div className={`bg-white dark:bg-surface-800 rounded-2xl p-6 ${hasSeries ? 'max-w-md' : 'max-w-sm'} w-full text-center shadow-modal dark:border dark:border-white/[0.06] max-h-[90vh] overflow-y-auto relative z-[52]`}>
         {/* Checkmark */}
