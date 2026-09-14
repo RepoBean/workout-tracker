@@ -15,9 +15,13 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+export const corsOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',')
+  : ['http://localhost:5174', 'http://127.0.0.1:5174', 'https://localhost', 'http://localhost'];
+
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:5174', 'http://127.0.0.1:5174'],
+  origin: corsOrigins,
   credentials: true
 }));
 app.use(express.json());
@@ -75,4 +79,9 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
-start();
+export { app };
+export default app;
+
+if (process.env.NODE_ENV !== 'test') {
+  start();
+}

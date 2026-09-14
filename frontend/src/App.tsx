@@ -1,9 +1,12 @@
-import { lazy, Suspense } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useOffline } from './shared/context/OfflineContext';
 import { useAiCoach } from './shared/context/AiCoachContext';
 import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
+import { isNativeApp } from './shared/lib/platform';
+import { getApiBaseUrl } from './shared/api/baseUrl';
+import { ServerCard } from './features/settings/components/ServerCard';
 
 // Route-level code splitting — each tab loads its chunk on first visit.
 const Dashboard = lazy(() => import('./features/dashboard'));
@@ -178,6 +181,26 @@ function AppContent() {
 }
 
 function App() {
+  const [hasServerUrl, setHasServerUrl] = useState(() => !isNativeApp() || getApiBaseUrl() !== '');
+
+  if (!hasServerUrl) {
+    return (
+      <div className="min-h-screen bg-surface-50 dark:bg-surface-900 transition-colors flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-4">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-display font-bold text-gray-900 dark:text-gray-100">
+              Workout Tracker
+            </h1>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+              Connect to your server to get started
+            </p>
+          </div>
+          <ServerCard onSaved={() => setHasServerUrl(true)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <AppContent />

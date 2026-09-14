@@ -17,6 +17,7 @@ import { HeartRatePill } from '../../shared/ui/HeartRatePill';
 import { Input } from '../../shared/ui/Input';
 import { useToast } from '../../shared/ui/Toast';
 import { AiCoachSettingsCard } from '../coach/components/AiCoachSettingsCard';
+import { ServerCard } from './components/ServerCard';
 
 const SEX_OPTIONS: Array<{ value: Sex; label: string }> = [
   { value: 'male', label: 'Male' },
@@ -270,6 +271,7 @@ export default function Settings() {
       </div>
 
       <AiCoachSettingsCard />
+      <ServerCard />
     </div>
   );
 }

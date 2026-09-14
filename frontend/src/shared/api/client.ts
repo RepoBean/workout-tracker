@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getApiBaseUrl } from './baseUrl';
 
 export const api = axios.create({
   baseURL: '/api',
@@ -6,6 +7,12 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Request interceptor to prepend configured base URL (for native app pointing to remote server)
+api.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl() + '/api';
+  return config;
 });
 
 // Response interceptor for error handling
