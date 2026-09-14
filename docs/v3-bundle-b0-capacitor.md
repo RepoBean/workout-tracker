@@ -529,8 +529,22 @@ scripts/serve-apk.sh      # prints the URL to open in Chrome on the Pixel (e.g. 
 ```
 Note: `scripts/serve-apk.sh` prints the first LAN address (e.g. 192.168.123.81). When connecting over VPN, substitute the server's VPN IP address.
 
-### 4.7 Device results (Jason)
-_(D1–D10 pass/fail with notes, copied diagnostics text for D5)_
+### 4.7 Device results (Jason, 2026-09-14, Pixel, APK from `f896358`, staging backend)
+- D1 install + render: **pass**. D2 Test connection: **pass** (after staging was shipped from the
+  branch — the first attempt failed because staging still ran main's image with no CORS origin for
+  `https://localhost`; nothing wrong on the phone).
+- D4 strap pairs inside the app, BPM live: **pass** (two test sessions logged to staging with per-set
+  HR; deleted afterwards).
+- **D5 strap tracked with the screen off: pass.** Heart rate kept recording while the phone was
+  locked. (Diagnostics block not captured; the recorded series had no visible gap.)
+- **D6 rest timer fired with the screen off: pass, once only.**
+- D9 completion: pass; confetti was drawn behind the completion modal in the WebView —
+  fixed in `40c3407` (canvas z-index 51 → 60), a web-visible one-liner.
+- D3 / D7 / D8 / D10: not explicitly exercised; D10 is implied (the APK was reinstalled over an
+  earlier build several times during testing without a signature error).
+
+**Spike verdict: the two background behaviors work in a Capacitor wrapper with a
+`connectedDevice` foreground service and AlarmManager-backed local notifications. Proceed to B1.**
 
 ---
 

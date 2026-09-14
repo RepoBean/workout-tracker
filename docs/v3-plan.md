@@ -135,14 +135,14 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 
 ## 5. Track B — Android client (Capacitor) and offline
 
-### Bundle B0 — Capacitor spike (prove the two background behaviors, nothing else) — agent brief: `docs/v3-bundle-b0-capacitor.md`
+### Bundle B0 — Capacitor spike (prove the two background behaviors, nothing else) — DONE 2026-09-14; brief + results: `docs/v3-bundle-b0-capacitor.md`
 - [x] `npx cap add android` under `frontend/` (`android/` dir, `capacitor.config.ts`). Plugins: `@capacitor-community/bluetooth-le`, `@capacitor/local-notifications`, `@capawesome-team/capacitor-android-foreground-service` (note the `-team` scope), `@capacitor/app`.
 - [x] `HeartRateContext`: a transport interface (`connect / disconnect / onSample`) with two implementations — Web Bluetooth (browser) and native BLE (app). Nothing above the context changes.
 - [x] `TimerContext`: on native, schedule an exact local notification at timer start, cancel on stop/complete; web path unchanged.
 - [x] Foreground service while a session is active ("Workout in progress" persistent notification).
 - [x] **API base URL becomes a setting** (VPN address) instead of relative `/api` (`shared/api/client.ts`). Dev builds point at **staging (8037)** or the Vite dev server; release builds at 8035 / 8036.
 - [x] **Bundle fonts locally** (Google Fonts at runtime fails offline / in the APK without network).
-- [ ] Build: Android SDK + JDK on the host, `./gradlew assembleDebug`. Claude can build the APK from the CLI but **cannot run it — verification is on Jason's Pixel**: strap stays connected with screen off ≥10 min; timer fires with screen off; app set to battery **Unrestricted**; the strap pairs once more in the app (separate pairing path from Chrome).
+- [x] Build: Android SDK + JDK on the host, `./gradlew assembleDebug`. Claude can build the APK from the CLI but **cannot run it — verification is on Jason's Pixel** (verified 2026-09-14: strap tracked with the screen off, timer fired once with the screen off; results in `docs/v3-bundle-b0-capacitor.md` §4.7): strap stays connected with screen off ≥10 min; timer fires with screen off; app set to battery **Unrestricted**; the strap pairs once more in the app (separate pairing path from Chrome).
 - [x] Serve the APK from the home server over the VPN for sideloading.
 
 ### Bundle B1 — Full Android app
@@ -173,7 +173,7 @@ rollback = previous tag + restored backup; the wife stack lags by days, never le
 
 ## 7. Still open / not decided
 
-- Which track goes first. **Recommendation:** Step Zero → Drizzle (A1) → Capacitor spike (B0) → then interleave A2… and B1 as desired. B0 is the fastest visible payoff; A1 is foundations. *(Step Zero and A1 done as of 2026-09-14; next is B0 or A2.)*
+- Which track goes first. **Recommendation:** Step Zero → Drizzle (A1) → Capacitor spike (B0) → then interleave A2… and B1 as desired. B0 is the fastest visible payoff; A1 is foundations. *(Step Zero, A1 and B0 done as of 2026-09-14; next is B1 or A2.)*
 - Coach write access (e.g. adjusting next session's targets with confirmation). Deferred; `project_coach_usage` memory says the coach is for at-home review.
 - kg display toggle — later, display-only.
 - Whether `exerciseNotes` moves into `SessionExercises.note` (likely yes, A3).
