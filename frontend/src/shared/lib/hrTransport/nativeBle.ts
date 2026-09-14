@@ -66,9 +66,6 @@ export class NativeBleTransport implements HrTransport {
   }
 
   async reconnect(h: HrHandlers): Promise<HrDeviceInfo | null> {
-    await this.ensureInitialized();
-    this.handlers = h;
-
     let stored: { deviceId: string; name: string } | null = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -78,6 +75,9 @@ export class NativeBleTransport implements HrTransport {
     }
 
     if (!stored?.deviceId) return null;
+
+    await this.ensureInitialized();
+    this.handlers = h;
 
     try {
       const { deviceId, name } = stored;
