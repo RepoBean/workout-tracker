@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { Button } from '../../../shared/ui/Button';
 import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
@@ -25,35 +25,49 @@ export function CompletionCelebration({
   hrSeries,
   onDismiss,
 }: CompletionCelebrationProps) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
-    if (isOpen) {
-      // Fire confetti
-      const duration = 2000;
-      const end = Date.now() + duration;
+    if (!isOpen || !canvasRef.current) return;
 
-      const frame = () => {
-        confetti({
-          particleCount: 3,
-          angle: 60,
-          spread: 55,
-          origin: { x: 0, y: 0.7 },
-          colors: ['#0d9488', '#10b981', '#f59e0b'],
-        });
-        confetti({
-          particleCount: 3,
-          angle: 120,
-          spread: 55,
-          origin: { x: 1, y: 0.7 },
-          colors: ['#0d9488', '#10b981', '#f59e0b'],
-        });
+    // Use dedicated in-tree canvas with useWorker: false to avoid
+    // Chromium WebView offscreen-canvas / worker freeze on Android
+    const fireConfetti = confetti.create(canvasRef.current, {
+      resize: true,
+      useWorker: false,
+    });
 
-        if (Date.now() < end) {
-          requestAnimationFrame(frame);
-        }
-      };
+    let animId: number | null = null;
+    const durationMs = 2000;
+    const end = Date.now() + durationMs;
 
-      frame();
-    }
+    const frame = () => {
+      fireConfetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors: ['#0d9488', '#10b981', '#f59e0b'],
+      });
+      fireConfetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors: ['#0d9488', '#10b981', '#f59e0b'],
+      });
+
+      if (Date.now() < end) {
+        animId = requestAnimationFrame(frame);
+      }
+    };
+
+    frame();
+
+    return () => {
+      if (animId !== null) cancelAnimationFrame(animId);
+      fireConfetti.reset();
+    };
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -75,8 +89,17 @@ export function CompletionCelebration({
   const hasSeries = hrSeries && hrSeries.t.length > 0;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className={`bg-white dark:bg-surface-800 rounded-2xl p-6 ${hasSeries ? 'max-w-md' : 'max-w-sm'} w-full text-center shadow-modal dark:border dark:border-white/[0.06] max-h-[90vh] overflow-y-auto`}>
+    <div
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onDismiss();
+      }}
+    >
+      <canvas
+        ref={canvasRef}
+        className="fixed inset-0 pointer-events-none z-[51] w-full h-full"
+      />
+      <div className={`bg-white dark:bg-surface-800 rounded-2xl p-6 ${hasSeries ? 'max-w-md' : 'max-w-sm'} w-full text-center shadow-modal dark:border dark:border-white/[0.06] max-h-[90vh] overflow-y-auto relative z-[52]`}>
         {/* Checkmark */}
         <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
           <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">

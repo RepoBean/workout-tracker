@@ -439,27 +439,7 @@ export default function ActiveSession() {
   }
 
   // Check if session is already completed
-  if (session.completedAt) {
-    // If we just completed it this session, keep the celebration modal mounted
-    // until the user dismisses (otherwise the refetch unmounts it instantly).
-    if (showCelebration && celebrationData) {
-      return (
-        <CompletionCelebration
-          isOpen={true}
-          workoutName={session.workoutName || 'Workout'}
-          totalSets={celebrationData.totalSets}
-          totalVolume={celebrationData.totalVolume}
-          duration={celebrationData.duration}
-          avgRpe={celebrationData.avgRpe}
-          hrSeries={celebrationData.hrSeries}
-          onDismiss={() => {
-            setShowCelebration(false);
-            navigate('/');
-          }}
-        />
-      );
-    }
-
+  if (session.completedAt && !showCelebration) {
     return <CompletedSessionSummary session={session} />;
   }
 
@@ -586,7 +566,7 @@ export default function ActiveSession() {
         hrSeries={celebrationData?.hrSeries || null}
         onDismiss={() => {
           setShowCelebration(false);
-          navigate('/');
+          navigate('/', { replace: true });
         }}
       />
     </div>
