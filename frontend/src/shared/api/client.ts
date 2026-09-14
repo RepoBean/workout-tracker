@@ -11,7 +11,9 @@ export const api = axios.create({
 
 // Request interceptor to prepend configured base URL (for native app pointing to remote server)
 api.interceptors.request.use((config) => {
-  config.baseURL = getApiBaseUrl() + '/api';
+  if (!config.baseURL || config.baseURL === '/api') {
+    config.baseURL = getApiBaseUrl() + '/api';
+  }
   return config;
 });
 
