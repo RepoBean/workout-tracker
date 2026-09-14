@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode } from 'react';
+import { isNativeApp } from '../lib/platform';
+import { scheduleRestNotification, cancelRestNotification, ensureNotificationPermission } from '../lib/restNotification';
 
 interface TimerContextType {
   isRunning: boolean;
@@ -137,6 +139,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
           clearInterval(intervalRef.current);
           intervalRef.current = null;
         }
+        cancelRestNotification();
         // Reset state before firing completion effects so a throwing
         // sound/notification can't strand the UI on a stale countdown
         setState(initialState);
@@ -175,13 +178,19 @@ export function TimerProvider({ children }: { children: ReactNode }) {
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime, targetDuration: seconds }));
 
-    // Request notification permission on first use
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().then(setNotificationPermission);
+    if (isNativeApp()) {
+      ensureNotificationPermission();
+      scheduleRestNotification(endTime);
+    } else {
+      // Request notification permission on first use
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then(setNotificationPermission);
+      }
     }
   }, []);
 
   const stopTimer = useCallback(() => {
+    cancelRestNotification();
     setState(initialState);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
@@ -195,6 +204,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
       const newTarget = prev.targetDuration + seconds;
 
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime: newEndTime, targetDuration: newTarget }));
+      cancelRestNotification();
+      scheduleRestNotification(newEndTime);
 
       return {
         ...prev,
@@ -206,6 +217,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const skipTimer = useCallback(() => {
+    cancelRestNotification();
     setState(initialState);
     localStorage.removeItem(STORAGE_KEY);
   }, []);
