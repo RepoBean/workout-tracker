@@ -26,8 +26,8 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 | Layer | Technology |
 |-------|------------|
 | Frontend | React 19 + TypeScript + Vite + Tailwind CSS |
-| Backend | Express + TypeScript + Sequelize ORM |
-| Database | SQLite (self-contained) |
+| Backend | Express + TypeScript + Drizzle ORM (better-sqlite3) |
+| Database | SQLite (self-contained); schema via drizzle-kit SQL migrations in `backend/drizzle/` |
 | Data Fetching | TanStack Query (React Query) |
 | State | React Context for global state (timer, theme, offline status) |
 | Validation | Zod (backend request validation) |
@@ -39,7 +39,7 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 | Rule | Constraint |
 |------|------------|
 | Tables | 5 maximum: Programs, Workouts, Exercises, Sessions, Sets |
-| Database | SQLite only — no Postgres, no migrations framework |
+| Database | SQLite only — no Postgres. Schema changes are drizzle-kit SQL migrations (`backend/drizzle/`), applied at boot; never hand-edit the live DB |
 | State | React state + TanStack Query + Context only — NO Redux, NO Zustand |
 | Design | Mobile-first — this runs on a phone at the gym |
 | Units | Pounds (lbs) for weight |
@@ -49,7 +49,7 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 ## Database
 
-Local dev database lives at `backend/database.sqlite` (throwaway). In Docker each instance has its own named volume (see Development Setup). Sequelize creates tables on first run.
+Local dev database lives at `backend/database.sqlite` (throwaway). In Docker each instance has its own named volume (see Development Setup). On boot, `src/db/migrate.ts` runs the legacy column adds (table-guarded, pre-2026-06 DBs only) and then the drizzle-kit migrations in `backend/drizzle/` — the `0000_baseline` is `CREATE ... IF NOT EXISTS` (no-op on existing DBs, full create on a fresh one); applied ones are recorded in `__drizzle_migrations`. To change the schema: edit `src/db/schema.ts`, run `npx drizzle-kit generate --name=<what>`, review the SQL, commit `drizzle/`. Dates are stored in Sequelize's text format (`YYYY-MM-DD HH:MM:SS.SSS +00:00`, see `src/db/columns.ts`) so pre-Drizzle images can still read the DB.
 
 ## Database Schema
 
@@ -251,20 +251,20 @@ backend/
 │   │   ├── workouts.ts      # CRUD for workouts
 │   │   ├── exercises.ts     # CRUD for exercises
 │   │   └── sessions.ts      # CRUD for sessions + sets
-│   ├── models/
-│   │   ├── index.ts         # Sequelize instance + associations
-│   │   ├── Program.ts
-│   │   ├── Workout.ts
-│   │   ├── Exercise.ts
-│   │   ├── Session.ts
-│   │   └── Set.ts
+│   ├── db/
+│   │   ├── schema.ts        # Drizzle tables + relations (mirrors the live DDL exactly) + row types
+│   │   ├── columns.ts       # sequelizeDate custom column (Sequelize text date format, read + write)
+│   │   ├── index.ts         # better-sqlite3 connection (DB_PATH, foreign_keys ON) + `db`
+│   │   ├── migrate.ts       # bootstrap(): legacy column adds → drizzle migrator
+│   │   └── queries/
+│   │       └── setsByName.ts # Case-insensitive name lookups (previous hints, PR check)
 │   ├── middleware/
 │   │   └── validate.ts      # Zod schema validation (body + URL params)
 │   ├── types/
-│   │   ├── index.ts         # Shared types (can be imported by frontend)
-│   │   └── associations.ts  # Typed Sequelize include shapes (ProgramWithWorkouts, etc.)
-│   ├── migrations.ts        # Additive column migrations (duplicate-safe ALTER TABLE)
+│   │   └── index.ts         # Stale hand-written types (nothing imports it; removed in v3 Bundle 6)
 │   └── index.ts             # Express app setup
+├── drizzle/                 # drizzle-kit SQL migrations + meta/ (committed; copied into the image)
+├── drizzle.config.ts
 ├── test/                    # Vitest + supertest API tests (in-memory SQLite, `npm test`)
 ├── database.sqlite              # SQLite database
 ├── package.json
@@ -280,7 +280,7 @@ backend/
 ### What the Backend DOES
 - ✅ Validate request bodies with Zod schemas
 - ✅ Reject invalid data (negative weights, bad dates, missing fields)
-- ✅ Persist to SQLite via Sequelize
+- ✅ Persist to SQLite via Drizzle
 - ✅ Return raw data for frontend to process
 - ✅ Handle database transactions where needed
 
@@ -518,7 +518,8 @@ Deploys are logged to `~/backups/workout-tracker/deploys.log`.
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/backup.sh <inst>` | Consistent snapshot (`VACUUM INTO` inside the container via the `sqlite3` npm module, no CLI in the image) → `~/backups/workout-tracker/<inst>-<stamp>.sqlite`, integrity-checked twice |
+| `scripts/backup.sh <inst>` | Consistent snapshot (`VACUUM INTO` inside the container via the image's own SQLite driver — better-sqlite3, or sqlite3 on pre-Drizzle images; no CLI in the image) → `~/backups/workout-tracker/<inst>-<stamp>.sqlite`, integrity-checked twice |
+| `scripts/api-snapshot.sh <inst> <dir>` | Sorted-key JSON dump of the read endpoints for `diff -r` before/after a backend refactor |
 | `scripts/backup-cron.sh` | Nightly (crontab `30 3 * * *`): main + wife, 60-day local retention, rsync mirror to `/mnt/faster/backups/workout-tracker-db/` (NAS, 365 days), log in `backup.log` |
 | `scripts/restore.sh <inst> <file>` | Replace an instance's DB (pre-restore backup, typed confirmation, `--yes`/`--force`) |
 | `scripts/seed-staging.sh` | backup main → restore into staging |
@@ -624,6 +625,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 | — | Feature: Coach dossier + 6→2 tools — the AI coach's data is now preloaded into the system prompt instead of fetched a piece at a time (see Key Features §17). New `lib/dossier.ts` (pure, 27 tests) and `hooks/useCoachDossier.ts`; the ~618 KB all-time fetch runs once behind a 60 s timeout override and its *computed text* is memoized to `wt:coach-dossier-alltime`, keyed by newest session id + count + date. Deleted `get_active_program`, `list_recent_sessions`, `get_stats`, `get_personal_records`; `get_exercise_history` replaced by `get_workout_history({monthsBack?, from?, to?, exerciseName?})`. That tool takes `monthsBack` as its primary form (no model calendar arithmetic), **sends `to` as `${date}T23:59:59.999Z`** (verified live: a bare `to=2026-09-07` returns 0 sessions, the suffixed form returns the session on that day), rejects unparseable dates rather than forwarding them (`?from=garbage` silently returns 0), and matches `exerciseName` as a case-insensitive **substring** so renamed lifts stay whole (live: "Low Incline Dumbbell Press" → "Low Incline DB Press" on 2026-06-26; exact matching returned half the history and read as if the lift began in June). Prompt caching added: `systemCacheable` on `RunTurnArgs`, an Anthropic `cache_control` breakpoint at the end of the stable prefix, concatenation for OpenAI-compatible. Persona rewritten off "call a tool first". Backend untouched. |
 | — | UX: Dashboard design pass — first focused pass since the April overhaul. Header is date-led (weekday + date; app name dropped — it's on the PWA icon), with a shared `.eyebrow` label class (index.css) used by every dashboard section. Hero: decorative blob removed, workout name to 3xl/extrabold, meta line shows rotation position ("Workout 2 of 3"), targets via new shared `exerciseTargetSummary` (moved from WorkoutCard to `shared/api/cardio.ts` — cardio no longer shows the "1 × 1" placeholder), expanded rows prefix "last", cardio rows skip the meaningless 0×0 history fetch, skeleton matches the teal surface (no white flash), empty state links to Programs. `StatsCard` (3-tile KPI row; giant teal 0 for a dead streak) replaced by `ThisWeek.tsx`: Sun–Sat disc strip (filled+check = trained, ring = today, dashed = future) fed by the calendar-month queries, streak as amber flame chip only when > 0, counts as one quiet text line. Calendar: workout days are filled tappable discs (dots-under-numbers removed, rows now constant height), today ringed to match the strip, adjacent-month cells blank, single-letter day headers, aria-labels on month nav, count reads "N workouts in July". ResumeWorkout: amber-tinted card + "In progress" eyebrow + elapsed right-aligned; Discard demoted from lg danger button to quiet red ghost (still 48px, still `confirm()`). Quick Workout button demoted to md secondary, "(Ad-hoc)" jargon dropped; picker modal copy pass ("Start from Scratch", "Cardio" with activity-pulse icon — heart glyph stays reserved for HR). HeartRatePill hit targets 28→40px (all three states; renders in dashboard + session headers). ThemeContext now syncs `meta[name=theme-color]` to the page surface (#FAFAF8/#0F0F12) — status bar no longer bright teal over a dark page. |
 | — | Ops: Step Zero (v3 Bundle 0) — single-checkout `docker-compose.yml` with `main`/`wife`/`staging` profiles (8035/8036/8037), one image pair tagged by git sha (`TAG`), private network per pair with the backend aliased `backend`, all volumes `external`. Wife stack migrated in from its separate clone (zero data movement; old clone removed). New `scripts/`: `backup.sh` (VACUUM INTO via in-container node), `backup-cron.sh` (nightly, 60 d local / 365 d NAS mirror at `/mnt/faster/backups/workout-tracker-db/`), `restore.sh`, `seed-staging.sh`, `ship.sh` (tests → active-session gate → backup → tagged build → wait healthy → `deploys.log`), `rollback.sh`, `prune-images.sh`. CI workflow `.github/workflows/test.yml`; dead `lint` script removed. v3 plan copied to `docs/v3-plan.md` (canonical). No product change. |
+| — | Refactor: Sequelize → Drizzle (v3 Bundle 1; plan in `docs/v3-bundle-1-drizzle.md`). `sequelize`+`sqlite3` replaced by `drizzle-orm`+`better-sqlite3`+`drizzle-kit`; `src/models/` → `src/db/{schema,columns,index,migrate}.ts`. Schema mirrors the live DDL exactly (names, defaults, FK actions, index names) so both instances' DBs are used as-is; **dates keep Sequelize's text format** via a custom column (`columns.ts`) so a DB the new image has written stays readable by the old image (rollback = old tag, no restore). Migration runner: table-guarded legacy column adds → drizzle migrator over `backend/drizzle/` (`0000_baseline` is `IF NOT EXISTS`, hand-edited from drizzle-kit output; `0001` adds the `sets_exercise_name_lower` expression index). SQLite does the cascades now (`foreign_keys = ON`; the DDL always declared them). The two full-table loads (`/sessions/:id/previous`, `/exercises/history-by-name`, also `all-sets-by-name`) became indexed `lower(exerciseName) = lower(?)` queries in `db/queries/setsByName.ts`. `/history?from|to` bounds are parsed explicitly; unparseable → 400 (was a silent empty 200). Tests: 22 HTTP-only characterization tests (`parity.test.ts`) written first against Sequelize and passed unchanged on Drizzle — shapes, timestamps, cascades, date bounds, case-insensitive lookups, ordering; migration tests replay the literal live DDL and a pre-2026-06 shape; `columns.test.ts`. Existing tests changed only in seed helpers (`test/app.ts` `seed`/`find`, rows carry a `reload()`); zero `request(app)` lines touched. vitest no longer needs `pool: forks`. Ops: `scripts/lib/snapshot.js` supports both drivers (backup runs inside whichever image is live), `Dockerfile.backend` copies `drizzle/` into the image, `ship.sh` refuses Node < 20 (host moved to Node 22 via nvm, `.nvmrc` added; apt `/usr/bin/node` is still 18 and serves cron), new `scripts/api-snapshot.sh` for before/after diffs. Deleted: `seed.ts`, `scripts/import_legacy.ts`, `types/associations.ts`. |
 
 ---
 

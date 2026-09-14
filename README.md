@@ -77,7 +77,7 @@ The structured data formats make it easy for any LLM to parse and reason about y
 | Layer    | Tech                                  |
 |----------|---------------------------------------|
 | Frontend | React 19, TypeScript, Vite, Tailwind  |
-| Backend  | Express 5, Sequelize, TypeScript      |
+| Backend  | Express 5, Drizzle ORM, TypeScript    |
 | Database | SQLite                                |
 | Deploy   | Docker, Nginx                         |
 
@@ -153,8 +153,9 @@ workout-tracker-v2/
 │       └── shared/      # Shared UI components, hooks, context
 ├── backend/             # Express API server
 │   └── src/
-│       ├── models/      # Sequelize models (SQLite)
+│       ├── db/          # Drizzle schema, connection, migration bootstrap
 │       └── routes/      # REST API endpoints
+│   └── drizzle/         # SQL migrations (drizzle-kit), applied at startup
 ├── docker-compose.yml   # Docker orchestration (main / wife / staging profiles)
 ├── scripts/             # backup, restore, ship, rollback (see CLAUDE.md)
 ├── Dockerfile.backend   # Multi-stage backend build

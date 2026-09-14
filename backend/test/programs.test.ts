@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, resetDb } from './app.js';
-import { Program } from '../src/models/index.js';
-import type { ProgramWithWorkoutsAndExercises } from '../src/types/associations.js';
+import { createTestApp, resetDb, seed } from './app.js';
+import type { ProgramWithWorkoutsAndExercises } from './app.js';
 
 const app = createTestApp();
 
@@ -78,7 +77,7 @@ describe('POST /api/programs/import', () => {
 
 describe('PUT /api/programs/:id', () => {
   it('rejects a body containing only isActive', async () => {
-    const program = await Program.create({ name: 'Test' });
+    const program = seed.program({ name: 'Test' });
 
     const res = await request(app)
       .put(`/api/programs/${program.id}`)
@@ -90,7 +89,7 @@ describe('PUT /api/programs/:id', () => {
   });
 
   it('strips isActive when sent alongside valid fields', async () => {
-    const program = await Program.create({ name: 'Test' });
+    const program = seed.program({ name: 'Test' });
 
     const res = await request(app)
       .put(`/api/programs/${program.id}`)
@@ -105,8 +104,8 @@ describe('PUT /api/programs/:id', () => {
 
 describe('PUT /api/programs/:id/set-active', () => {
   it('keeps exactly one program active and unarchives the target', async () => {
-    const a = await Program.create({ name: 'A', isActive: true });
-    const b = await Program.create({ name: 'B', isArchived: true });
+    const a = seed.program({ name: 'A', isActive: true });
+    const b = seed.program({ name: 'B', isArchived: true });
 
     const res = await request(app).put(`/api/programs/${b.id}/set-active`);
 
@@ -119,7 +118,7 @@ describe('PUT /api/programs/:id/set-active', () => {
   });
 
   it('returns 404 and rolls back when the program does not exist', async () => {
-    const a = await Program.create({ name: 'A', isActive: true });
+    const a = seed.program({ name: 'A', isActive: true });
 
     const res = await request(app).put('/api/programs/9999/set-active');
 

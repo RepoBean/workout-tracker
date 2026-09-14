@@ -1,4 +1,4 @@
-# Backend Dockerfile - TypeScript + Express + SQLite
+# Backend Dockerfile - TypeScript + Express + SQLite (Drizzle + better-sqlite3)
 # Multi-stage build: compile TS → run compiled JS
 
 # Stage 1: Builder (compile TypeScript + native modules)
@@ -6,7 +6,8 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies for sqlite3 native module
+# Build tools for the better-sqlite3 native addon. It normally downloads a
+# prebuilt binary for this Node version; this is the fallback compile path.
 RUN apt-get update && \
     apt-get install -y python3 make g++ && \
     rm -rf /var/lib/apt/lists/*
@@ -31,11 +32,14 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV=production
 
-# Copy compiled node_modules from builder (includes sqlite3 native module)
+# Copy compiled node_modules from builder (includes the better-sqlite3 native addon)
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy compiled JavaScript output
 COPY --from=builder /app/dist ./dist
+
+# SQL migrations, applied at startup (resolved as dist/../drizzle)
+COPY --from=builder /app/drizzle ./drizzle
 
 # Copy package.json for metadata
 COPY backend/package.json ./

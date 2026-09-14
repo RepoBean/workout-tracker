@@ -27,6 +27,11 @@ fi
 export TAG
 
 if [ "$SKIP_TESTS" != "1" ]; then
+  # The backend tests load better-sqlite3, a native addon built for the Node that
+  # ran `npm ci` (nvm default, see backend/.nvmrc). The apt /usr/bin/node is 18 —
+  # a non-interactive shell would pick it up and fail to load the addon.
+  NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+  [ "$NODE_MAJOR" -ge 20 ] || die "node on PATH is $(node --version 2>/dev/null || echo 'missing'); need >= 20 (nvm use $(cat backend/.nvmrc))"
   log "backend: tsc --noEmit + vitest run"
   (cd backend && npx tsc --noEmit && npx vitest run) || die "backend tests/typecheck failed"
   log "frontend: tsc -b + vitest run"

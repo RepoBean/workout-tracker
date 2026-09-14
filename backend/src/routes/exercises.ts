@@ -1,9 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Exercise, Workout, Set as SetModel, Session } from '../models/index.js';
+import { eq, like } from 'drizzle-orm';
+import { db, now } from '../db/index.js';
+import { exercises, sets, workouts } from '../db/schema.js';
+import { allStandardSetsByName, latestSetsByName } from '../db/queries/setsByName.js';
 import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
-import { Op } from 'sequelize';
-import type { SetWithSession } from '../types/associations.js';
 
 const router = Router();
 
@@ -53,11 +54,7 @@ const updateExerciseSchema = z.object({
   message: 'At least one field must be provided',
 });
 
-const historyByNameSchema = z.object({
-  name: z.string().min(1),
-});
-
-const allSetsByNameSchema = z.object({
+const nameQuerySchema = z.object({
   name: z.string().min(1),
 });
 
@@ -65,63 +62,24 @@ const allSetsByNameSchema = z.object({
 // Routes
 // ============================================
 
-// GET /api/exercises/history-by-name - Get exercise history by name
-router.get('/history-by-name', async (req: Request, res: Response) => {
+// GET /api/exercises/history-by-name - Most recent completed session's sets for an exercise name
+router.get('/history-by-name', (req: Request, res: Response) => {
   try {
-    const result = historyByNameSchema.safeParse({ name: req.query.name });
+    const result = nameQuerySchema.safeParse({ name: req.query.name });
     if (!result.success) {
       res.status(400).json({ error: 'Name parameter is required' });
       return;
     }
 
-    const { name } = result.data;
-
-    // Find all sets with matching exerciseName from completed sessions
-    const matchingSets = await SetModel.findAll({
-      where: {
-        dropIndex: 0, // Only standard sets
-      },
-      include: [{
-        model: Session,
-        as: 'session',
-        where: {
-          completedAt: { [Op.not]: null },
-        },
-        attributes: ['id', 'completedAt'],
-      }],
-      order: [
-        [{ model: Session, as: 'session' }, 'completedAt', 'DESC'],
-        ['setNumber', 'ASC'],
-      ],
-    });
-
-    // Filter by name (case-insensitive) since SQLite LOWER() in Sequelize is tricky
-    const filtered = matchingSets.filter(
-      set => set.exerciseName.toLowerCase() === name.toLowerCase()
-    );
-
-    if (filtered.length === 0) {
+    const latest = latestSetsByName(result.data.name);
+    if (!latest) {
       res.json({ sets: [], fromSessionDate: null });
       return;
     }
 
-    // Get the most recent session's sets
-    const mostRecentSet = filtered[0] as SetWithSession;
-    const mostRecentSessionId = mostRecentSet.session.id;
-    const mostRecentDate = mostRecentSet.session.completedAt;
-
-    const setsFromMostRecent = filtered
-      .filter(set => (set as SetWithSession).session.id === mostRecentSessionId)
-      .map(set => ({
-        setNumber: set.setNumber,
-        weight: set.weight,
-        reps: set.reps,
-        perceivedEffort: set.perceivedEffort,
-      }));
-
     res.json({
-      sets: setsFromMostRecent,
-      fromSessionDate: mostRecentDate,
+      sets: latest.sets,
+      fromSessionDate: latest.completedAt,
     });
   } catch (error) {
     console.error('Error fetching exercise history by name:', error);
@@ -130,50 +88,15 @@ router.get('/history-by-name', async (req: Request, res: Response) => {
 });
 
 // GET /api/exercises/all-sets-by-name - All standard sets for an exercise across all completed sessions
-router.get('/all-sets-by-name', async (req: Request, res: Response) => {
+router.get('/all-sets-by-name', (req: Request, res: Response) => {
   try {
-    const result = allSetsByNameSchema.safeParse({ name: req.query.name });
+    const result = nameQuerySchema.safeParse({ name: req.query.name });
     if (!result.success) {
       res.status(400).json({ error: 'Name parameter is required' });
       return;
     }
 
-    const { name } = result.data;
-
-    // Find all standard sets (dropIndex === 0) belonging to completed sessions.
-    const matchingSets = await SetModel.findAll({
-      where: {
-        dropIndex: 0,
-      },
-      include: [{
-        model: Session,
-        as: 'session',
-        where: {
-          completedAt: { [Op.not]: null },
-        },
-        attributes: ['id', 'completedAt'],
-      }],
-      order: [
-        [{ model: Session, as: 'session' }, 'completedAt', 'DESC'],
-        ['setNumber', 'ASC'],
-      ],
-    });
-
-    // Filter by name (case-insensitive); SQLite LOWER() through Sequelize is awkward.
-    const filtered = matchingSets.filter(
-      set => set.exerciseName.toLowerCase() === name.toLowerCase()
-    );
-
-    const sets = filtered.map(set => ({
-      weight: set.weight,
-      reps: set.reps,
-      dropIndex: set.dropIndex,
-      durationSec: set.durationSec,
-      distance: set.distance,
-      completedAt: (set as SetWithSession).session.completedAt,
-    }));
-
-    res.json({ sets });
+    res.json({ sets: allStandardSetsByName(result.data.name) });
   } catch (error) {
     console.error('Error fetching all sets by name:', error);
     res.status(500).json({ error: 'Failed to fetch sets' });
@@ -181,7 +104,7 @@ router.get('/all-sets-by-name', async (req: Request, res: Response) => {
 });
 
 // GET /api/exercises/suggestions - Autocomplete suggestions
-router.get('/suggestions', async (req: Request, res: Response) => {
+router.get('/suggestions', (req: Request, res: Response) => {
   try {
     const query = req.query.q as string;
     if (!query || query.length < 2) {
@@ -189,31 +112,21 @@ router.get('/suggestions', async (req: Request, res: Response) => {
       return;
     }
 
-    const exerciseNames = await Exercise.findAll({
-      attributes: ['name'],
-      where: {
-        name: {
-          [Op.like]: `%${query}%`
-        }
-      },
-      group: ['name'],
-      limit: 10
-    });
+    const exerciseNames = db.selectDistinct({ name: exercises.name })
+      .from(exercises)
+      .where(like(exercises.name, `%${query}%`))
+      .limit(10)
+      .all();
 
-    const setExerciseNames = await SetModel.findAll({
-      attributes: ['exerciseName'],
-      where: {
-        exerciseName: {
-          [Op.like]: `%${query}%`
-        }
-      },
-      group: ['exerciseName'],
-      limit: 10
-    });
+    const setExerciseNames = db.selectDistinct({ name: sets.exerciseName })
+      .from(sets)
+      .where(like(sets.exerciseName, `%${query}%`))
+      .limit(10)
+      .all();
 
     const allNames = new globalThis.Set([
       ...exerciseNames.map(e => e.name),
-      ...setExerciseNames.map(s => s.exerciseName)
+      ...setExerciseNames.map(s => s.name),
     ]);
 
     res.json(Array.from(allNames).slice(0, 10));
@@ -224,9 +137,9 @@ router.get('/suggestions', async (req: Request, res: Response) => {
 });
 
 // GET /api/exercises/:id - Get single exercise
-router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
+router.get('/:id', validateParams(idParamSchema), (req: Request, res: Response) => {
   try {
-    const exercise = await Exercise.findByPk(Number(req.params.id));
+    const exercise = db.select().from(exercises).where(eq(exercises.id, Number(req.params.id))).get();
 
     if (!exercise) {
       res.status(404).json({ error: 'Exercise not found' });
@@ -241,20 +154,21 @@ router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Resp
 });
 
 // POST /api/exercises - Create new exercise
-router.post('/', validate(createExerciseSchema), async (req: Request, res: Response) => {
+router.post('/', validate(createExerciseSchema), (req: Request, res: Response) => {
   try {
     const {
       workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
       exerciseType, cardioModality, targetDurationSec, targetDistance,
     } = req.body;
 
-    const workout = await Workout.findByPk(workoutId);
+    const workout = db.select({ id: workouts.id }).from(workouts).where(eq(workouts.id, workoutId)).get();
     if (!workout) {
       res.status(404).json({ error: 'Workout not found' });
       return;
     }
 
-    const exercise = await Exercise.create({
+    const ts = now();
+    const exercise = db.insert(exercises).values({
       workoutId,
       name,
       targetSets,
@@ -265,7 +179,9 @@ router.post('/', validate(createExerciseSchema), async (req: Request, res: Respo
       cardioModality: cardioModality ?? null,
       targetDurationSec: targetDurationSec ?? null,
       targetDistance: targetDistance ?? null,
-    });
+      createdAt: ts,
+      updatedAt: ts,
+    }).returning().get();
 
     res.status(201).json(exercise);
   } catch (error) {
@@ -275,10 +191,11 @@ router.post('/', validate(createExerciseSchema), async (req: Request, res: Respo
 });
 
 // PUT /api/exercises/:id - Update exercise
-router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema), (req: Request, res: Response) => {
   try {
-    const exercise = await Exercise.findByPk(Number(req.params.id));
-    if (!exercise) {
+    const id = Number(req.params.id);
+    const existing = db.select({ id: exercises.id }).from(exercises).where(eq(exercises.id, id)).get();
+    if (!existing) {
       res.status(404).json({ error: 'Exercise not found' });
       return;
     }
@@ -287,17 +204,20 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
       name, targetSets, targetReps, orderIndex, supersetGroup,
       exerciseType, cardioModality, targetDurationSec, targetDistance,
     } = req.body;
-    if (name !== undefined) exercise.name = name;
-    if (targetSets !== undefined) exercise.targetSets = targetSets;
-    if (targetReps !== undefined) exercise.targetReps = targetReps;
-    if (orderIndex !== undefined) exercise.orderIndex = orderIndex;
-    if (supersetGroup !== undefined) exercise.supersetGroup = supersetGroup;
-    if (exerciseType !== undefined) exercise.exerciseType = exerciseType;
-    if (cardioModality !== undefined) exercise.cardioModality = cardioModality;
-    if (targetDurationSec !== undefined) exercise.targetDurationSec = targetDurationSec;
-    if (targetDistance !== undefined) exercise.targetDistance = targetDistance;
 
-    await exercise.save();
+    const exercise = db.update(exercises).set({
+      ...(name !== undefined && { name }),
+      ...(targetSets !== undefined && { targetSets }),
+      ...(targetReps !== undefined && { targetReps }),
+      ...(orderIndex !== undefined && { orderIndex }),
+      ...(supersetGroup !== undefined && { supersetGroup }),
+      ...(exerciseType !== undefined && { exerciseType }),
+      ...(cardioModality !== undefined && { cardioModality }),
+      ...(targetDurationSec !== undefined && { targetDurationSec }),
+      ...(targetDistance !== undefined && { targetDistance }),
+      updatedAt: now(),
+    }).where(eq(exercises.id, id)).returning().get();
+
     res.json(exercise);
   } catch (error) {
     console.error('Error updating exercise:', error);
@@ -305,16 +225,15 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
   }
 });
 
-// DELETE /api/exercises/:id - Delete exercise
-router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
+// DELETE /api/exercises/:id - Delete exercise (SQLite nulls exerciseId on its sets)
+router.delete('/:id', validateParams(idParamSchema), (req: Request, res: Response) => {
   try {
-    const exercise = await Exercise.findByPk(Number(req.params.id));
-    if (!exercise) {
+    const result = db.delete(exercises).where(eq(exercises.id, Number(req.params.id))).run();
+    if (result.changes === 0) {
       res.status(404).json({ error: 'Exercise not found' });
       return;
     }
 
-    await exercise.destroy();
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting exercise:', error);

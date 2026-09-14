@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Workout, Exercise, Program, sequelize } from '../models/index.js';
+import { and, asc, eq, sql } from 'drizzle-orm';
+import { db, now } from '../db/index.js';
+import { programs, workouts, exercises } from '../db/schema.js';
 import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
@@ -31,21 +33,28 @@ const reorderWorkoutsSchema = z.object({
 });
 
 // ============================================
+// Queries
+// ============================================
+
+function findWorkoutWithExercises(id: number) {
+  return db.query.workouts.findFirst({
+    where: eq(workouts.id, id),
+    with: { exercises: { orderBy: asc(exercises.orderIndex) } },
+  });
+}
+
+function findWorkout(id: number) {
+  return db.select().from(workouts).where(eq(workouts.id, id)).get();
+}
+
+// ============================================
 // Routes
 // ============================================
 
 // GET /api/workouts/:id - Get single workout with exercises
 router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const workout = await Workout.findByPk(Number(req.params.id), {
-      include: [{
-        model: Exercise,
-        as: 'exercises'
-      }],
-      order: [
-        [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
+    const workout = await findWorkoutWithExercises(Number(req.params.id));
 
     if (!workout) {
       res.status(404).json({ error: 'Workout not found' });
@@ -60,17 +69,20 @@ router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Resp
 });
 
 // POST /api/workouts - Create new workout
-router.post('/', validate(createWorkoutSchema), async (req: Request, res: Response) => {
+router.post('/', validate(createWorkoutSchema), (req: Request, res: Response) => {
   try {
     const { programId, name, orderIndex } = req.body;
 
-    const program = await Program.findByPk(programId);
+    const program = db.select({ id: programs.id }).from(programs).where(eq(programs.id, programId)).get();
     if (!program) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
 
-    const workout = await Workout.create({ programId, name, orderIndex });
+    const ts = now();
+    const workout = db.insert(workouts)
+      .values({ programId, name, orderIndex, createdAt: ts, updatedAt: ts })
+      .returning().get();
     res.status(201).json(workout);
   } catch (error) {
     console.error('Error creating workout:', error);
@@ -79,19 +91,21 @@ router.post('/', validate(createWorkoutSchema), async (req: Request, res: Respon
 });
 
 // PUT /api/workouts/:id - Update workout
-router.put('/:id', validateParams(idParamSchema), validate(updateWorkoutSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateWorkoutSchema), (req: Request, res: Response) => {
   try {
-    const workout = await Workout.findByPk(Number(req.params.id));
-    if (!workout) {
+    const id = Number(req.params.id);
+    if (!findWorkout(id)) {
       res.status(404).json({ error: 'Workout not found' });
       return;
     }
 
     const { name, orderIndex } = req.body;
-    if (name !== undefined) workout.name = name;
-    if (orderIndex !== undefined) workout.orderIndex = orderIndex;
+    const workout = db.update(workouts).set({
+      ...(name !== undefined && { name }),
+      ...(orderIndex !== undefined && { orderIndex }),
+      updatedAt: now(),
+    }).where(eq(workouts.id, id)).returning().get();
 
-    await workout.save();
     res.json(workout);
   } catch (error) {
     console.error('Error updating workout:', error);
@@ -99,16 +113,15 @@ router.put('/:id', validateParams(idParamSchema), validate(updateWorkoutSchema),
   }
 });
 
-// DELETE /api/workouts/:id - Delete workout
-router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
+// DELETE /api/workouts/:id - Delete workout (SQLite cascades to exercises, nulls sessions)
+router.delete('/:id', validateParams(idParamSchema), (req: Request, res: Response) => {
   try {
-    const workout = await Workout.findByPk(Number(req.params.id));
-    if (!workout) {
+    const result = db.delete(workouts).where(eq(workouts.id, Number(req.params.id))).run();
+    if (result.changes === 0) {
       res.status(404).json({ error: 'Workout not found' });
       return;
     }
 
-    await workout.destroy();
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting workout:', error);
@@ -119,61 +132,47 @@ router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: R
 // POST /api/workouts/:id/duplicate - Duplicate workout with exercises
 router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const original = await Workout.findByPk(Number(req.params.id), {
-      include: [{
-        model: Exercise,
-        as: 'exercises'
-      }],
-      order: [
-        [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
+    const original = await findWorkoutWithExercises(Number(req.params.id));
 
     if (!original) {
       res.status(404).json({ error: 'Workout not found' });
       return;
     }
 
-    const workoutCount = await Workout.count({ where: { programId: original.programId } });
-    const originalJSON = original.toJSON() as unknown as Record<string, unknown>;
-    const exercises = (originalJSON.exercises as Array<Record<string, unknown>>) || [];
+    const { count } = db.select({ count: sql<number>`count(*)` })
+      .from(workouts).where(eq(workouts.programId, original.programId)).get()!;
 
-    const newWorkout = await sequelize.transaction(async (t) => {
-      const workout = await Workout.create({
+    const newId = db.transaction((tx) => {
+      const ts = now();
+      const workout = tx.insert(workouts).values({
         programId: original.programId,
         name: `${original.name} (Copy)`,
-        orderIndex: workoutCount,
-      }, { transaction: t });
+        orderIndex: count,
+        createdAt: ts,
+        updatedAt: ts,
+      }).returning({ id: workouts.id }).get();
 
-      for (const e of exercises) {
-        await Exercise.create({
+      for (const e of original.exercises) {
+        tx.insert(exercises).values({
           workoutId: workout.id,
-          name: e.name as string,
-          targetSets: e.targetSets as number,
-          targetReps: e.targetReps as string,
-          orderIndex: e.orderIndex as number,
-          supersetGroup: (e.supersetGroup as string) || null,
-          exerciseType: (e.exerciseType as 'strength' | 'cardio') || 'strength',
-          cardioModality: (e.cardioModality as 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other' | null) || null,
-          targetDurationSec: (e.targetDurationSec as number | null) ?? null,
-          targetDistance: (e.targetDistance as number | null) ?? null,
-        }, { transaction: t });
+          name: e.name,
+          targetSets: e.targetSets,
+          targetReps: e.targetReps,
+          orderIndex: e.orderIndex,
+          supersetGroup: e.supersetGroup || null,
+          exerciseType: e.exerciseType || 'strength',
+          cardioModality: e.cardioModality || null,
+          targetDurationSec: e.targetDurationSec ?? null,
+          targetDistance: e.targetDistance ?? null,
+          createdAt: ts,
+          updatedAt: ts,
+        }).run();
       }
 
-      return workout;
+      return workout.id;
     });
 
-    const fullWorkout = await Workout.findByPk(newWorkout.id, {
-      include: [{
-        model: Exercise,
-        as: 'exercises'
-      }],
-      order: [
-        [{ model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
-
-    res.status(201).json(fullWorkout);
+    res.status(201).json(await findWorkoutWithExercises(newId));
   } catch (error) {
     console.error('Error duplicating workout:', error);
     res.status(500).json({ error: 'Failed to duplicate workout' });
@@ -181,17 +180,15 @@ router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request
 });
 
 // POST /api/workouts/reorder - Reorder workouts within a program
-router.post('/reorder', validate(reorderWorkoutsSchema), async (req: Request, res: Response) => {
+router.post('/reorder', validate(reorderWorkoutsSchema), (req: Request, res: Response) => {
   try {
-    const { workoutIds } = req.body;
+    const { workoutIds } = req.body as { workoutIds: number[] };
 
-    await sequelize.transaction(async (t) => {
-      for (let i = 0; i < workoutIds.length; i++) {
-        await Workout.update(
-          { orderIndex: i },
-          { where: { id: workoutIds[i] }, transaction: t }
-        );
-      }
+    db.transaction((tx) => {
+      const ts = now();
+      workoutIds.forEach((id, i) => {
+        tx.update(workouts).set({ orderIndex: i, updatedAt: ts }).where(eq(workouts.id, id)).run();
+      });
     });
 
     res.json({ success: true });
@@ -202,24 +199,24 @@ router.post('/reorder', validate(reorderWorkoutsSchema), async (req: Request, re
 });
 
 // POST /api/workouts/:id/reorder-exercises - Reorder exercises within a workout
-router.post('/:id/reorder-exercises', validateParams(idParamSchema), validate(reorderExercisesSchema), async (req: Request, res: Response) => {
+router.post('/:id/reorder-exercises', validateParams(idParamSchema), validate(reorderExercisesSchema), (req: Request, res: Response) => {
   try {
     const workoutId = Number(req.params.id);
-    const { exerciseIds } = req.body;
+    const { exerciseIds } = req.body as { exerciseIds: number[] };
 
-    const workout = await Workout.findByPk(workoutId);
-    if (!workout) {
+    if (!findWorkout(workoutId)) {
       res.status(404).json({ error: 'Workout not found' });
       return;
     }
 
-    await sequelize.transaction(async (t) => {
-      for (let i = 0; i < exerciseIds.length; i++) {
-        await Exercise.update(
-          { orderIndex: i },
-          { where: { id: exerciseIds[i], workoutId }, transaction: t }
-        );
-      }
+    db.transaction((tx) => {
+      const ts = now();
+      exerciseIds.forEach((id, i) => {
+        tx.update(exercises)
+          .set({ orderIndex: i, updatedAt: ts })
+          .where(and(eq(exercises.id, id), eq(exercises.workoutId, workoutId)))
+          .run();
+      });
     });
 
     res.json({ success: true });

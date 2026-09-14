@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, resetDb } from './app.js';
-import { Program, Workout } from '../src/models/index.js';
+import { createTestApp, resetDb, seed } from './app.js';
 
 const app = createTestApp();
 
@@ -10,8 +9,8 @@ beforeEach(async () => {
 });
 
 async function seedWorkout() {
-  const program = await Program.create({ name: 'Test Program' });
-  return Workout.create({ programId: program.id, name: 'Day A', orderIndex: 0 });
+  const program = seed.program({ name: 'Test Program' });
+  return seed.workout({ programId: program.id, name: 'Day A', orderIndex: 0 });
 }
 
 describe('POST /api/exercises', () => {

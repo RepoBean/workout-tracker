@@ -1,6 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { Program, Workout, Exercise, sequelize } from '../models/index.js';
+import { asc, desc, eq } from 'drizzle-orm';
+import { db, now } from '../db/index.js';
+import { programs, workouts, exercises } from '../db/schema.js';
 import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
@@ -50,6 +52,74 @@ const importProgramSchema = z.object({
   }),
 });
 
+type ImportProgram = z.infer<typeof importProgramSchema>['program'];
+
+class NotFoundError extends Error {}
+
+// ============================================
+// Queries
+// ============================================
+
+// Program → workouts (by orderIndex) → exercises (by orderIndex)
+const tree = {
+  workouts: {
+    orderBy: asc(workouts.orderIndex),
+    with: { exercises: { orderBy: asc(exercises.orderIndex) } },
+  },
+} as const;
+
+function findProgramTree(id: number) {
+  return db.query.programs.findFirst({ where: eq(programs.id, id), with: tree });
+}
+
+function findProgram(id: number) {
+  return db.select().from(programs).where(eq(programs.id, id)).get();
+}
+
+/** Insert a program plus nested workouts/exercises in one transaction; returns the new id. */
+function insertProgramTree(name: string, source: ImportProgram['workouts']): number {
+  return db.transaction((tx) => {
+    const ts = now();
+    const program = tx.insert(programs).values({
+      name,
+      isActive: false,
+      isArchived: false,
+      currentWorkoutIndex: 0,
+      createdAt: ts,
+      updatedAt: ts,
+    }).returning({ id: programs.id }).get();
+
+    for (const w of source) {
+      const workout = tx.insert(workouts).values({
+        programId: program.id,
+        name: w.name,
+        orderIndex: w.orderIndex,
+        createdAt: ts,
+        updatedAt: ts,
+      }).returning({ id: workouts.id }).get();
+
+      for (const e of w.exercises) {
+        tx.insert(exercises).values({
+          workoutId: workout.id,
+          name: e.name,
+          targetSets: e.targetSets,
+          targetReps: e.targetReps,
+          orderIndex: e.orderIndex,
+          supersetGroup: e.supersetGroup || null,
+          exerciseType: e.exerciseType || 'strength',
+          cardioModality: e.cardioModality ?? null,
+          targetDurationSec: e.targetDurationSec ?? null,
+          targetDistance: e.targetDistance ?? null,
+          createdAt: ts,
+          updatedAt: ts,
+        }).run();
+      }
+    }
+
+    return program.id;
+  });
+}
+
 // ============================================
 // Routes
 // ============================================
@@ -58,26 +128,13 @@ const importProgramSchema = z.object({
 router.get('/', async (req: Request, res: Response) => {
   try {
     const includeArchived = req.query.includeArchived === 'true';
-    const where = includeArchived ? {} : { isArchived: false };
 
-    const programs = await Program.findAll({
-      where,
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        ['isActive', 'DESC'],
-        ['name', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
+    const rows = await db.query.programs.findMany({
+      where: includeArchived ? undefined : eq(programs.isArchived, false),
+      orderBy: [desc(programs.isActive), asc(programs.name)],
+      with: tree,
     });
-    res.json(programs);
+    res.json(rows);
   } catch (error) {
     console.error('Error fetching programs:', error);
     res.status(500).json({ error: 'Failed to fetch programs' });
@@ -87,20 +144,7 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/programs/:id - Get single program with workouts and exercises
 router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const program = await Program.findByPk(Number(req.params.id), {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
+    const program = await findProgramTree(Number(req.params.id));
 
     if (!program) {
       res.status(404).json({ error: 'Program not found' });
@@ -117,47 +161,31 @@ router.get('/:id', validateParams(idParamSchema), async (req: Request, res: Resp
 // GET /api/programs/:id/export - Export program as JSON
 router.get('/:id/export', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const program = await Program.findByPk(Number(req.params.id), {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
+    const program = await findProgramTree(Number(req.params.id));
 
     if (!program) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
 
-    const programJSON = program.toJSON() as unknown as Record<string, unknown>;
-    const workouts = (programJSON.workouts as Array<Record<string, unknown>>) || [];
-
     const exportData = {
       version: 1,
       exportedAt: new Date().toISOString(),
       program: {
         name: program.name,
-        workouts: workouts.map((w) => ({
-          name: w.name as string,
-          orderIndex: w.orderIndex as number,
-          exercises: ((w.exercises as Array<Record<string, unknown>>) || []).map((e) => ({
-            name: e.name as string,
-            targetSets: e.targetSets as number,
-            targetReps: e.targetReps as string,
-            orderIndex: e.orderIndex as number,
-            supersetGroup: (e.supersetGroup as string) || null,
-            exerciseType: (e.exerciseType as string) || 'strength',
-            cardioModality: (e.cardioModality as string) || null,
-            targetDurationSec: (e.targetDurationSec as number | null) ?? null,
-            targetDistance: (e.targetDistance as number | null) ?? null,
+        workouts: program.workouts.map((w) => ({
+          name: w.name,
+          orderIndex: w.orderIndex,
+          exercises: w.exercises.map((e) => ({
+            name: e.name,
+            targetSets: e.targetSets,
+            targetReps: e.targetReps,
+            orderIndex: e.orderIndex,
+            supersetGroup: e.supersetGroup || null,
+            exerciseType: e.exerciseType || 'strength',
+            cardioModality: e.cardioModality || null,
+            targetDurationSec: e.targetDurationSec ?? null,
+            targetDistance: e.targetDistance ?? null,
           })),
         })),
       },
@@ -173,11 +201,14 @@ router.get('/:id/export', validateParams(idParamSchema), async (req: Request, re
 });
 
 // POST /api/programs - Create new program
-router.post('/', validate(createProgramSchema), async (req: Request, res: Response) => {
+router.post('/', validate(createProgramSchema), (req: Request, res: Response) => {
   try {
-    const program = await Program.create({
+    const ts = now();
+    const program = db.insert(programs).values({
       name: req.body.name,
-    });
+      createdAt: ts,
+      updatedAt: ts,
+    }).returning().get();
     res.status(201).json(program);
   } catch (error) {
     console.error('Error creating program:', error);
@@ -188,58 +219,9 @@ router.post('/', validate(createProgramSchema), async (req: Request, res: Respon
 // POST /api/programs/import - Import program from JSON
 router.post('/import', validate(importProgramSchema), async (req: Request, res: Response) => {
   try {
-    const data = req.body;
-
-    const program = await sequelize.transaction(async (t) => {
-      const newProgram = await Program.create({
-        name: data.program.name,
-        isActive: false,
-        isArchived: false,
-        currentWorkoutIndex: 0,
-      }, { transaction: t });
-
-      for (const workoutData of data.program.workouts) {
-        const newWorkout = await Workout.create({
-          programId: newProgram.id,
-          name: workoutData.name,
-          orderIndex: workoutData.orderIndex,
-        }, { transaction: t });
-
-        for (const exerciseData of workoutData.exercises) {
-          await Exercise.create({
-            workoutId: newWorkout.id,
-            name: exerciseData.name,
-            targetSets: exerciseData.targetSets,
-            targetReps: exerciseData.targetReps,
-            orderIndex: exerciseData.orderIndex,
-            supersetGroup: exerciseData.supersetGroup || null,
-            exerciseType: exerciseData.exerciseType || 'strength',
-            cardioModality: exerciseData.cardioModality ?? null,
-            targetDurationSec: exerciseData.targetDurationSec ?? null,
-            targetDistance: exerciseData.targetDistance ?? null,
-          }, { transaction: t });
-        }
-      }
-
-      return newProgram;
-    });
-
-    const fullProgram = await Program.findByPk(program.id, {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
-
-    res.status(201).json(fullProgram);
+    const data = req.body as z.infer<typeof importProgramSchema>;
+    const id = insertProgramTree(data.program.name, data.program.workouts);
+    res.status(201).json(await findProgramTree(id));
   } catch (error) {
     console.error('Error importing program:', error);
     res.status(500).json({ error: 'Failed to import program' });
@@ -247,20 +229,22 @@ router.post('/import', validate(importProgramSchema), async (req: Request, res: 
 });
 
 // PUT /api/programs/:id - Update program
-router.put('/:id', validateParams(idParamSchema), validate(updateProgramSchema), async (req: Request, res: Response) => {
+router.put('/:id', validateParams(idParamSchema), validate(updateProgramSchema), (req: Request, res: Response) => {
   try {
-    const program = await Program.findByPk(Number(req.params.id));
-    if (!program) {
+    const id = Number(req.params.id);
+    if (!findProgram(id)) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
 
     const { name, isArchived, currentWorkoutIndex } = req.body;
-    if (name !== undefined) program.name = name;
-    if (isArchived !== undefined) program.isArchived = isArchived;
-    if (currentWorkoutIndex !== undefined) program.currentWorkoutIndex = currentWorkoutIndex;
+    const program = db.update(programs).set({
+      ...(name !== undefined && { name }),
+      ...(isArchived !== undefined && { isArchived }),
+      ...(currentWorkoutIndex !== undefined && { currentWorkoutIndex }),
+      updatedAt: now(),
+    }).where(eq(programs.id, id)).returning().get();
 
-    await program.save();
     res.json(program);
   } catch (error) {
     console.error('Error updating program:', error);
@@ -273,39 +257,26 @@ router.put('/:id/set-active', validateParams(idParamSchema), async (req: Request
   try {
     const programId = Number(req.params.id);
 
-    await sequelize.transaction(async (t) => {
+    // Throwing inside the transaction rolls it back (the deactivate-all must not stick)
+    db.transaction((tx) => {
+      const ts = now();
       // Deactivate all programs
-      await Program.update({ isActive: false }, {
-        where: {},
-        transaction: t,
-      });
+      tx.update(programs).set({ isActive: false, updatedAt: ts }).run();
 
       // Activate target program (and unarchive if needed)
-      const [updatedCount] = await Program.update(
-        { isActive: true, isArchived: false },
-        { where: { id: programId }, transaction: t }
-      );
+      const result = tx.update(programs)
+        .set({ isActive: true, isArchived: false, updatedAt: ts })
+        .where(eq(programs.id, programId))
+        .run();
 
-      if (updatedCount === 0) {
-        throw new Error('Program not found');
+      if (result.changes === 0) {
+        throw new NotFoundError();
       }
     });
 
-    const program = await Program.findByPk(programId, {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{ model: Exercise, as: 'exercises' }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
-
-    res.json(program);
+    res.json(await findProgramTree(programId));
   } catch (error) {
-    if (error instanceof Error && error.message === 'Program not found') {
+    if (error instanceof NotFoundError) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
@@ -317,77 +288,15 @@ router.put('/:id/set-active', validateParams(idParamSchema), async (req: Request
 // POST /api/programs/:id/duplicate - Duplicate program with workouts and exercises
 router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request, res: Response) => {
   try {
-    const original = await Program.findByPk(Number(req.params.id), {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{
-          model: Exercise,
-          as: 'exercises'
-        }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
+    const original = await findProgramTree(Number(req.params.id));
 
     if (!original) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
 
-    const originalJSON = original.toJSON() as unknown as Record<string, unknown>;
-    const workouts = (originalJSON.workouts as Array<Record<string, unknown>>) || [];
-
-    const newProgram = await sequelize.transaction(async (t) => {
-      const program = await Program.create({
-        name: `${original.name} (Copy)`,
-        isActive: false,
-        isArchived: false,
-        currentWorkoutIndex: 0,
-      }, { transaction: t });
-
-      for (const w of workouts) {
-        const newWorkout = await Workout.create({
-          programId: program.id,
-          name: w.name as string,
-          orderIndex: w.orderIndex as number,
-        }, { transaction: t });
-
-        const exercises = (w.exercises as Array<Record<string, unknown>>) || [];
-        for (const e of exercises) {
-          await Exercise.create({
-            workoutId: newWorkout.id,
-            name: e.name as string,
-            targetSets: e.targetSets as number,
-            targetReps: e.targetReps as string,
-            orderIndex: e.orderIndex as number,
-            supersetGroup: (e.supersetGroup as string) || null,
-            exerciseType: (e.exerciseType as 'strength' | 'cardio') || 'strength',
-            cardioModality: (e.cardioModality as 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other' | null) || null,
-            targetDurationSec: (e.targetDurationSec as number | null) ?? null,
-            targetDistance: (e.targetDistance as number | null) ?? null,
-          }, { transaction: t });
-        }
-      }
-
-      return program;
-    });
-
-    const fullProgram = await Program.findByPk(newProgram.id, {
-      include: [{
-        model: Workout,
-        as: 'workouts',
-        include: [{ model: Exercise, as: 'exercises' }]
-      }],
-      order: [
-        [{ model: Workout, as: 'workouts' }, 'orderIndex', 'ASC'],
-        [{ model: Workout, as: 'workouts' }, { model: Exercise, as: 'exercises' }, 'orderIndex', 'ASC']
-      ]
-    });
-
-    res.status(201).json(fullProgram);
+    const id = insertProgramTree(`${original.name} (Copy)`, original.workouts);
+    res.status(201).json(await findProgramTree(id));
   } catch (error) {
     console.error('Error duplicating program:', error);
     res.status(500).json({ error: 'Failed to duplicate program' });
@@ -395,17 +304,18 @@ router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request
 });
 
 // DELETE /api/programs/:id - Archive program (soft delete)
-router.delete('/:id', validateParams(idParamSchema), async (req: Request, res: Response) => {
+router.delete('/:id', validateParams(idParamSchema), (req: Request, res: Response) => {
   try {
-    const program = await Program.findByPk(Number(req.params.id));
-    if (!program) {
+    const id = Number(req.params.id);
+    const result = db.update(programs)
+      .set({ isArchived: true, isActive: false, updatedAt: now() })
+      .where(eq(programs.id, id))
+      .run();
+
+    if (result.changes === 0) {
       res.status(404).json({ error: 'Program not found' });
       return;
     }
-
-    program.isArchived = true;
-    program.isActive = false;
-    await program.save();
 
     res.status(204).send();
   } catch (error) {

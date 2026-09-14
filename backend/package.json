@@ -10,17 +10,19 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
     "cors": "^2.8.5",
+    "drizzle-orm": "^0.45.2",
     "express": "^5.1.0",
-    "sequelize": "^6.37.7",
-    "sqlite3": "^5.1.7",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.15.0",
     "@types/supertest": "^7.2.0",
+    "drizzle-kit": "^0.31.10",
     "supertest": "^7.2.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",

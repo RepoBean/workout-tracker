@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, resetDb } from './app.js';
-import { Program, Workout, Exercise } from '../src/models/index.js';
-import type { WorkoutWithExercises } from '../src/types/associations.js';
+import { createTestApp, resetDb, seed } from './app.js';
+import type { WorkoutWithExercises } from './app.js';
 
 const app = createTestApp();
 
@@ -11,9 +10,9 @@ beforeEach(async () => {
 });
 
 async function seedWorkout() {
-  const program = await Program.create({ name: 'Test Program' });
-  const workout = await Workout.create({ programId: program.id, name: 'Day A', orderIndex: 0 });
-  await Exercise.create({
+  const program = seed.program({ name: 'Test Program' });
+  const workout = seed.workout({ programId: program.id, name: 'Day A', orderIndex: 0 });
+  seed.exercise({
     workoutId: workout.id,
     name: 'Bench Press',
     targetSets: 3,
@@ -21,7 +20,7 @@ async function seedWorkout() {
     orderIndex: 0,
     supersetGroup: 'A',
   });
-  await Exercise.create({
+  seed.exercise({
     workoutId: workout.id,
     name: 'Rowing',
     targetSets: 1,

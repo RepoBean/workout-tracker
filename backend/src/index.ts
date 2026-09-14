@@ -2,8 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { sequelize } from './models/index.js';
-import { runMigrations } from './migrations.js';
+import { sqlite } from './db/index.js';
+import { bootstrap } from './db/migrate.js';
 import programsRouter from './routes/programs.js';
 import workoutsRouter from './routes/workouts.js';
 import exercisesRouter from './routes/exercises.js';
@@ -52,13 +52,11 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 });
 
 // Initialize database and start server
-async function start() {
+function start() {
   try {
-    // Sync database (creates tables if they don't exist)
-    await sequelize.sync();
-    console.log('Database synced successfully');
-
-    await runMigrations(sequelize);
+    // Legacy column adds + drizzle migrations (creates tables on a fresh DB)
+    bootstrap(sqlite);
+    console.log('Database ready');
 
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
@@ -71,9 +69,9 @@ async function start() {
 }
 
 // Handle graceful shutdown
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down...');
-  await sequelize.close();
+  sqlite.close();
   process.exit(0);
 });
 

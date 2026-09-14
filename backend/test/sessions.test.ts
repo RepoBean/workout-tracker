@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
-import { createTestApp, resetDb } from './app.js';
-import { Program, Workout, Exercise, Session } from '../src/models/index.js';
+import { createTestApp, resetDb, seed, find } from './app.js';
 
 const app = createTestApp();
 
@@ -10,10 +9,10 @@ beforeEach(async () => {
 });
 
 async function seedProgram() {
-  const program = await Program.create({ name: 'PPL', isActive: true });
-  const push = await Workout.create({ programId: program.id, name: 'Push', orderIndex: 0 });
-  const pull = await Workout.create({ programId: program.id, name: 'Pull', orderIndex: 1 });
-  await Exercise.create({
+  const program = seed.program({ name: 'PPL', isActive: true });
+  const push = seed.workout({ programId: program.id, name: 'Push', orderIndex: 0 });
+  const pull = seed.workout({ programId: program.id, name: 'Pull', orderIndex: 1 });
+  seed.exercise({
     workoutId: push.id, name: 'Bench Press', targetSets: 3, targetReps: '8-10', orderIndex: 0,
   });
   return { program, push, pull };
@@ -119,7 +118,7 @@ describe('PUT /api/sessions/:id/sets/:setId', () => {
   it('re-points a program set at a different exercise (swap carry-over)', async () => {
     const { push } = await seedProgram();
     const session = await startSession(push.id);
-    const exercise = await Exercise.findOne({ where: { workoutId: push.id } });
+    const exercise = find.exerciseInWorkout(push.id);
 
     const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send({
       exerciseId: exercise!.id,
@@ -238,7 +237,7 @@ describe('POST /api/sessions/:id/complete', () => {
     });
 
     expect(res.status).toBe(200);
-    const stored = await Session.findByPk(session.id);
+    const stored = find.session(session.id);
     expect(stored?.heartRateAvg).toBe(132);
     expect(JSON.parse(stored?.heartRateSeries ?? '')).toEqual({ t: [0, 60, 120], b: [95, 140, 150] });
   });
@@ -277,7 +276,7 @@ describe('GET /api/sessions/history — limit contract', () => {
       workoutName: `Session ${i}`,
       completedAt: new Date(Date.now() - i * 86_400_000),
     }));
-    await Session.bulkCreate(rows);
+    seed.sessions(rows);
   }
 
   it('honors a limit above the old 100 cap instead of falling back to 50', async () => {
