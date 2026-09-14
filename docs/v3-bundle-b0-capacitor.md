@@ -417,7 +417,7 @@ D5 and D6 are the spike. Everything else is scaffolding. If D5 fails with sample
 ## 4. Results (agent fills in; Jason appends device results)
 
 ### 4.1 Versions installed
-- `@capacitor/core`: `8.1.1`
+- `@capacitor/core`: `8.5.2`
 - `@capacitor/android`: `8.5.2`
 - `@capacitor/app`: `8.1.1`
 - `@capacitor-community/bluetooth-le`: `8.3.0`
@@ -429,25 +429,27 @@ D5 and D6 are the spike. Everything else is scaffolding. If D5 fails with sample
   - `minSdkVersion = 24`
   - `compileSdkVersion = 36`
   - `targetSdkVersion = 36`
-  - `androidxActivityVersion = '1.10.1'`
-  - `androidxAppCompatVersion = '1.7.0'`
+  - `androidxActivityVersion = '1.11.0'`
+  - `androidxAppCompatVersion = '1.7.1'`
   - `androidxCoordinatorLayoutVersion = '1.3.0'`
-  - `androidxCoreVersion = '1.16.0'`
-  - `androidxFragmentVersion = '1.8.6'`
-  - `coreSplashScreenVersion = '1.0.1'`
-  - `androidxEspressoCoreVersion = '3.6.1'`
-  - `androidxJunitVersion = '1.2.1'`
+  - `androidxCoreVersion = '1.17.0'`
+  - `androidxFragmentVersion = '1.8.9'`
+  - `coreSplashScreenVersion = '1.2.0'`
+  - `androidxWebkitVersion = '1.14.0'`
   - `junitVersion = '4.13.2'`
+  - `androidxJunitVersion = '1.3.0'`
+  - `androidxEspressoCoreVersion = '3.7.0'`
+  - `cordovaAndroidVersion = '14.0.1'`
   - Android build-tools: `36.0.0`
 - Docker JDK image tag: `eclipse-temurin:21-jdk`
 
 ### 4.2 Baseline vs after
 | Metric | Before | After |
 |---|---|---|
-| Frontend tests | 106 (10 test files) | 118 (12 test files: +7 baseUrl, +5 parseHr) |
+| Frontend tests | 106 (10 test files) | 121 (13 test files: +7 baseUrl, +5 parseHr, +3 client) |
 | Backend tests | 71 (7 test files) | 74 (8 test files: +3 cors) |
-| Entry chunk (kB / gzip) | 301.85 kB / 95.43 kB | 352.11 kB / 114.66 kB (growth from local font woff2 loader imports; all native plugins stay in lazy chunks) |
-| New lazy chunks | — | `nativeBle` (11.00 kB), `webBluetooth` (2.52 kB), `local-notifications` (8.69 kB), `foreground-service` (4.59 kB), `capacitor-app` (0.84 kB), `parseHr` (0.15 kB) |
+| Entry chunk (kB / gzip) | 301.85 kB / 95.43 kB | 343.85 kB / 111.66 kB (initial 352.11 kB entry chunk contained static `@capacitor/core` import via `platform.ts`; reading `window.Capacitor.isNativePlatform` eliminated the static core import and dropped the entry chunk to 343.85 kB; all native plugins stay in lazy chunks) |
+| New lazy chunks | — | `nativeBle` (11.08 kB), `webBluetooth` (2.52 kB), `local-notifications` (8.72 kB), `foreground-service` (4.60 kB), `capacitor-app` (0.85 kB), `parseHr` (0.15 kB) |
 
 ### 4.3 What was built
 - **Phase 0 (Baseline):** Recorded baseline test counts and bundle metrics before code changes.
@@ -517,7 +519,7 @@ D5 and D6 are the spike. Everything else is scaffolding. If D5 fails with sample
 - Android 14/15 exact alarm permissions (`SCHEDULE_EXACT_ALARM` vs `USE_EXACT_ALARM`): sideloaded APKs generally allow exact alarms or provide a direct toggle via the Settings card.
 - Foreground service `connectedDevice` type requirement: Android 14 enforces that apps declaring `connectedDevice` must establish and maintain an active Bluetooth connection.
 - WebView network calls vs CapacitorHttp: all HTTP requests currently execute via standard WebView `fetch` / Axios over CORS. If VPN or staging encounters network-layer issues on physical devices, CapacitorHttp plugin could be introduced in Bundle B1.
-- AI Coach proxy endpoint: `/ai-proxy/google/` is a relative URL and will proxy through whatever backend URL is configured in Server settings.
+- AI Coach proxy endpoint: `/ai-proxy/google/` is a bare relative `fetch` from `features/coach/lib/providers/presets.ts`; inside the WebView it resolves to `https://localhost/ai-proxy/...` and 404s (out of scope to fix in B0).
 - CSV / file download within Android WebView: `<a download>` links may require native filesystem writing in future bundles if exported from the device.
 
 ### 4.6 How Jason gets the APK
@@ -525,6 +527,7 @@ D5 and D6 are the spike. Everything else is scaffolding. If D5 fails with sample
 scripts/build-apk.sh      # prints ~/apk/latest.apk
 scripts/serve-apk.sh      # prints the URL to open in Chrome on the Pixel (e.g. http://<host>:8038/latest.apk)
 ```
+Note: `scripts/serve-apk.sh` prints the first LAN address (e.g. 192.168.123.81). When connecting over VPN, substitute the server's VPN IP address.
 
 ### 4.7 Device results (Jason)
 _(D1–D10 pass/fail with notes, copied diagnostics text for D5)_
@@ -628,3 +631,12 @@ Add a one-line comment: `// FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in 
 R2 case); `cd backend && npm test` green; `scripts/build-apk.sh` produces a new `~/apk/latest.apk`
 with the **same** debug certificate fingerprint (`6f2643f1…`); Part 4 corrected; append a short
 "Round 1 fixes" list under this section saying what changed per item. Then stop and report.
+
+### Round 1 fixes
+- **R1 (Foreground service gated on HR connection):** In `frontend/src/features/active-session/index.tsx`, updated `useWorkoutForegroundService` to require `hrConnected` from `useHeartRate()` so the `connectedDevice` foreground service does not start before BLE permission is granted. In `frontend/src/shared/lib/foregroundService.ts`, set `isRunning = true` only after `startForegroundService` resolves, added generation counter (`serviceGeneration`) to handle race conditions where `stopWorkoutService` is called while starting, and guarded `isStarting`.
+- **R2 (Per-request baseURL preserved in client interceptor):** In `frontend/src/shared/api/client.ts`, updated the request interceptor to only substitute `config.baseURL` if it is falsy or the default `'/api'`, allowing `ServerCard.handleTest`'s custom typed URL to reach the target server. Added unit test in `frontend/src/shared/api/client.test.ts` (3 tests) validating custom baseURL retention and default substitution.
+- **R3 (Skip BLE init on cold launch when no device stored):** In `frontend/src/shared/lib/hrTransport/nativeBle.ts`, reordered `reconnect()` to check `localStorage` for `wt:hr-native-device` before calling `ensureInitialized()`, preventing unnecessary Bluetooth permission prompts on cold app launch when no strap has been paired.
+- **R4 (Timer extension side effects moved out of setState):** In `frontend/src/shared/context/TimerContext.tsx`, moved `localStorage.setItem` and `scheduleRestNotification` outside `setState` using `stateRef.current`. Dropped `cancelRestNotification()` from `extendTimer` as scheduling with the same notification ID replaces the pending notification.
+- **R5 (Type foreground serviceType with ServiceType enum):** In `frontend/src/shared/lib/foregroundService.ts`, imported `type { ServiceType }` from `@capawesome-team/capacitor-android-foreground-service` and changed `16 as unknown as any` to `16 as ServiceType` with comment `// FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in the plugin's enum`.
+- **R6 (Chain rest notification after permission check):** In `frontend/src/shared/context/TimerContext.tsx`, changed `ensureNotificationPermission()` in `startTimer` to `void ensureNotificationPermission().then(() => scheduleRestNotification(endTime))` so the first notification after fresh install is not dropped before permissions resolve.
+- **R7 (Docs, dependency pins, entry chunk optimization, and build script):** Updated `@capacitor/core` to `8.5.2` and androidx versions in Part 4.1. Eliminated static `@capacitor/core` import in `frontend/src/shared/lib/platform.ts` by checking `window.Capacitor?.isNativePlatform?.()`, reducing entry chunk from 352.11 kB to 343.85 kB. Clarified `/ai-proxy/google/` WebView 404 behavior in Part 4.5. Added VPN IP substitution note in Part 4.6. Dropped caret `^` from `@capacitor/app` and `@capawesome-team/capacitor-android-foreground-service` in `frontend/package.json`. Optimized `scripts/build-apk.sh` to only `chmod` the Gradle cache volume on first creation.

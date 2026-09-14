@@ -16,9 +16,9 @@ echo "==> Building frontend and syncing Capacitor Android..."
 echo "==> Building Android builder Docker image..."
 docker build -f Dockerfile.android -t workout-tracker-android .
 
-# Ensure named volume exists and is writable by mapped user
+# Ensure named volume exists and is writable by mapped user (only on first creation)
 docker volume create workout-tracker-android-home >/dev/null
-docker run --rm -v workout-tracker-android-home:/home/builder workout-tracker-android chmod -R 777 /home/builder 2>/dev/null || true
+docker run --rm -v workout-tracker-android-home:/home/builder workout-tracker-android sh -c '[ -f /home/builder/.initialized ] || { chmod -R 777 /home/builder && touch /home/builder/.initialized; }' 2>/dev/null || true
 
 # 4. Assemble debug APK using Gradle in Docker container
 echo "==> Running assembleDebug inside container..."
