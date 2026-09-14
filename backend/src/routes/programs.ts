@@ -131,7 +131,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     const rows = await db.query.programs.findMany({
       where: includeArchived ? undefined : eq(programs.isArchived, false),
-      orderBy: [desc(programs.isActive), asc(programs.name)],
+      orderBy: [desc(programs.isActive), asc(programs.name), asc(programs.id)],
       with: tree,
     });
     res.json(rows);

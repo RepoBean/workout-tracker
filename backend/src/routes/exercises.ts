@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { eq, like } from 'drizzle-orm';
+import { asc, eq, like } from 'drizzle-orm';
 import { db, now } from '../db/index.js';
 import { exercises, sets, workouts } from '../db/schema.js';
 import { allStandardSetsByName, latestSetsByName } from '../db/queries/setsByName.js';
@@ -112,15 +112,18 @@ router.get('/suggestions', (req: Request, res: Response) => {
       return;
     }
 
+    // Alphabetical per source (what the old GROUP BY returned), program names first
     const exerciseNames = db.selectDistinct({ name: exercises.name })
       .from(exercises)
       .where(like(exercises.name, `%${query}%`))
+      .orderBy(asc(exercises.name))
       .limit(10)
       .all();
 
     const setExerciseNames = db.selectDistinct({ name: sets.exerciseName })
       .from(sets)
       .where(like(sets.exerciseName, `%${query}%`))
+      .orderBy(asc(sets.exerciseName))
       .limit(10)
       .all();
 

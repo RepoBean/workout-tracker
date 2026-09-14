@@ -337,7 +337,8 @@ describe('name lookups are case-insensitive and pick the latest completed sessio
 
     const res = await request(app).get('/api/exercises/suggestions?q=PRESS');
     expect(res.status).toBe(200);
-    expect(res.body.sort()).toEqual(['Bench Press', 'Cable Press-down', 'Overhead Press']);
+    // Program exercise names first, then history names; alphabetical within each
+    expect(res.body).toEqual(['Bench Press', 'Overhead Press', 'Cable Press-down']);
     expect((await request(app).get('/api/exercises/suggestions?q=p')).body).toEqual([]);
   });
 });
