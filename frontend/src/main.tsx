@@ -11,6 +11,11 @@ import { AiCoachProvider } from './shared/context/AiCoachContext';
 import { ToastProvider } from './shared/ui/Toast';
 import App from './App';
 import { sweepLegacySetInputKeys } from './features/active-session/lib/sessionStorage';
+import '@fontsource/dm-sans/700.css';
+import '@fontsource/dm-sans/800.css';
+import '@fontsource/outfit/400.css';
+import '@fontsource/outfit/500.css';
+import '@fontsource/outfit/600.css';
 import './index.css';
 
 // One-time cleanup of legacy unscoped SetInput override keys
