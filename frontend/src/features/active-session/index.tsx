@@ -65,7 +65,7 @@ export default function ActiveSession() {
   const { exerciseHints } = usePreviousData(sessionId);
 
   const { stopTimer } = useTimer();
-  const { samplesSince } = useHeartRate();
+  const { isConnected: hrConnected, samplesSince } = useHeartRate();
 
   // Seed an ad-hoc cardio exercise when the picker passed ?cardio=<modality>.
   // Strip the param after seeding so refresh doesn't re-add.
@@ -115,7 +115,7 @@ export default function ActiveSession() {
   });
 
   useWorkoutForegroundService(
-    isNativeApp() && !!session && !session.completedAt && !showCelebration
+    isNativeApp() && !!session && !session.completedAt && !showCelebration && hrConnected
   );
 
   const exercises = session?.exercises || [];

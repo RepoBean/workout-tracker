@@ -1,6 +1,8 @@
 import { isNativeApp } from './platform';
 
 let isRunning = false;
+let isStarting = false;
+let serviceGeneration = 0;
 let channelCreated = false;
 
 export function isWorkoutServiceRunning(): boolean {
@@ -9,17 +11,22 @@ export function isWorkoutServiceRunning(): boolean {
 
 export async function startWorkoutService(): Promise<void> {
   if (!isNativeApp()) return;
-  if (isRunning) return;
+  if (isRunning || isStarting) return;
 
-  isRunning = true;
+  isStarting = true;
+  const currentGen = ++serviceGeneration;
+
   try {
     const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service');
+    if (currentGen !== serviceGeneration) return;
 
     // Ensure notification permission
     try {
       const perm = await ForegroundService.checkPermissions();
+      if (currentGen !== serviceGeneration) return;
       if (perm.display !== 'granted') {
         await ForegroundService.requestPermissions();
+        if (currentGen !== serviceGeneration) return;
       }
     } catch {
       // Best-effort permission check
@@ -39,6 +46,7 @@ export async function startWorkoutService(): Promise<void> {
         // Channel creation might fail or already exist
       }
     }
+    if (currentGen !== serviceGeneration) return;
 
     // Android foreground service type 16 = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
     await ForegroundService.startForegroundService({
@@ -50,14 +58,27 @@ export async function startWorkoutService(): Promise<void> {
       silent: true,
       serviceType: 16 as unknown as any,
     });
+
+    if (currentGen !== serviceGeneration) {
+      await ForegroundService.stopForegroundService();
+      return;
+    }
+
+    isRunning = true;
   } catch (err) {
     isRunning = false;
     console.warn('[ForegroundService] Failed to start:', err);
+  } finally {
+    if (currentGen === serviceGeneration) {
+      isStarting = false;
+    }
   }
 }
 
 export async function stopWorkoutService(): Promise<void> {
   if (!isNativeApp()) return;
+  ++serviceGeneration;
+  isStarting = false;
   if (!isRunning) return;
 
   isRunning = false;
