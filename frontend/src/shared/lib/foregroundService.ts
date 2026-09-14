@@ -1,4 +1,5 @@
 import { isNativeApp } from './platform';
+import type { ServiceType } from '@capawesome-team/capacitor-android-foreground-service';
 
 let isRunning = false;
 let isStarting = false;
@@ -49,6 +50,7 @@ export async function startWorkoutService(): Promise<void> {
     if (currentGen !== serviceGeneration) return;
 
     // Android foreground service type 16 = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
+    // FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in the plugin's enum
     await ForegroundService.startForegroundService({
       id: 1,
       title: 'Workout in progress',
@@ -56,7 +58,7 @@ export async function startWorkoutService(): Promise<void> {
       smallIcon: 'ic_stat_workout',
       notificationChannelId: 'workout-active',
       silent: true,
-      serviceType: 16 as unknown as any,
+      serviceType: 16 as ServiceType,
     });
 
     if (currentGen !== serviceGeneration) {
