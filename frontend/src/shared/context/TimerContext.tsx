@@ -58,6 +58,8 @@ const TimerContext = createContext<TimerContextType | undefined>(undefined);
 
 export function TimerProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<TimerState>(loadPersistedTimer);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
 
@@ -196,17 +198,17 @@ export function TimerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const extendTimer = useCallback((seconds: number) => {
+    const current = stateRef.current;
+    if (!current.isRunning || !current.endTime) return;
+
+    const newEndTime = current.endTime + seconds * 1000;
+    const newRemaining = Math.max(0, Math.ceil((newEndTime - Date.now()) / 1000));
+    const newTarget = current.targetDuration + seconds;
+
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime: newEndTime, targetDuration: newTarget }));
+
     setState(prev => {
       if (!prev.isRunning || !prev.endTime) return prev;
-
-      const newEndTime = prev.endTime + seconds * 1000;
-      const newRemaining = Math.max(0, Math.ceil((newEndTime - Date.now()) / 1000));
-      const newTarget = prev.targetDuration + seconds;
-
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime: newEndTime, targetDuration: newTarget }));
-      cancelRestNotification();
-      scheduleRestNotification(newEndTime);
-
       return {
         ...prev,
         endTime: newEndTime,
@@ -214,6 +216,8 @@ export function TimerProvider({ children }: { children: ReactNode }) {
         targetDuration: newTarget,
       };
     });
+
+    scheduleRestNotification(newEndTime);
   }, []);
 
   const skipTimer = useCallback(() => {
