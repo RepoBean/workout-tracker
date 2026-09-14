@@ -181,8 +181,7 @@ export function TimerProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ endTime, targetDuration: seconds }));
 
     if (isNativeApp()) {
-      ensureNotificationPermission();
-      scheduleRestNotification(endTime);
+      void ensureNotificationPermission().then(() => scheduleRestNotification(endTime));
     } else {
       // Request notification permission on first use
       if ('Notification' in window && Notification.permission === 'default') {
