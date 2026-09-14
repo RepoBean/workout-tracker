@@ -1,4 +1,4 @@
-# v3 Bundle 1 — Drizzle swap (plan)
+# v3 Bundle 1 — Drizzle swap (plan + results)
 
 Written 2026-09-13 from a read-only survey of the repo at `1aeebcc` (Step Zero shipped) plus the
 live `main` and `wife` backups taken that day. Companion to `docs/v3-plan.md` §4 Bundle 1. This is a
@@ -128,3 +128,28 @@ Lock in behaviour that is implicit today, so the swap has to reproduce it. All m
 
 ## 6. Out of scope (later bundles)
 No new tables, no `catalogId`, no server-side derived reads beyond the two scan fixes, no WAL, no Node bump inside Docker/CI, no `types/index.ts` cleanup (Bundle 6), no CLAUDE.md rules rewrite (Bundle 6).
+
+---
+
+## 7. Results (2026-09-14)
+
+Shipped as `7bc0b81` + `24aad02` + `3b9020a` (staging 12:46 UTC, main 12:48 UTC; wife to follow days later).
+
+- **Tests:** 71 backend (was 41): 22 new HTTP-only characterization tests in `parity.test.ts` were green on
+  Sequelize first and passed on Drizzle with one adjustment (suggestion order pinned after the staging diff
+  exposed it, see below); migration tests replay the literal live DDL; `columns.test.ts` covers the date format.
+  Existing test files changed only in seed helpers — `git diff` shows zero `request(app)` lines touched.
+- **Staging parity diff** (`scripts/api-snapshot.sh`, 41 files, old image vs new on the same seeded copy of main):
+  first pass differed in 3 files — `suggestions-*` (the old `GROUP BY` returned names alphabetically per source,
+  `SELECT DISTINCT` did not; fixed with explicit `ORDER BY`) and `programs.json` (two archived programs both named
+  "test" swapped — an unspecified tie, now broken by `id ASC`). Final pass: **40/41 byte-identical**, the 41st is
+  that tie.
+- **Write lifecycle on staging:** start → log → edit → note → second set → complete with HR series → history /
+  hints / stats all correct; raw storage verified as `2026-09-14 12:46:54.539 +00:00`, `real` weights, JSON text.
+- **Rollback rehearsal:** `rollback.sh staging 1aeebcc` with **no restore** — the Sequelize image booted on the
+  Drizzle-touched DB (extra `__drizzle_migrations` table + index ignored), served the new session identically,
+  started and deleted a session. Rolled forward again cleanly. Rollback for this bundle = old tag only.
+- **Speed (staging, same data):** `history-by-name` 37 ms → 2.7 ms; `history?limit=1000` (636 KB) 90 ms → 28 ms.
+- **Backups:** `snapshot.js` dual-driver path exercised both ways — `sqlite3` against the old main image
+  (seed-staging), `better-sqlite3` against the new staging image. Drop the `sqlite3` branch once wife is on ≥ `3b9020a`.
+- **Deliberate behaviour change:** `GET /sessions/history?from=garbage` is 400 (was 200 with `[]`).

@@ -98,12 +98,13 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [x] **CI**: `.github/workflows/test.yml` running both suites on push (second opinion; ship.sh is the gate). Fix or delete the dead `lint` script.
 - [x] `docs/` copy of this plan in the repo (this file).
 
-### Bundle 1 — Drizzle swap (pure refactor, no schema change)
-- [ ] `drizzle-orm` + `better-sqlite3` + `drizzle-kit`; remove `sequelize` + `sqlite3`. (Also removes the forks-pool constraint in backend vitest — sqlite3 addon wasn't worker-thread safe.)
-- [ ] `backend/src/db/schema.ts` mirroring the current 5 tables **exactly** (same table/column names and types) so existing DBs are used as-is.
-- [ ] Migration runner: drizzle-kit SQL migrations in `backend/drizzle/`, applied at startup, recorded in drizzle's migrations table. Baseline handling for existing DBs: keep the current duplicate-safe `runMigrations` column list as a one-time pre-baseline step, then a `CREATE TABLE IF NOT EXISTS` baseline. Decide the exact mechanism during implementation; test against a **copy of the live DB on staging**.
-- [ ] Rewrite the 4 routers on Drizzle. Fix the two full-table-load queries (`/sessions/:id/previous`, `/exercises/history-by-name`) with `lower(exerciseName) = lower(?)` (consider an expression index).
-- [ ] `test/app.ts` builds the app on an in-memory better-sqlite3 DB. **Gate: all backend tests pass unchanged.**
+### Bundle 1 — Drizzle swap (pure refactor, no schema change) — SHIPPED 2026-09-14 (plan + results: `docs/v3-bundle-1-drizzle.md`)
+- [x] `drizzle-orm` + `better-sqlite3` + `drizzle-kit`; remove `sequelize` + `sqlite3`. (Also removes the forks-pool constraint in backend vitest — sqlite3 addon wasn't worker-thread safe.)
+- [x] `backend/src/db/schema.ts` mirroring the current 5 tables **exactly** (same table/column names and types) so existing DBs are used as-is.
+- [x] Migration runner: drizzle-kit SQL migrations in `backend/drizzle/`, applied at startup, recorded in drizzle's migrations table. Baseline handling for existing DBs: keep the current duplicate-safe `runMigrations` column list as a one-time pre-baseline step, then a `CREATE TABLE IF NOT EXISTS` baseline. Decide the exact mechanism during implementation; test against a **copy of the live DB on staging**.
+- [x] Rewrite the 4 routers on Drizzle. Fix the two full-table-load queries (`/sessions/:id/previous`, `/exercises/history-by-name`) with `lower(exerciseName) = lower(?)` (consider an expression index).
+- [x] `test/app.ts` builds the app on an in-memory better-sqlite3 DB. **Gate: all backend tests pass unchanged.** (HTTP assertions untouched; only seed helpers changed. Plus 22 HTTP-only characterization tests written first against Sequelize.)
+- [x] Verified on staging against a copy of main's data: 40/41 API snapshots byte-identical to the old image (the 41st is a tie-order of two archived programs both named "test"), full write lifecycle, **rollback to the old tag with no restore works** (dates kept in Sequelize's text format).
 
 ### Bundle 2 — Exercise catalog
 - [ ] New table (name TBD: `ExerciseDefinitions`): id, name (unique, case-insensitive), aliases (JSON), movementPattern, equipment, isAssisted/bodyweight flag, defaultRestSec, archived.
@@ -172,7 +173,7 @@ rollback = previous tag + restored backup; the wife stack lags by days, never le
 
 ## 7. Still open / not decided
 
-- Which track goes first. **Recommendation:** Step Zero → Drizzle (A1) → Capacitor spike (B0) → then interleave A2… and B1 as desired. B0 is the fastest visible payoff; A1 is foundations.
+- Which track goes first. **Recommendation:** Step Zero → Drizzle (A1) → Capacitor spike (B0) → then interleave A2… and B1 as desired. B0 is the fastest visible payoff; A1 is foundations. *(Step Zero and A1 done as of 2026-09-14; next is B0 or A2.)*
 - Coach write access (e.g. adjusting next session's targets with confirmation). Deferred; `project_coach_usage` memory says the coach is for at-home review.
 - kg display toggle — later, display-only.
 - Whether `exerciseNotes` moves into `SessionExercises.note` (likely yes, A3).
