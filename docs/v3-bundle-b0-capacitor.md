@@ -528,3 +528,103 @@ scripts/serve-apk.sh      # prints the URL to open in Chrome on the Pixel (e.g. 
 
 ### 4.7 Device results (Jason)
 _(D1–D10 pass/fail with notes, copied diagnostics text for D5)_
+
+---
+
+## 5. Review round 1 (Claude Code, 2026-09-14) — fix list for the agent
+
+Reviewed branch `b0-capacitor-spike` at `d5dcc51`. Independently verified: `tsc -b` clean,
+118 frontend + 74 backend tests pass, no `googleapis` in `frontend/dist`, native plugins only in
+lazy chunks. Web behavior is preserved. **Not mergeable yet** — items R1 and R2 will make device
+checks D5 and D2 fail on the first try. Fix in the order below, one commit per item (or R1+R2,
+then R3–R6, then R7), on the same branch. Rules from Part 1.3 still apply.
+
+### R1 — Foreground service starts before the Bluetooth permission exists (must fix)
+`frontend/src/features/active-session/index.tsx` ~line 117 starts the service as soon as the
+session page mounts. The BLE runtime permission is only granted when the user taps Connect.
+On Android 14+ a `connectedDevice`-type service without a granted Bluetooth permission throws in
+`startForeground`; the plugin's `AndroidForegroundService.onStartCommand` catches and logs it,
+the JS promise still resolves, so `isRunning` stays `true` and nothing retries. A service that was
+started with `startForegroundService` and never reaches `startForeground` is killed by the system
+after a few seconds (`ForegroundServiceDidNotStartInTimeException`), which can crash the app.
+
+**Fix:** gate the hook on the strap being connected as well:
+```ts
+const { isConnected: hrConnected } = useHeartRate();
+useWorkoutForegroundService(
+  isNativeApp() && !!session && !session.completedAt && !showCelebration && hrConnected
+);
+```
+The service exists to keep the BLE link alive; the timer uses AlarmManager and does not need it.
+Also make `startWorkoutService` set `isRunning = true` only **after** `startForegroundService`
+resolves (currently set before the awaits), and add a generation counter so a `stop` that arrives
+while a `start` is still awaiting wins (`useWorkoutForegroundService` cleanup can fire mid-start).
+
+### R2 — "Test connection" ignores the typed URL (must fix)
+`frontend/src/shared/api/client.ts` line ~13: the request interceptor unconditionally sets
+`config.baseURL = getApiBaseUrl() + '/api'`, so the per-request `baseURL` that `ServerCard.handleTest`
+passes is overwritten. Test always hits the **saved** URL. On the first-run screen the saved URL is
+blank, so a correct address still reports "Connection failed" until Save is pressed first.
+
+**Fix:** in the interceptor, only substitute when `config.baseURL` is the instance default:
+```ts
+api.interceptors.request.use((config) => {
+  if (!config.baseURL || config.baseURL === '/api') {
+    config.baseURL = getApiBaseUrl() + '/api';
+  }
+  return config;
+});
+```
+Add a vitest case (axios `getUri`, or a mocked adapter) proving a per-request `baseURL` survives.
+
+### R3 — Bluetooth permission prompt on every cold launch
+`frontend/src/shared/lib/hrTransport/nativeBle.ts` `reconnect()` calls `ensureInitialized()`
+**before** reading `wt:hr-native-device`. `BleClient.initialize` requests runtime permissions
+(`requestPermissionForAliases` in the plugin's `initialize`), so a fresh install asks for Bluetooth
+at app open before the user has touched anything. **Fix:** read localStorage first; return `null`
+before initializing when nothing is stored.
+
+### R4 — Side effects inside a React state updater
+`frontend/src/shared/context/TimerContext.tsx` `extendTimer`: `cancelRestNotification()` +
+`scheduleRestNotification()` run inside the `setState` updater. React may invoke updaters twice
+(StrictMode), and the cancel races the schedule (both are async bridge calls). **Fix:** compute
+`newEndTime` outside via a ref of the current state (or read `state` in the callback deps), call
+`setState`, then call `scheduleRestNotification(newEndTime)` after it. **Drop the cancel** —
+scheduling with the same notification id replaces the pending alarm. Same in `startTimer`: no
+cancel needed. Web branch stays byte-for-byte.
+
+### R5 — `serviceType: 16 as unknown as any`
+`frontend/src/shared/lib/foregroundService.ts` ~line 52 violates the no-`any` rule. The plugin's
+Java passes the raw int straight to `startForeground(id, notification, serviceType)`, so
+`serviceType: 16 as ServiceType` (import the enum type from the plugin) is correct and typed.
+Add a one-line comment: `// FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in the plugin's enum`.
+
+### R6 — First rest notification after install may be dropped
+`TimerContext.startTimer` calls `ensureNotificationPermission()` without awaiting, then schedules.
+**Fix:** `void ensureNotificationPermission().then(() => scheduleRestNotification(endTime))`.
+
+### R7 — Docs and pins
+- Part 4.1: `@capacitor/core` is **8.5.2** (doc says 8.1.1). Re-copy the androidx versions from
+  `frontend/android/variables.gradle` (doc lists 1.10.1 / 1.7.0 / 1.16.0 / 1.8.6 / 1.0.1; the file has
+  1.11.0 / 1.7.1 / 1.17.0 / 1.8.9 / 1.2.0).
+- Part 4.2: the entry-chunk growth (301.85 → 352.11 kB) is **not** from fonts — fonts are CSS and
+  add no JS. The static `@capacitor/core` import through `platform.ts` (pulled into the entry by
+  `TimerContext`, `HeartRateContext`, `App.tsx`) is the plausible cause. Either state that, or
+  eliminate it: `isNativeApp()` can read the bridge-injected global without importing core —
+  `typeof window !== 'undefined' && !!(window as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.()` —
+  then re-measure and record the new number. Do whichever; report the number.
+- Part 4.5: the Google coach proxy line is wrong. `/ai-proxy/google/` is a bare relative `fetch`
+  from `features/coach/lib/providers/presets.ts`; inside the WebView it resolves to
+  `https://localhost/ai-proxy/...` and 404s. State that plainly (out of scope to fix).
+- `frontend/package.json`: pin `@capacitor/app` and `@capawesome-team/capacitor-android-foreground-service`
+  exactly (drop the `^`), per Part 1.4.
+- `scripts/serve-apk.sh` prints the first LAN address (192.168.123.81); note in Part 4.6 that on
+  VPN the user substitutes the VPN address.
+- Optional: `scripts/build-apk.sh` runs `chmod -R 777` over the whole Gradle cache volume on every
+  build; it will get slow. Do it only when the volume is first created.
+
+### Acceptance for this round
+`cd frontend && npx tsc -b && npx vitest run && npm run build` green (test count ≥ 119 with the new
+R2 case); `cd backend && npm test` green; `scripts/build-apk.sh` produces a new `~/apk/latest.apk`
+with the **same** debug certificate fingerprint (`6f2643f1…`); Part 4 corrected; append a short
+"Round 1 fixes" list under this section saying what changed per item. Then stop and report.
