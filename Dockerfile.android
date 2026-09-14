@@ -22,6 +22,7 @@ RUN yes | sdkmanager --licenses && \
 
 # Setup builder home directory with world-writable permissions so mapped UID can write cache and debug keystore
 RUN mkdir -p /home/builder/.gradle /home/builder/.android /project && \
+    rm -rf /home/ubuntu && ln -s /home/builder /home/ubuntu && \
     chmod -R 777 /home/builder /project
 
 ENV HOME=/home/builder

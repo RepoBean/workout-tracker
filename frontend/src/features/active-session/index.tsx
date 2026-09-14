@@ -10,6 +10,9 @@ import { useHrPersistence } from './hooks/useHrPersistence';
 import { useDiscardSession } from './hooks/useDiscardSession';
 import { clearSessionLocalState } from './lib/sessionStorage';
 import { useExerciseHistoryByName } from '../../shared/api/queries';
+import { useWorkoutForegroundService } from './hooks/useWorkoutForegroundService';
+import { stopWorkoutService } from '../../shared/lib/foregroundService';
+import { isNativeApp } from '../../shared/lib/platform';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
 import { ExerciseListDropdown } from './components/ExerciseListDropdown';
@@ -110,6 +113,10 @@ export default function ActiveSession() {
     sessionStartMs: session?.createdAt ? new Date(session.createdAt).getTime() : null,
     isSessionActive: !!session && !session.completedAt && !showCelebration,
   });
+
+  useWorkoutForegroundService(
+    isNativeApp() && !!session && !session.completedAt && !showCelebration
+  );
 
   const exercises = session?.exercises || [];
   const sets = session?.sets || [];
@@ -270,6 +277,7 @@ export default function ActiveSession() {
     completeSession(undefined, {
       onSuccess: () => {
         stopTimer();
+        void stopWorkoutService();
 
         // Clear all session-scoped localStorage (nav, ad-hoc, ordering,
         // hidden, HR chart override, cardio persistence).

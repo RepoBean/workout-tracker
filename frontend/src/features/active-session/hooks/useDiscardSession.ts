@@ -3,6 +3,7 @@ import { api } from '../../../shared/api/client';
 import { queryKeys } from '../../../shared/api/queries';
 import { useToast } from '../../../shared/ui/Toast';
 import { clearSessionLocalState } from '../lib/sessionStorage';
+import { stopWorkoutService } from '../../../shared/lib/foregroundService';
 
 // Deletes an incomplete session (and its sets, via cascade) and sweeps the
 // session-scoped localStorage. Shared by the active-session screen and the
@@ -16,6 +17,7 @@ export function useDiscardSession() {
       await api.delete(`/sessions/${sessionId}`);
     },
     onSuccess: (_data, sessionId) => {
+      void stopWorkoutService();
       clearSessionLocalState(sessionId);
       toast.success('Workout discarded');
       queryClient.invalidateQueries({ queryKey: queryKeys.activeSession });

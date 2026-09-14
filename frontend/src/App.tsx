@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { useOffline } from './shared/context/OfflineContext';
 import { useAiCoach } from './shared/context/AiCoachContext';
@@ -142,6 +142,38 @@ function WorkoutErrorFallback() {
 function AppContent() {
   const location = useLocation();
   const isWorkout = location.pathname.startsWith('/workout/');
+  const pathnameRef = useRef(location.pathname);
+  pathnameRef.current = location.pathname;
+
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
+    let mounted = true;
+
+    import('@capacitor/app').then(({ App: CapApp }) => {
+      if (!mounted) return;
+      void CapApp.addListener('backButton', () => {
+        if (pathnameRef.current === '/') {
+          void CapApp.minimizeApp();
+        } else {
+          window.history.back();
+        }
+      }).then(handle => {
+        if (!mounted) {
+          void handle.remove();
+        } else {
+          listenerHandle = handle;
+        }
+      });
+    });
+
+    return () => {
+      mounted = false;
+      if (listenerHandle) {
+        void listenerHandle.remove();
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-surface-50 dark:bg-surface-900 transition-colors">
