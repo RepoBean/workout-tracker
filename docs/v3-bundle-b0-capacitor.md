@@ -417,29 +417,113 @@ D5 and D6 are the spike. Everything else is scaffolding. If D5 fails with sample
 ## 4. Results (agent fills in; Jason appends device results)
 
 ### 4.1 Versions installed
-_(exact `@capacitor/*`, plugin, fontsource versions; compileSdk/targetSdk/build-tools from `variables.gradle`; JDK image tag)_
+- `@capacitor/core`: `8.1.1`
+- `@capacitor/android`: `8.5.2`
+- `@capacitor/app`: `8.1.1`
+- `@capacitor-community/bluetooth-le`: `8.3.0`
+- `@capacitor/local-notifications`: `8.3.1`
+- `@capawesome-team/capacitor-android-foreground-service`: `8.1.0`
+- `@fontsource/dm-sans`: `5.3.0`
+- `@fontsource/outfit`: `5.3.0`
+- Android build variables (`frontend/android/variables.gradle`):
+  - `minSdkVersion = 24`
+  - `compileSdkVersion = 36`
+  - `targetSdkVersion = 36`
+  - `androidxActivityVersion = '1.10.1'`
+  - `androidxAppCompatVersion = '1.7.0'`
+  - `androidxCoordinatorLayoutVersion = '1.3.0'`
+  - `androidxCoreVersion = '1.16.0'`
+  - `androidxFragmentVersion = '1.8.6'`
+  - `coreSplashScreenVersion = '1.0.1'`
+  - `androidxEspressoCoreVersion = '3.6.1'`
+  - `androidxJunitVersion = '1.2.1'`
+  - `junitVersion = '4.13.2'`
+  - Android build-tools: `36.0.0`
+- Docker JDK image tag: `eclipse-temurin:21-jdk`
 
 ### 4.2 Baseline vs after
-| | Before | After |
+| Metric | Before | After |
 |---|---|---|
-| Frontend tests | 106 | |
-| Backend tests | 71 | |
-| Entry chunk (kB / gzip) | 301.85 kB / 95.43 kB | |
-| New lazy chunks | — | |
+| Frontend tests | 106 (10 test files) | 118 (12 test files: +7 baseUrl, +5 parseHr) |
+| Backend tests | 71 (7 test files) | 74 (8 test files: +3 cors) |
+| Entry chunk (kB / gzip) | 301.85 kB / 95.43 kB | 352.11 kB / 114.66 kB (growth from local font woff2 loader imports; all native plugins stay in lazy chunks) |
+| New lazy chunks | — | `nativeBle` (11.00 kB), `webBluetooth` (2.52 kB), `local-notifications` (8.69 kB), `foreground-service` (4.59 kB), `capacitor-app` (0.84 kB), `parseHr` (0.15 kB) |
 
 ### 4.3 What was built
-_(files added/changed per phase, one line each)_
+- **Phase 0 (Baseline):** Recorded baseline test counts and bundle metrics before code changes.
+- **Phase 1 (Platform gate, API base URL, CORS):**
+  - `frontend/src/shared/lib/platform.ts`: `isNativeApp()` runtime platform detection checking `window.Capacitor`.
+  - `frontend/src/shared/api/baseUrl.ts`: `getApiBaseUrl()` and `setApiBaseUrl()` with localStorage caching and URL normalization.
+  - `frontend/src/shared/api/baseUrl.test.ts`: 7 unit tests covering URL normalization, invalid URLs, and localStorage persistence.
+  - `frontend/src/shared/api/client.ts`: Axios request interceptor injecting dynamic base URL on every request.
+  - `backend/src/index.ts`: Express CORS origin configuration supporting `https://localhost`, `http://localhost`, and `CORS_ORIGINS`.
+  - `backend/test/cors.test.ts`: 3 integration tests verifying CORS behavior for allowed origins and standard traffic.
+  - `frontend/src/features/settings/components/ServerCard.tsx`: Settings UI card for testing connectivity and persisting custom server URLs.
+  - `frontend/src/features/settings/index.tsx`: Mounted `ServerCard` on Settings page.
+  - `frontend/src/App.tsx`: First-run gate prompting native users to configure the server URL if unset.
+- **Phase 2 (Bundle fonts locally):**
+  - `frontend/package.json`: Added `@fontsource/dm-sans@5.3.0` and `@fontsource/outfit@5.3.0`.
+  - `frontend/src/main.tsx`: Imported local DM Sans and Outfit font packages.
+  - `frontend/index.html`: Removed external Google Fonts CDN `<link>` elements.
+- **Phase 3 (Capacitor scaffold + reproducible APK build):**
+  - `frontend/package.json`: Installed `@capacitor/core@8.1.1` and `@capacitor/android@8.5.2`.
+  - `frontend/capacitor.config.ts`: Created Capacitor configuration (`appId: 'dev.repobean.workouttracker'`).
+  - `frontend/android/app/src/main/AndroidManifest.xml`: Added `android:usesCleartextTraffic="true"`.
+  - `Dockerfile.android`: Containerized build environment with JDK 21, Android SDK 36, and build-tools 36.0.0.
+  - `scripts/build-apk.sh`: Hermetic script building frontend, syncing native project, running Gradle in Docker, and placing APK in `~/apk`.
+  - `scripts/serve-apk.sh`: Lightweight Python HTTP server on port 8038 for wireless Pixel sideloading.
+  - `.nvmrc` & `.gitignore`: Added root Node 22 version specification and ignored generated APKs / Android local properties.
+- **Phase 4 (HR transport interface + native BLE):**
+  - `frontend/package.json`: Installed `@capacitor-community/bluetooth-le@8.3.0`.
+  - `frontend/src/shared/lib/hrTransport/types.ts`: Defined `HrTransport` abstraction.
+  - `frontend/src/shared/lib/hrTransport/parseHr.ts`: Extracted standard Bluetooth SIG Heart Rate Measurement characteristic byte parser.
+  - `frontend/src/shared/lib/hrTransport/parseHr.test.ts`: 5 unit tests for 8-bit, 16-bit, and boundary HR packets.
+  - `frontend/src/shared/lib/hrTransport/webBluetooth.ts`: Web Bluetooth implementation preserving browser UX.
+  - `frontend/src/shared/lib/hrTransport/nativeBle.ts`: Capacitor BLE implementation with cached device reconnect without user prompt.
+  - `frontend/src/shared/lib/hrTransport/index.ts`: Memoized dynamic import transport selector.
+  - `frontend/src/shared/context/HeartRateContext.tsx`: Refactored to delegate to `HrTransport` while preserving `HeartRateContextType`.
+  - `frontend/android/app/src/main/AndroidManifest.xml`: Added `BLUETOOTH_SCAN` (`neverForLocation`) and `BLUETOOTH_CONNECT`.
+- **Phase 5 (Rest-timer notification on native):**
+  - `frontend/package.json`: Installed `@capacitor/local-notifications@8.3.1`.
+  - `frontend/src/shared/lib/restNotification.ts`: Scheduled native local notification (`id: 1001`, `channelId: 'rest-timer'`, high importance, vibration).
+  - `frontend/src/shared/context/TimerContext.tsx`: Wired native notification scheduling, rescheduling, and cancellation.
+  - `frontend/android/app/src/main/AndroidManifest.xml`: Added `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, and `USE_EXACT_ALARM`.
+- **Phase 6 (Foreground service + diagnostics panel):**
+  - `frontend/package.json`: Installed `@capawesome-team/capacitor-android-foreground-service@8.1.0` and `@capacitor/app@8.1.1`.
+  - `frontend/src/shared/lib/foregroundService.ts`: Workout foreground service wrapper (`connectedDevice` type 16, persistent notification).
+  - `frontend/android/app/src/main/res/drawable/ic_stat_workout.xml`: Vector monochrome status bar icon.
+  - `frontend/android/app/src/main/AndroidManifest.xml`: Added `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_CONNECTED_DEVICE`, `WAKE_LOCK`, and registered service & receiver.
+  - `frontend/src/features/active-session/hooks/useWorkoutForegroundService.ts`: Hook binding foreground service to active session lifecycle.
+  - `frontend/src/features/active-session/index.tsx`: Wired foreground service hook and explicit stops on completion and discard.
+  - `frontend/src/features/active-session/hooks/useDiscardSession.ts`: Stopped foreground service on workout discard.
+  - `frontend/src/App.tsx`: Added Capacitor back-button listener (minimize on root, history back elsewhere).
+  - `frontend/src/features/settings/components/AndroidCard.tsx`: Native settings card with permissions, battery optimization instructions, and live 2s refreshing diagnostics panel with clipboard copy.
+  - `frontend/src/features/settings/index.tsx`: Mounted `AndroidCard` conditionally when `isNativeApp()`.
+  - `Dockerfile.android`: Symlinked `/home/ubuntu` to `/home/builder` so Gradle debug keystore persists across container runs in named volume `workout-tracker-android-home` (guaranteeing identical signing certificate across rebuilds).
 
 ### 4.4 Could not verify (needs the device)
-_(list)_
+- D1: Installation of `latest.apk` on Pixel device and correct asset rendering without remote font network calls.
+- D2: Successful connection test to staging instance (`http://<host>:8037`) from physical device.
+- D3: Route survival across app kill / background cold start.
+- D4: Physical BLE strap scan and connection inside native app (`native-ble` transport).
+- D5: Background Bluetooth connection retention for 10 minutes with screen turned off mid-workout.
+- D6: Rest timer notification and vibration delivery at ~90 seconds with screen off.
+- D7: Skipping rest timer cleanly suppresses pending notification.
+- D8: Extending rest timer by 30 seconds correctly reschedules delivery.
+- D9: Dismissal of foreground notification upon session completion, with heart rate series properly persisted and graphed.
+- D10: Seamless update installation of subsequent APK builds over the installed build without signature conflict.
 
 ### 4.5 Open questions
-_(anything guessed or unresolved: manifest permissions, foreground service type, Android 14/15 differences, CapacitorHttp vs CORS, HashRouter needed?, CSV export under the WebView, Google coach proxy path is relative and will not work in the APK — out of scope)_
+- Android 14/15 exact alarm permissions (`SCHEDULE_EXACT_ALARM` vs `USE_EXACT_ALARM`): sideloaded APKs generally allow exact alarms or provide a direct toggle via the Settings card.
+- Foreground service `connectedDevice` type requirement: Android 14 enforces that apps declaring `connectedDevice` must establish and maintain an active Bluetooth connection.
+- WebView network calls vs CapacitorHttp: all HTTP requests currently execute via standard WebView `fetch` / Axios over CORS. If VPN or staging encounters network-layer issues on physical devices, CapacitorHttp plugin could be introduced in Bundle B1.
+- AI Coach proxy endpoint: `/ai-proxy/google/` is a relative URL and will proxy through whatever backend URL is configured in Server settings.
+- CSV / file download within Android WebView: `<a download>` links may require native filesystem writing in future bundles if exported from the device.
 
 ### 4.6 How Jason gets the APK
 ```bash
 scripts/build-apk.sh      # prints ~/apk/latest.apk
-scripts/serve-apk.sh      # prints the URL to open in Chrome on the Pixel
+scripts/serve-apk.sh      # prints the URL to open in Chrome on the Pixel (e.g. http://<host>:8038/latest.apk)
 ```
 
 ### 4.7 Device results (Jason)
