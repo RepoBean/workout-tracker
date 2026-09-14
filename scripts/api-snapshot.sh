@@ -4,21 +4,29 @@
 #   scripts/api-snapshot.sh <main|wife|staging> <outdir>
 # Used to prove a backend refactor is byte-for-byte identical: snapshot the old
 # image, deploy, snapshot again, diff. Run both within the same day (stats are
-# date-relative). Needs jq on the host.
+# date-relative).
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 require_instance "${1:-}"; shift
 OUT="${1:-}"; [ -n "$OUT" ] || die "usage: api-snapshot.sh <instance> <outdir>"
-command -v jq >/dev/null || die "jq is required"
 mkdir -p "$OUT"
 
-snap() { # <name> <api path>
+# Pretty-print JSON with sorted keys; optionally drop one top-level key.
+sort_json() { python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+drop = sys.argv[1] if len(sys.argv) > 1 else None
+if drop and isinstance(data, dict): data.pop(drop, None)
+json.dump(data, sys.stdout, indent=2, sort_keys=True, ensure_ascii=False); print()
+' "$@"; }
+
+snap() { # <name> <api path> [drop-key]
   local name="$1" path="$2" body
   body="$(api_get "$path")" || die "GET $path failed"
   if [[ "$path" == *export-csv* ]]; then
     printf '%s\n' "$body" > "$OUT/$name.csv"
   else
-    printf '%s' "$body" | jq -S . > "$OUT/$name.json" || die "GET $path returned non-JSON"
+    printf '%s' "$body" | sort_json "${3:-}" > "$OUT/$name.json" || die "GET $path returned non-JSON"
   fi
 }
 
@@ -32,27 +40,29 @@ snap export-csv                "sessions/export-csv"
 snap suggestions-pr            "exercises/suggestions?q=pr"
 snap suggestions-row           "exercises/suggestions?q=row"
 
-# Newest 5 sessions by id, and exports for every non-archived program
-for id in $(jq -r '.[].id' "$OUT/history-all.json" | head -5); do
-  snap "session-$id" "sessions/$id"
-done
-for id in $(jq -r '.[].id' "$OUT/programs-active.json"); do
-  snap "program-$id" "programs/$id"
-  snap "program-$id-export" "programs/$id/export"
-done
+# Newest 5 session ids, every non-archived program id, and the 8 most-logged
+# exercise names (URL-encoded), derived from the dumps above.
+readarray -t SESSION_IDS < <(python3 -c 'import json,sys; [print(s["id"]) for s in json.load(open(sys.argv[1]))[:5]]' "$OUT/history-all.json")
+readarray -t PROGRAM_IDS < <(python3 -c 'import json,sys; [print(p["id"]) for p in json.load(open(sys.argv[1]))]' "$OUT/programs-active.json")
+readarray -t NAMES < <(python3 -c '
+import json, sys, collections, urllib.parse, re
+c = collections.Counter(s["exerciseName"] for sess in json.load(open(sys.argv[1])) for s in sess["sets"])
+for name, _ in c.most_common(8):
+    print(re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") + "\t" + urllib.parse.quote(name))
+' "$OUT/history-all.json")
 
-# The 8 most-logged exercise names → the two name-lookup endpoints
-jq -r '[.[].sets[].exerciseName] | group_by(.) | map({n: .[0], c: length}) | sort_by(-.c) | .[:8][].n' \
-  "$OUT/history-all.json" | while IFS= read -r name; do
-  slug="$(printf '%s' "$name" | tr -cs 'A-Za-z0-9' '-' | tr 'A-Z' 'a-z')"
-  enc="$(jq -rn --arg s "$name" '$s|@uri')"
+for id in "${SESSION_IDS[@]}"; do
+  snap "session-$id" "sessions/$id"
+  snap "session-$id-previous" "sessions/$id/previous"
+done
+for id in "${PROGRAM_IDS[@]}"; do
+  snap "program-$id" "programs/$id"
+  snap "program-$id-export" "programs/$id/export" exportedAt
+done
+for entry in "${NAMES[@]}"; do
+  slug="${entry%%	*}"; enc="${entry#*	}"
   snap "by-name-$slug-latest" "exercises/history-by-name?name=$enc"
   snap "by-name-$slug-all"    "exercises/all-sets-by-name?name=$enc"
-done
-
-# Strip the one field that legitimately differs per call (export timestamp)
-for f in "$OUT"/program-*-export.json; do
-  [ -f "$f" ] && jq -S 'del(.exportedAt)' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 
 log "$INSTANCE: $(ls "$OUT" | wc -l) snapshot files in $OUT"
