@@ -135,8 +135,8 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 
 ## 5. Track B — Android client (Capacitor) and offline
 
-### Bundle B0 — Capacitor spike (prove the two background behaviors, nothing else)
-- [ ] `npx cap add android` under `frontend/` (`android/` dir, `capacitor.config.ts`). Plugins: `@capacitor-community/bluetooth-le`, `@capacitor/local-notifications`, an Android foreground-service plugin (e.g. `@capawesome/capacitor-android-foreground-service`), `@capacitor/app`.
+### Bundle B0 — Capacitor spike (prove the two background behaviors, nothing else) — agent brief: `docs/v3-bundle-b0-capacitor.md`
+- [ ] `npx cap add android` under `frontend/` (`android/` dir, `capacitor.config.ts`). Plugins: `@capacitor-community/bluetooth-le`, `@capacitor/local-notifications`, `@capawesome-team/capacitor-android-foreground-service` (note the `-team` scope), `@capacitor/app`.
 - [ ] `HeartRateContext`: a transport interface (`connect / disconnect / onSample`) with two implementations — Web Bluetooth (browser) and native BLE (app). Nothing above the context changes.
 - [ ] `TimerContext`: on native, schedule an exact local notification at timer start, cancel on stop/complete; web path unchanged.
 - [ ] Foreground service while a session is active ("Workout in progress" persistent notification).
