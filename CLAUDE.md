@@ -525,6 +525,7 @@ Deploys are logged to `~/backups/workout-tracker/deploys.log`.
 | `scripts/seed-staging.sh` | backup main → restore into staging |
 | `scripts/rollback.sh <inst> <tag>` | Redeploy an existing image tag, never builds; `--restore <file>` optional |
 | `scripts/prune-images.sh [keep]` | Drop old image tags beyond the newest N (default 5) |
+| `scripts/release-apk.sh` | Build the APK from HEAD (clean + pushed) and publish GitHub Release `apk-<sha>`; phones install from `releases/latest/download/workout-tracker.apk` |
 
 Manual equivalent for a quick rebuild of one instance (images tagged `latest`):
 `docker compose --profile main up -d --build`. **With no `--profile`, `docker compose up` starts
@@ -554,7 +555,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 
 ### Android app (spike)
 
-The native Android app wraps the existing React build in a Capacitor WebView (`frontend/android/`, `Dockerfile.android`). It is built in Docker without requiring Android SDK installed on the host: `scripts/build-apk.sh` compiles the frontend, syncs native assets, runs `./gradlew assembleDebug` in a container with a persisted keystore volume (`workout-tracker-android-home`), and outputs `~/apk/latest.apk`. `scripts/serve-apk.sh` serves the APK over the local network / VPN on port 8038 for sideloading onto test devices.
+The native Android app wraps the existing React build in a Capacitor WebView (`frontend/android/`, `Dockerfile.android`). It is built in Docker without requiring Android SDK installed on the host: `scripts/build-apk.sh` compiles the frontend, syncs native assets, runs `./gradlew assembleDebug` in a container with a persisted keystore volume (`workout-tracker-android-home`), and outputs `~/apk/latest.apk`. `scripts/serve-apk.sh` serves the APK over the local network / VPN on port 8038 for sideloading onto test devices. `scripts/release-apk.sh` publishes it as a GitHub Release instead (stable link: `https://github.com/RepoBean/workout-tracker/releases/latest/download/workout-tracker.apk`) — built locally so the keystore volume signs every release and updates install over the old app. The APK bundles the frontend, so UI changes need a new release; backend changes reach the app via `ship.sh` alone. Both Jason and his wife run it (main 8035 / wife 8036).
 
 ---
 
