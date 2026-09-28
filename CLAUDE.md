@@ -38,7 +38,7 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 | Rule | Constraint |
 |------|------------|
-| Tables | 5 maximum: Programs, Workouts, Exercises, Sessions, Sets |
+| Tables | 6 maximum: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog (v3 allowed exactly one new table — the catalog; see `docs/v3-plan.md`) |
 | Database | SQLite only — no Postgres. Schema changes are drizzle-kit SQL migrations (`backend/drizzle/`), applied at boot; never hand-edit the live DB |
 | State | React state + TanStack Query + Context only — NO Redux, NO Zustand |
 | Design | Mobile-first — this runs on a phone at the gym |
@@ -49,7 +49,7 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 ## Database
 
-Local dev database lives at `backend/database.sqlite` (throwaway). In Docker each instance has its own named volume (see Development Setup). On boot, `src/db/migrate.ts` runs the legacy column adds (table-guarded, pre-2026-06 DBs only) and then the drizzle-kit migrations in `backend/drizzle/` — the `0000_baseline` is `CREATE ... IF NOT EXISTS` (no-op on existing DBs, full create on a fresh one); applied ones are recorded in `__drizzle_migrations`. To change the schema: edit `src/db/schema.ts`, run `npx drizzle-kit generate --name=<what>`, review the SQL, commit `drizzle/`. Dates are stored in Sequelize's text format (`YYYY-MM-DD HH:MM:SS.SSS +00:00`, see `src/db/columns.ts`) so pre-Drizzle images can still read the DB.
+Local dev database lives at `backend/database.sqlite` (throwaway). In Docker each instance has its own named volume (see Development Setup). On boot, `src/db/migrate.ts` runs the legacy column adds (table-guarded, pre-2026-06 DBs only) and then the drizzle-kit migrations in `backend/drizzle/` — the `0000_baseline` is `CREATE ... IF NOT EXISTS` (no-op on existing DBs, full create on a fresh one); applied ones are recorded in `__drizzle_migrations`. Last, `backfillCatalog()` (`src/db/catalog.ts`) fills any NULL `catalogId` from names — every boot, silent once converged. To change the schema: edit `src/db/schema.ts`, run `npx drizzle-kit generate --name=<what>`, review the SQL, commit `drizzle/`. Dates are stored in Sequelize's text format (`YYYY-MM-DD HH:MM:SS.SSS +00:00`, see `src/db/columns.ts`) so pre-Drizzle images can still read the DB.
 
 ## Database Schema
 
@@ -62,13 +62,16 @@ Program (id, name, isActive, isArchived, currentWorkoutIndex, createdAt, updated
 └─> Workout (id, programId, name, orderIndex, createdAt, updatedAt)
     └─> Exercise (id, workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
                   exerciseType, cardioModality, targetDurationSec, targetDistance,
-                  createdAt, updatedAt)
+                  catalogId, createdAt, updatedAt)
 
 Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc,
          heartRateAvg, heartRateMin, heartRateMax, heartRateSeries, exerciseNotes,
          createdAt, updatedAt)
 └─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort,
-         dropIndex, heartRateAvg, heartRateMax, durationSec, distance, createdAt, updatedAt)
+         dropIndex, heartRateAvg, heartRateMax, durationSec, distance, catalogId,
+         createdAt, updatedAt)
+
+ExerciseCatalog (id, name, aliases, createdAt, updatedAt)   ← Exercise.catalogId, Set.catalogId
 ```
 
 ### Key Patterns
@@ -89,6 +92,7 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
 | **Cardio Exercises** | `exerciseType` is `'strength'` (default) or `'cardio'`. Cardio exercises may set `cardioModality` (running/cycling/treadmill/rowing/other) and targets (`targetDurationSec`, `targetDistance`). Cardio sets store `durationSec`/`distance`; weight/reps are 0. |
 | **Heart Rate** | From a BLE HR strap (Web Bluetooth). Sessions store `heartRateAvg/Min/Max` + `heartRateSeries` (JSON string of downsampled samples); Sets store per-set `heartRateAvg`/`heartRateMax`. All nullable — absent when no strap connected. |
 | **Exercise Notes** | `Session.exerciseNotes` JSON column keyed by exercise name (captured in the RPE prompt). Session-level to avoid replicating one string across every set. |
+| **Exercise Catalog** | One `ExerciseCatalog` row per lift (unique on `lower(name)`, index `catalog_name_lower`), `aliases` JSON `string[]`. `Exercises.catalogId` / `Sets.catalogId` are nullable FKs with **no ON DELETE action** (a referenced row can't be deleted). **Names stay on every row and are authoritative**: the server derives `catalogId` from the name on every write (`resolveCatalogId` in `db/catalog.ts` — name, else alias, else insert); request schemas never accept `catalogId`, so old clients stay correct. `backfillCatalog()` runs every boot (after migrations): fills NULL ids (first boot, or rows an older image wrote during a rollback) and GCs unreferenced alias-less rows — silent once converged. Merge (Settings → Exercise catalog) folds B into A: re-points ids, B's name + aliases become A's aliases; split reverses it exactly. Neither ever rewrites `exerciseName`/`name`/`exerciseNotes` or a row's `updatedAt`. Readers that should see a renamed lift as one lift use catalog identity: `/previous`, `history-by-name`, `all-sets-by-name` (server), Progress + coach all-time rollup (client, `shared/lib/catalog.ts`). Per-session views (history cards, active session, notes, CSV) stay name-based by design. A program-exercise rename resolves to the new name's entry ("this slot now does a different lift"); "same lift, new spelling" is a merge. |
 
 ---
 
@@ -164,7 +168,9 @@ src/
 │   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
 │   │   │   └── ProgressChart.tsx         # Reusable chart component
 │   │   ├── hooks/
-│   │   │   └── useProgressData.ts
+│   │   │   └── useProgressData.ts        # Thin useMemo wrapper over logic/exerciseIndex
+│   │   ├── logic/
+│   │   │   └── exerciseIndex.ts          # Picker names, strength/cardio history, PRs — grouped by catalog identity (+ tests)
 │   │   └── index.tsx              # Tabbed progress page entry
 │   │
 │   ├── dashboard/                 # Home/landing page
@@ -179,6 +185,10 @@ src/
 │   │   └── index.tsx              # Home page entry
 │   │
 │   ├── settings/                  # Settings page
+│   │   ├── components/
+│   │   │   ├── ExerciseCatalogCard.tsx # Catalog list: merge into… / split off alias
+│   │   │   ├── ServerCard.tsx     # API base URL (Android app)
+│   │   │   └── AndroidCard.tsx    # Native permissions + diagnostics
 │   │   └── index.tsx              # Profile (DOB/sex/HR for zones), auto-progression, AI coach card
 │   │
 │   └── coach/                     # AI Coach (opt-in, BYO API key)
@@ -221,6 +231,7 @@ src/
 │   ├── lib/
 │   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
+│   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
 │   │   └── oneRepMax.ts           # Epley 1RM estimate
 │   ├── utils/
 │   │   ├── format.ts              # formatMMSS, parseDurationToSec, etc. (+ tests)
@@ -253,14 +264,16 @@ backend/
 │   │   ├── programs.ts      # CRUD for programs
 │   │   ├── workouts.ts      # CRUD for workouts
 │   │   ├── exercises.ts     # CRUD for exercises
-│   │   └── sessions.ts      # CRUD for sessions + sets
+│   │   ├── sessions.ts      # CRUD for sessions + sets
+│   │   └── catalog.ts       # Exercise catalog: list (with counts), merge, split
 │   ├── db/
 │   │   ├── schema.ts        # Drizzle tables + relations (mirrors the live DDL exactly) + row types
 │   │   ├── columns.ts       # sequelizeDate custom column (Sequelize text date format, read + write)
 │   │   ├── index.ts         # better-sqlite3 connection (DB_PATH, foreign_keys ON) + `db`
-│   │   ├── migrate.ts       # bootstrap(): legacy column adds → drizzle migrator
+│   │   ├── migrate.ts       # bootstrap(): legacy column adds → drizzle migrator → catalog backfill
+│   │   ├── catalog.ts       # resolveCatalogId / findCatalogId / backfillCatalog (every boot)
 │   │   └── queries/
-│   │       └── setsByName.ts # Case-insensitive name lookups (previous hints, PR check)
+│   │       └── setsByName.ts # Name → catalog → sets by catalogId (previous hints, PR check); name fallback
 │   ├── middleware/
 │   │   └── validate.ts      # Zod schema validation (body + URL params)
 │   ├── types/
@@ -323,12 +336,15 @@ backend/
 | GET | /api/sessions/:id | Get one session with sets |
 | GET | /api/sessions/:id/previous | Previous session hints |
 | POST | /api/sessions/start | Start new session |
-| POST | /api/sessions/:id/sets | Log a set |
+| POST | /api/sessions/:id/sets | Log a set (server derives `catalogId` from `exerciseName`; responses for sets/exercises carry `catalogId`) |
 | PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE, duration, distance; re-point via exerciseName + exerciseId:null for swap carry-over) |
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
 | PUT | /api/sessions/:id/exercise-note | Set/clear a per-exercise note |
 | POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
+| GET | /api/catalog | Exercise catalog: `{id, name, aliases, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
+| POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
+| POST | /api/catalog/:id/split | Split `{ alias }` off `:id` into its own entry again (exact inverse of merge) |
 
 ---
 

@@ -5,18 +5,28 @@
 # Used to prove a backend refactor is byte-for-byte identical: snapshot the old
 # image, deploy, snapshot again, diff. Run both within the same day (stats are
 # date-relative).
+#   WT_SNAPSHOT_STRIP=catalogId,other  drop those keys at any depth before writing,
+#                                      so a bundle that only ADDS a field can still
+#                                      diff empty against the old image.
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 require_instance "${1:-}"; shift
 OUT="${1:-}"; [ -n "$OUT" ] || die "usage: api-snapshot.sh <instance> <outdir>"
 mkdir -p "$OUT"
 
-# Pretty-print JSON with sorted keys; optionally drop one top-level key.
+# Pretty-print JSON with sorted keys; optionally drop one top-level key, and drop
+# every key named in WT_SNAPSHOT_STRIP at any depth.
 sort_json() { python3 -c '
-import json, sys
+import json, os, sys
 data = json.load(sys.stdin)
 drop = sys.argv[1] if len(sys.argv) > 1 else None
 if drop and isinstance(data, dict): data.pop(drop, None)
+strip = {k for k in os.environ.get("WT_SNAPSHOT_STRIP", "").split(",") if k}
+def clean(v):
+    if isinstance(v, dict): return {k: clean(x) for k, x in v.items() if k not in strip}
+    if isinstance(v, list): return [clean(x) for x in v]
+    return v
+if strip: data = clean(data)
 json.dump(data, sys.stdout, indent=2, sort_keys=True, ensure_ascii=False); print()
 ' "$@"; }
 
@@ -65,4 +75,21 @@ for entry in "${NAMES[@]}"; do
   snap "by-name-$slug-all"    "exercises/all-sets-by-name?name=$enc"
 done
 
-log "$INSTANCE: $(ls "$OUT" | wc -l) snapshot files in $OUT"
+log "$INSTANCE: $(ls "$OUT" | wc -l) snapshot files in $OUT${WT_SNAPSHOT_STRIP:+ (stripped: $WT_SNAPSHOT_STRIP)}"
+
+# Catalog post-check (v3 Bundle 2): every set and program exercise the API returns
+# should carry a catalogId. Reads the raw responses — the files above may be stripped.
+{ api_get "sessions/history?limit=2000"; printf '\n'; api_get "programs?includeArchived=true"; } | python3 -c '
+import json, sys
+history, programs = (json.loads(line) for line in sys.stdin.read().splitlines() if line.strip())
+rows = {
+    "sets": [s for sess in history for s in sess.get("sets", [])],
+    "exercises": [e for p in programs for w in p.get("workouts", []) for e in w.get("exercises", [])],
+}
+for kind, items in rows.items():
+    if items and all("catalogId" not in x for x in items):
+        print(f"catalogId post-check: {kind}: field absent (pre-catalog image)")
+    else:
+        nulls = sum(1 for x in items if x.get("catalogId") is None)
+        print(f"catalogId post-check: {kind}: {nulls} of {len(items)} null")
+'
