@@ -146,8 +146,10 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [x] Serve the APK from the home server over the VPN for sideloading.
 
 ### Bundle B1 — Full Android app
-- [ ] Foreground-service lifecycle bound to the active session (start on session start/resume, stop on complete/discard), elapsed time in the notification, tap → deep link into the session.
-- [ ] Android back button, status bar / safe areas, app icon, release signing (self-signed keystore kept **outside the repo**), versionCode from commit count. Release APK built from the **same commit** as the web deploy; an old APK keeps working because the API only ever gains fields.
+- [x] Foreground-service lifecycle bound to the server active session + strap connected (app-level hook; the `connectedDevice` type needs the strap), start time in the notification (static — a ticking elapsed time would need native code), tap → `/workout/:id`. Shipped 2026-09-28.
+- [x] Android back button (B0), app icon (adaptive vector + monochrome), versionCode from commit count (2026-09-28). Also fixed: Google coach proxy + CSV/program export inside the WebView.
+- [ ] Status bar / safe areas — only if something looks wrong on the device.
+- [~] Release signing: **decided to keep the persisted debug keystore** (volume `workout-tracker-android-home`). A new key forces uninstall on both phones and wipes their localStorage. Release APK built from the **same commit** as the web deploy; an old APK keeps working because the API only ever gains fields.
 
 ### Bundle B2 — Offline (after Track A Bundle 3, not before)
 - [ ] Service worker (vite-plugin-pwa / Workbox): precache the shell so the app opens without the VPN; API network-first.

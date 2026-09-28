@@ -7,6 +7,7 @@ import { Button } from './shared/ui/Button';
 import { isNativeApp } from './shared/lib/platform';
 import { getApiBaseUrl } from './shared/api/baseUrl';
 import { ServerCard } from './features/settings/components/ServerCard';
+import { useWorkoutForegroundService } from './features/active-session/hooks/useWorkoutForegroundService';
 
 // Route-level code splitting — each tab loads its chunk on first visit.
 const Dashboard = lazy(() => import('./features/dashboard'));
@@ -144,6 +145,7 @@ function AppContent() {
   const isWorkout = location.pathname.startsWith('/workout/');
   const pathnameRef = useRef(location.pathname);
   pathnameRef.current = location.pathname;
+  useWorkoutForegroundService();
 
   useEffect(() => {
     if (!isNativeApp()) return;

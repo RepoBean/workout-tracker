@@ -195,9 +195,10 @@ export function usePreviousSession(sessionId: number) {
 /**
  * Check for an active (incomplete) session to resume
  */
-export function useActiveSessionCheck() {
+export function useActiveSessionCheck(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.activeSession,
+    enabled: options?.enabled ?? true,
     queryFn: async () => {
       const { data } = await api.get<ActiveSession | null>('/sessions/active');
       return data;

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Barbell glyph from frontend/public/icon.svg, fit to the 108dp adaptive-icon canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M25.333,52.667h57.333a1.333,1.333 0,0 1,1.333,1.333v0a1.333,1.333 0,0 1,-1.333,1.333h-57.333a1.333,1.333 0,0 1,-1.333,-1.333v-0a1.333,1.333 0,0 1,1.333,-1.333z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M26.667,44h3a1,1 0,0 1,1,1v18a1,1 0,0 1,-1,1h-3a1,1 0,0 1,-1,-1v-18a1,1 0,0 1,1,-1z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M30.5,46.5h2a0.667,0.667 0,0 1,0.667,0.667v13.667a0.667,0.667 0,0 1,-0.667,0.667h-2a0.667,0.667 0,0 1,-0.667,-0.667v-13.667a0.667,0.667 0,0 1,0.667,-0.667z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M78.333,44h3a1,1 0,0 1,1,1v18a1,1 0,0 1,-1,1h-3a1,1 0,0 1,-1,-1v-18a1,1 0,0 1,1,-1z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M75.5,46.5h2a0.667,0.667 0,0 1,0.667,0.667v13.667a0.667,0.667 0,0 1,-0.667,0.667h-2a0.667,0.667 0,0 1,-0.667,-0.667v-13.667a0.667,0.667 0,0 1,0.667,-0.667z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M34.5,51h1.5a0.5,0.5 0,0 1,0.5,0.5v5a0.5,0.5 0,0 1,-0.5,0.5h-1.5a0.5,0.5 0,0 1,-0.5,-0.5v-5a0.5,0.5 0,0 1,0.5,-0.5z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M72,51h1.5a0.5,0.5 0,0 1,0.5,0.5v5a0.5,0.5 0,0 1,-0.5,0.5h-1.5a0.5,0.5 0,0 1,-0.5,-0.5v-5a0.5,0.5 0,0 1,0.5,-0.5z" />
+</vector>

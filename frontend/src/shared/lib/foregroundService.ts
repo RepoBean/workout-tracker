@@ -1,93 +1,93 @@
 import { isNativeApp } from './platform';
 import type { ServiceType } from '@capawesome-team/capacitor-android-foreground-service';
 
-let isRunning = false;
-let isStarting = false;
-let serviceGeneration = 0;
+// Desired-state model: callers say whether the service SHOULD run; one async loop at a
+// time drives the plugin toward that. Start/stop calls can arrive in any order and
+// interleave with in-flight bridge calls without a stale start killing a newer one.
+let desired = false;
+let desiredBody = '';
+let running = false;
+let reconciling: Promise<void> | null = null;
 let channelCreated = false;
 
 export function isWorkoutServiceRunning(): boolean {
-  return isRunning;
+  return running;
 }
 
-export async function startWorkoutService(): Promise<void> {
+/** Ask for the service to run (with this notification body) or not. No-op on web. */
+export function setWorkoutServiceActive(active: boolean, body = 'Heart rate stays connected'): void {
   if (!isNativeApp()) return;
-  if (isRunning || isStarting) return;
-
-  isStarting = true;
-  const currentGen = ++serviceGeneration;
-
-  try {
-    const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service');
-    if (currentGen !== serviceGeneration) return;
-
-    // Ensure notification permission
-    try {
-      const perm = await ForegroundService.checkPermissions();
-      if (currentGen !== serviceGeneration) return;
-      if (perm.display !== 'granted') {
-        await ForegroundService.requestPermissions();
-        if (currentGen !== serviceGeneration) return;
-      }
-    } catch {
-      // Best-effort permission check
-    }
-
-    // Ensure notification channel exists
-    if (!channelCreated) {
-      try {
-        await ForegroundService.createNotificationChannel({
-          id: 'workout-active',
-          name: 'Active Workout',
-          description: 'Ongoing workout tracking',
-          importance: 3, // Default importance
-        });
-        channelCreated = true;
-      } catch {
-        // Channel creation might fail or already exist
-      }
-    }
-    if (currentGen !== serviceGeneration) return;
-
-    // Android foreground service type 16 = FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-    // FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in the plugin's enum
-    await ForegroundService.startForegroundService({
-      id: 1,
-      title: 'Workout in progress',
-      body: 'Heart rate and rest timer stay active',
-      smallIcon: 'ic_stat_workout',
-      notificationChannelId: 'workout-active',
-      silent: true,
-      serviceType: 16 as ServiceType,
+  desired = active;
+  desiredBody = body;
+  if (!reconciling) {
+    reconciling = reconcile().finally(() => {
+      reconciling = null;
     });
-
-    if (currentGen !== serviceGeneration) {
-      await ForegroundService.stopForegroundService();
-      return;
-    }
-
-    isRunning = true;
-  } catch (err) {
-    isRunning = false;
-    console.warn('[ForegroundService] Failed to start:', err);
-  } finally {
-    if (currentGen === serviceGeneration) {
-      isStarting = false;
-    }
   }
 }
 
 export async function stopWorkoutService(): Promise<void> {
-  if (!isNativeApp()) return;
-  ++serviceGeneration;
-  isStarting = false;
-  if (!isRunning) return;
+  setWorkoutServiceActive(false);
+  await reconciling;
+}
 
-  isRunning = false;
-  try {
-    const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service');
-    await ForegroundService.stopForegroundService();
-  } catch (err) {
-    console.warn('[ForegroundService] Failed to stop:', err);
+async function reconcile(): Promise<void> {
+  const { ForegroundService } = await import('@capawesome-team/capacitor-android-foreground-service');
+
+  while (running !== desired) {
+    if (desired) {
+      try {
+        await start(ForegroundService, desiredBody);
+        running = true;
+      } catch (err) {
+        // Don't spin on a start that keeps failing (e.g. permission denied); the next
+        // setWorkoutServiceActive(true) call retries.
+        console.warn('[ForegroundService] Failed to start:', err);
+        desired = false;
+      }
+    } else {
+      try {
+        await ForegroundService.stopForegroundService();
+      } catch (err) {
+        console.warn('[ForegroundService] Failed to stop:', err);
+      }
+      running = false;
+    }
   }
+}
+
+type Plugin = typeof import('@capawesome-team/capacitor-android-foreground-service').ForegroundService;
+
+async function start(ForegroundService: Plugin, body: string): Promise<void> {
+  try {
+    const perm = await ForegroundService.checkPermissions();
+    if (perm.display !== 'granted') await ForegroundService.requestPermissions();
+  } catch {
+    // Best-effort permission check
+  }
+
+  if (!channelCreated) {
+    try {
+      await ForegroundService.createNotificationChannel({
+        id: 'workout-active',
+        name: 'Active Workout',
+        description: 'Ongoing workout tracking',
+        importance: 3, // Default importance
+      });
+      channelCreated = true;
+    } catch {
+      // Channel creation might fail or already exist
+    }
+  }
+
+  await ForegroundService.startForegroundService({
+    id: 1,
+    title: 'Workout in progress',
+    body,
+    smallIcon: 'ic_stat_workout',
+    notificationChannelId: 'workout-active',
+    silent: true,
+    // FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE — not in the plugin's enum
+    serviceType: 16 as ServiceType,
+  });
 }

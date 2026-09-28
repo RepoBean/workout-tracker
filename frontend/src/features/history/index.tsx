@@ -1,5 +1,6 @@
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../shared/ui/Button';
+import { openServerDownload } from '../../shared/api/download';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
 import { useSessionHistory, useDeleteSession } from './hooks/useHistory';
 import { SessionCard } from './components/SessionCard';
@@ -13,7 +14,7 @@ export default function History() {
   const deleteSession = useDeleteSession();
 
   const handleExport = () => {
-    window.open('/api/sessions/export-csv', '_blank');
+    openServerDownload('/sessions/export-csv');
   };
 
   if (isLoading) {

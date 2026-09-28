@@ -21,7 +21,10 @@ docker volume create workout-tracker-android-home >/dev/null
 docker run --rm -v workout-tracker-android-home:/home/builder workout-tracker-android sh -c '[ -f /home/builder/.initialized ] || { chmod -R 777 /home/builder && touch /home/builder/.initialized; }' 2>/dev/null || true
 
 # 4. Assemble debug APK using Gradle in Docker container
-echo "==> Running assembleDebug inside container..."
+# versionCode = commit count (monotonic on main), versionName = short sha (+ -dirty).
+VERSION_CODE="$(git rev-list --count HEAD)"
+VERSION_NAME="$(git rev-parse --short HEAD)$([ -z "$(git status --porcelain --untracked-files=no)" ] || echo -dirty)"
+echo "==> Running assembleDebug inside container (versionCode $VERSION_CODE, versionName $VERSION_NAME)..."
 docker run --rm \
   --user "$(id -u):$(id -g)" \
   -e HOME=/home/builder \
@@ -29,7 +32,8 @@ docker run --rm \
   -v workout-tracker-android-home:/home/builder \
   -v "$PWD/frontend:/project" \
   -w /project/android \
-  workout-tracker-android ./gradlew assembleDebug --no-daemon
+  workout-tracker-android ./gradlew assembleDebug --no-daemon \
+    -PversionCode="$VERSION_CODE" -PversionName="$VERSION_NAME"
 
 # 5. Copy output APK to ~/apk
 APK_SOURCE="frontend/android/app/build/outputs/apk/debug/app-debug.apk"

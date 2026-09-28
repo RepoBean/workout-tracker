@@ -20,6 +20,14 @@ export function AndroidCard() {
   const [transportKind, setTransportKind] = useState<string>('unknown');
   const [exactAlarmState, setExactAlarmState] = useState<string>('checking...');
   const [lastTick, setLastTick] = useState<number>(Date.now());
+  const [appVersion, setAppVersion] = useState<string>('unknown');
+
+  useEffect(() => {
+    import('@capacitor/app')
+      .then(({ App }) => App.getInfo())
+      .then((info) => setAppVersion(`${info.version} (build ${info.build})`))
+      .catch(() => setAppVersion('unknown'));
+  }, []);
 
   const refreshAsync = useCallback(async () => {
     try {
@@ -100,6 +108,7 @@ export function AndroidCard() {
     '=== Workout Tracker Android Diagnostics ===',
     `Timestamp: ${new Date().toISOString()}`,
     `Platform: ${platform}`,
+    `App version: ${appVersion}`,
     `API Base URL: ${apiBaseUrl}`,
     `HR Transport: ${transportKind}`,
     `Connected: ${isConnected ? 'Yes' : 'No'} (${deviceName ?? 'None'})`,

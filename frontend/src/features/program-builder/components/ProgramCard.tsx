@@ -5,6 +5,8 @@ import { Input } from '../../../shared/ui/Input';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { WorkoutCard } from './WorkoutCard';
 import { api } from '../../../shared/api/client';
+import { openServerDownload } from '../../../shared/api/download';
+import { isNativeApp } from '../../../shared/lib/platform';
 import { useToast } from '../../../shared/ui/Toast';
 import type { Program } from '../../../shared/api/types';
 
@@ -61,6 +63,12 @@ export function ProgramCard({ program, variant = 'default' }: ProgramCardProps) 
   };
 
   const handleExport = async () => {
+    // The Android WebView can't save a blob download; the endpoint sends an attachment
+    // header, so let the system browser fetch it instead.
+    if (isNativeApp()) {
+      openServerDownload(`/programs/${program.id}/export`);
+      return;
+    }
     try {
       const { data } = await api.get(`/programs/${program.id}/export`);
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
