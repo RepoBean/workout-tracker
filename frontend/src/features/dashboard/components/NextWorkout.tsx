@@ -4,6 +4,7 @@ import { useNextWorkoutLocal } from '../hooks/useNextWorkoutLocal';
 import { useStartSession } from '../../active-session/hooks/useStartSession';
 import { useExerciseHistoryByName } from '../../../shared/api/queries';
 import { exerciseTargetSummary } from '../../../shared/api/cardio';
+import { formatWeight } from '../../../shared/utils/format';
 import type { Exercise } from '../../../shared/api/types';
 
 function NextWorkoutExerciseRow({ exercise }: { exercise: Exercise }) {
@@ -37,7 +38,7 @@ function NextWorkoutExerciseRow({ exercise }: { exercise: Exercise }) {
               {prevSets
                 .map((s) => {
                   const rpe = s.perceivedEffort ? ` @${s.perceivedEffort}` : '';
-                  return `${s.weight}×${s.reps}${rpe}`;
+                  return `${formatWeight(s.weight)}×${s.reps}${rpe}`;
                 })
                 .join(' · ')}
             </>

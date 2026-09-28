@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { ActiveSession } from '../../../shared/api/types';
+import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { setVolume } from '../../../shared/lib/effectiveWeight';
 
 interface CompletedSessionSummaryProps {
   session: ActiveSession;
@@ -11,9 +13,10 @@ interface CompletedSessionSummaryProps {
  * CompletionCelebration instead.
  */
 export function CompletedSessionSummary({ session }: CompletedSessionSummaryProps) {
+  const { profile: { bodyweight } } = useUserProfile();
   const sets = session.sets || [];
   const totalSets = sets.filter(s => (s.dropIndex || 0) === 0).length;
-  const totalVolume = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+  const totalVolume = sets.reduce((sum, s) => sum + setVolume(s, bodyweight), 0);
   const duration = session.completedAt && session.createdAt
     ? Math.round((new Date(session.completedAt).getTime() - new Date(session.createdAt).getTime()) / 60000)
     : 0;

@@ -2,7 +2,9 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { parseSeries } from '../../../shared/utils/heartRate';
-import { formatMMSS } from '../../../shared/utils/format';
+import { formatMMSS, formatWeight } from '../../../shared/utils/format';
+import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { effectiveWeight, setVolume } from '../../../shared/lib/effectiveWeight';
 import { SessionHRChart } from './SessionHRChart';
 import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
 import { averageRpe } from '../../active-session/logic/averageRpe';
@@ -47,6 +49,7 @@ interface ExerciseGroup {
 export function SessionCard({ session, highlightId, onDelete }: SessionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const confirmTimeoutRef = useRef<number | null>(null);
+  const { profile: { bodyweight } } = useUserProfile();
   const [isExpanded, setIsExpanded] = useState(
     highlightId ? session.id === Number(highlightId) : false
   );
@@ -70,7 +73,7 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
     // Volume only includes strength sets (cardio has weight=reps=0)
     const totalVolume = sets
       .filter(s => !isCardioSet(s))
-      .reduce((sum, s) => sum + s.weight * s.reps, 0);
+      .reduce((sum, s) => sum + setVolume(s, bodyweight), 0);
     const cardioSeconds = sets
       .filter(isCardioSet)
       .reduce((sum, s) => sum + (s.durationSec ?? 0), 0);
@@ -85,7 +88,7 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
       cardioDistance,
       avgRpe: averageRpe(sets),
     };
-  }, [session.sets]);
+  }, [session.sets, bodyweight]);
 
   const exerciseGroups = useMemo((): ExerciseGroup[] => {
     // Sort by id (insertion = performed order) before first-seen grouping so
@@ -216,7 +219,12 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
                           )}
                         </span>
                       ) : (
-                        <span>{set.weight} lbs x {set.reps}</span>
+                        <span>
+                          {formatWeight(set.weight)} lbs x {set.reps}
+                          {set.weight < 0 && bodyweight != null && (
+                            <span className="text-gray-400"> · {effectiveWeight(set.weight, bodyweight)} eff</span>
+                          )}
+                        </span>
                       )}
                       {set.perceivedEffort && (
                         <span className="text-gray-400">RPE {set.perceivedEffort}</span>

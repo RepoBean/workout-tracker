@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatMMSS, parseDurationToSec } from './format';
+import { formatMMSS, formatWeight, parseDurationToSec } from './format';
 
 describe('formatMMSS', () => {
   it('formats zero seconds', () => {
@@ -74,5 +74,14 @@ describe('parseDurationToSec', () => {
     expect(parseDurationToSec(':30')).toBeNull();
     expect(parseDurationToSec('1:2:3:4')).toBeNull();
     expect(parseDurationToSec('5:3.5')).toBeNull();
+  });
+});
+
+describe('formatWeight', () => {
+  it('renders positives plainly and negatives with a real minus sign', () => {
+    expect(formatWeight(185)).toBe('185');
+    expect(formatWeight(0)).toBe('0');
+    expect(formatWeight(-40)).toBe('−40');
+    expect(formatWeight(-37.5)).toBe('−37.5');
   });
 });

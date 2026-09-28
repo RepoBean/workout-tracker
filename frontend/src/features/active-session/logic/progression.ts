@@ -8,8 +8,12 @@
 //
 // The rep half of the suggestion is delegated to `suggestReps` so the pre-fill obeys one
 // set of rules everywhere. This module keeps ownership of the WEIGHT decision.
+//
+// Assisted lifts (negative weight = assistance) need no special case: −40 + 5 = −35 is
+// "less help", which is exactly the progression, and −35 > −40 fires the rep reset.
 
 import { parseRepTarget, suggestReps } from './suggestReps';
+import { formatWeight } from '../../../shared/utils/format';
 
 export type { RepRange } from './suggestReps';
 export { parseRepTarget } from './suggestReps';
@@ -64,7 +68,7 @@ export function computeProgression({
       suggestedWeight,
       suggestedReps: low,
       ready: true,
-      reason: `Last: ${weight}×${topReps} → Try: ${suggestedWeight} ↑`,
+      reason: `Last: ${formatWeight(weight)}×${topReps} → Try: ${formatWeight(suggestedWeight)} ↑`,
     };
   }
 
@@ -86,6 +90,6 @@ export function computeProgression({
       plannedWeight: weight,
     }),
     ready: false,
-    reason: `Aim for ${weight}×${high} to level up`,
+    reason: `Aim for ${formatWeight(weight)}×${high} to level up`,
   };
 }

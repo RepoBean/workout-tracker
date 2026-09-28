@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { SetInput } from './SetInput';
 import { CardioSetInput } from './CardioSetInput';
 import { ExerciseNote } from './ExerciseNote';
+import { AssistToggle } from './AssistToggle';
 import { SwipeableRow } from '../../../shared/ui/SwipeableRow';
 import { Button } from '../../../shared/ui/Button';
 import type { Exercise, Set } from '../../../shared/api/types';
 import { isCardioExercise } from '../../../shared/api/predicates';
-import { formatMMSS, parseDurationToSec } from '../../../shared/utils/format';
+import { formatMMSS, formatWeight, parseDurationToSec } from '../../../shared/utils/format';
 import { useProgression } from '../../../shared/context/ProgressionContext';
 import { computeProgression } from '../logic/progression';
 import { suggestReps } from '../logic/suggestReps';
@@ -47,7 +48,8 @@ interface ExerciseCardProps {
 
 interface EditingSet {
   id: number;
-  weight: string;
+  weight: string; // magnitude; `assisted` carries the sign (keypad has no minus)
+  assisted: boolean;
   reps: string;
 }
 
@@ -149,7 +151,8 @@ export function ExerciseCard({
     if (editingSet?.id === set.id || !onUpdateSet) return;
     setEditingSet({
       id: set.id,
-      weight: String(set.weight),
+      weight: String(Math.abs(set.weight)),
+      assisted: set.weight < 0,
       reps: String(set.reps),
     });
   };
@@ -157,10 +160,11 @@ export function ExerciseCard({
   const handleSaveEdit = () => {
     if (!editingSet || !onUpdateSet) return;
 
-    const weight = parseFloat(editingSet.weight);
+    const magnitude = Math.abs(parseFloat(editingSet.weight));
+    const weight = (editingSet.assisted ? -magnitude : magnitude) || 0;
     const reps = parseInt(editingSet.reps, 10);
 
-    if (!isNaN(weight) && weight >= 0 && !isNaN(reps) && reps > 0) {
+    if (Number.isFinite(weight) && !isNaN(reps) && reps > 0) {
       onUpdateSet(editingSet.id, { weight, reps });
     }
     setEditingSet(null);
@@ -303,7 +307,7 @@ export function ExerciseCard({
             <div className="text-right text-gray-500 dark:text-gray-400 text-sm pr-2 tabular-nums">
               {previousSet ? (
                 <>
-                  {previousSet.weight}×{previousSet.reps}
+                  {formatWeight(previousSet.weight)}×{previousSet.reps}
                   {previousSet.perceivedEffort != null && (
                     <span className="ml-1 text-xs text-gray-500">RPE {previousSet.perceivedEffort}</span>
                   )}
@@ -323,7 +327,7 @@ export function ExerciseCard({
                     type="text"
                     inputMode="decimal"
                     pattern="[0-9]*\.?[0-9]*"
-                    aria-label="Edit weight in pounds"
+                    aria-label={editingSet?.assisted ? 'Edit assistance in pounds' : 'Edit weight in pounds'}
                     value={editingSet?.weight ?? ''}
                     onChange={(e) => setEditingSet(prev => prev ? { ...prev, weight: e.target.value } : null)}
                     onFocus={(e) => e.target.select()}
@@ -332,6 +336,11 @@ export function ExerciseCard({
                                border-2 border-gray-200 dark:border-surface-800 rounded-lg
                                bg-white dark:bg-surface-900 dark:text-white
                                focus:border-primary-500 focus:ring-0 transition-colors"
+                  />
+                  <AssistToggle
+                    assisted={editingSet?.assisted ?? false}
+                    onToggle={() => setEditingSet(prev => prev ? { ...prev, assisted: !prev.assisted } : null)}
+                    className="w-11"
                   />
                   <span className="text-gray-400 dark:text-gray-500 shrink-0">×</span>
                   <input
@@ -375,7 +384,7 @@ export function ExerciseCard({
                     {arrowCell}
                     <div className="flex items-center justify-between gap-1 min-w-0">
                       <span className="font-medium text-green-600 dark:text-green-400 truncate">
-                        ✓ {currentSet.weight}×{currentSet.reps}
+                        ✓ {formatWeight(currentSet.weight)}×{currentSet.reps}
                         {currentSet.perceivedEffort && (
                           <span className="ml-1 text-xs text-gray-500">RPE {currentSet.perceivedEffort}</span>
                         )}
@@ -420,7 +429,7 @@ export function ExerciseCard({
                     <div className="text-right text-xs text-gray-400 pr-2">—</div>
                     <span className="text-gray-400 text-xs">↳</span>
                     <span className="text-orange-600 dark:text-orange-400 text-sm">
-                      Drop {dropSet.dropIndex}: {dropSet.weight}×{dropSet.reps}
+                      Drop {dropSet.dropIndex}: {formatWeight(dropSet.weight)}×{dropSet.reps}
                     </span>
                   </div>
                 </SwipeableRow>

@@ -35,6 +35,7 @@ interface FieldErrors {
   dob?: string;
   restingHr?: string;
   maxHrOverride?: string;
+  bodyweight?: string;
 }
 
 export default function Settings() {
@@ -57,6 +58,7 @@ export default function Settings() {
   const [sex, setSex] = useState<Sex>(profile.sex);
   const [restingHrStr, setRestingHrStr] = useState(toInputString(profile.restingHr));
   const [maxHrStr, setMaxHrStr] = useState(toInputString(profile.maxHrOverride));
+  const [bodyweightStr, setBodyweightStr] = useState(toInputString(profile.bodyweight));
   const [errors, setErrors] = useState<FieldErrors>({});
 
   function parseAndValidate(): { profile: UserProfile; errors: FieldErrors } {
@@ -65,6 +67,7 @@ export default function Settings() {
       sex,
       restingHr: null,
       maxHrOverride: null,
+      bodyweight: null,
     };
     const fieldErrors: FieldErrors = {};
 
@@ -94,6 +97,17 @@ export default function Settings() {
         fieldErrors.maxHrOverride = `Max HR must be ${PROFILE_LIMITS.maxHrOverride.min}–${PROFILE_LIMITS.maxHrOverride.max}`;
       } else {
         next.maxHrOverride = parsed;
+      }
+    }
+
+    const bodyweightTrim = bodyweightStr.trim();
+    if (bodyweightTrim) {
+      const parsed = Number(bodyweightTrim);
+      const { min, max } = PROFILE_LIMITS.bodyweight;
+      if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
+        fieldErrors.bodyweight = `Bodyweight must be ${min}–${max} lbs`;
+      } else {
+        next.bodyweight = parsed;
       }
     }
 
@@ -141,7 +155,7 @@ export default function Settings() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Profile</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Used to compute heart rate zones during cardio. Stored locally on this device.
+            Used for heart rate zones and assisted lifts. Stored locally on this device.
           </p>
         </div>
 
@@ -211,6 +225,23 @@ export default function Settings() {
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Defaults to a formula based on your age and sex. If you've measured your true max during a hard interval, that beats any formula.
+          </p>
+        </div>
+
+        <div>
+          <Input
+            label="Bodyweight (optional)"
+            type="number"
+            inputMode="decimal"
+            value={bodyweightStr}
+            onChange={(e) => setBodyweightStr(e.target.value)}
+            min={PROFILE_LIMITS.bodyweight.min}
+            max={PROFILE_LIMITS.bodyweight.max}
+            placeholder="lbs"
+            error={errors.bodyweight}
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Only needed for assisted lifts: a −40 assisted pull-up counts as bodyweight − 40 in volume, 1RM and PRs.
           </p>
         </div>
 

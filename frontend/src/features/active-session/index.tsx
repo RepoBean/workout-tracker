@@ -25,6 +25,8 @@ import { CompletionCelebration } from './components/CompletionCelebration';
 import { LiveHRChart } from './components/LiveHRChart';
 import { useTimer } from '../../shared/context/TimerContext';
 import { useHeartRate } from '../../shared/context/HeartRateContext';
+import { useUserProfile } from '../../shared/context/UserProfileContext';
+import { setVolume } from '../../shared/lib/effectiveWeight';
 import { downsampleHr } from '../../shared/utils/heartRate';
 import { getTargetSets, isCardioExercise, isCardioSet } from '../../shared/api/predicates';
 import { CARDIO_MODALITY_INFO } from '../../shared/api/cardio';
@@ -66,6 +68,7 @@ export default function ActiveSession() {
 
   const { stopTimer } = useTimer();
   const { isConnected: hrConnected, samplesSince } = useHeartRate();
+  const { profile: { bodyweight } } = useUserProfile();
 
   // Seed an ad-hoc cardio exercise when the picker passed ?cardio=<modality>.
   // Strip the param after seeding so refresh doesn't re-add.
@@ -266,7 +269,7 @@ export default function ActiveSession() {
 
     // Calculate stats before completing
     const totalSetsCount = sets.filter(s => (s.dropIndex || 0) === 0).length;
-    const totalVolumeCalc = sets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+    const totalVolumeCalc = sets.reduce((sum, s) => sum + setVolume(s, bodyweight), 0);
     const sessionStartMs = session?.createdAt
       ? new Date(session.createdAt).getTime()
       : Date.now();

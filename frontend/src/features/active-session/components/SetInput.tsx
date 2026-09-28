@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { PlateCalculator } from './PlateCalculator';
+import { AssistToggle } from './AssistToggle';
 import { getSetInputStorageKeys } from '../lib/sessionStorage';
 
 interface SetInputProps {
@@ -33,15 +34,16 @@ export function SetInput({
   const { weight: weightOverrideKey, reps: repsOverrideKey } =
     getSetInputStorageKeys(sessionId, exerciseName, setNumber);
 
-  // Use string state for display to prevent leading zeros issue
+  // `weight` is the signed value that gets logged (negative = assisted). The text box
+  // shows only its magnitude; `assisted` carries the sign (the decimal keypad has no
+  // minus key) and survives passing through 0 so "assist" + typing 40 gives −40.
   const [weight, setWeight] = useState(() => {
     const saved = localStorage.getItem(weightOverrideKey);
     return saved ? parseFloat(saved) : previousWeight;
   });
-  const [weightStr, setWeightStr] = useState(() => {
-    const saved = localStorage.getItem(weightOverrideKey);
-    return saved ?? String(previousWeight);
-  });
+  const [assisted, setAssisted] = useState(() => weight < 0);
+  // Use string state for display to prevent leading zeros issue
+  const [weightStr, setWeightStr] = useState(() => String(Math.abs(weight)));
   const [reps, setReps] = useState(() => {
     const saved = localStorage.getItem(repsOverrideKey);
     return saved ? parseInt(saved, 10) : previousReps;
@@ -59,7 +61,8 @@ export function SetInput({
     // Only sync from props if user hasn't made manual changes
     if (!isDirty.current) {
       setWeight(previousWeight);
-      setWeightStr(String(previousWeight));
+      setAssisted(previousWeight < 0);
+      setWeightStr(String(Math.abs(previousWeight)));
       localStorage.removeItem(weightOverrideKey);
     }
   }, [previousWeight]);
@@ -73,13 +76,25 @@ export function SetInput({
     }
   }, [previousReps]);
 
+  // Steppers move the signed value, so +2.5 is always "heavier" (less assistance)
+  // and crosses zero cleanly: −2.5 → 0 → 2.5.
   const updateWeight = useCallback((value: number) => {
-    const clamped = Math.max(0, value);
-    setWeight(clamped);
-    setWeightStr(String(clamped));
+    const next = value || 0; // normalize -0
+    setWeight(next);
+    setAssisted(prev => next < 0 || (next === 0 && prev));
+    setWeightStr(String(Math.abs(next)));
     isDirty.current = true;
-    localStorage.setItem(weightOverrideKey, String(clamped));
+    localStorage.setItem(weightOverrideKey, String(next));
   }, [weightOverrideKey]);
+
+  const toggleAssisted = useCallback(() => {
+    const nextAssisted = !assisted;
+    const next = (nextAssisted ? -1 : 1) * Math.abs(weight) || 0;
+    setAssisted(nextAssisted);
+    setWeight(next);
+    isDirty.current = true;
+    localStorage.setItem(weightOverrideKey, String(next));
+  }, [assisted, weight, weightOverrideKey]);
 
   const updateReps = useCallback((value: number) => {
     const clamped = Math.max(1, value);
@@ -98,20 +113,20 @@ export function SetInput({
       localStorage.setItem(weightOverrideKey, '0');
       return;
     }
-    // Strip leading zeros and parse
+    // Strip leading zeros and parse; the box holds a magnitude, the toggle the sign
     const parsed = parseFloat(raw);
     if (!isNaN(parsed)) {
-      const clamped = Math.max(0, parsed);
-      setWeight(clamped);
+      const next = (assisted ? -1 : 1) * Math.abs(parsed) || 0;
+      setWeight(next);
       setWeightStr(raw);
       isDirty.current = true;
-      localStorage.setItem(weightOverrideKey, String(clamped));
+      localStorage.setItem(weightOverrideKey, String(next));
     }
-  }, [weightOverrideKey]);
+  }, [assisted, weightOverrideKey]);
 
   const handleWeightBlur = useCallback(() => {
     // On blur, normalize the display value
-    setWeightStr(String(weight));
+    setWeightStr(String(Math.abs(weight)));
   }, [weight]);
 
   const handleRepsChange = useCallback((raw: string) => {
@@ -164,7 +179,7 @@ export function SetInput({
         <div className="flex items-center gap-1.5 flex-1 justify-center">
           <button
             onClick={() => updateWeight(weight - 2.5)}
-            className="w-14 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
+            className="w-12 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             -2.5
           </button>
@@ -172,22 +187,25 @@ export function SetInput({
             type="text"
             inputMode="decimal"
             pattern="[0-9]*\.?[0-9]*"
-            aria-label="Weight in pounds"
+            aria-label={assisted ? 'Assistance in pounds' : 'Weight in pounds'}
             value={weightStr}
             onChange={(e) => handleWeightChange(e.target.value)}
             onBlur={handleWeightBlur}
             onFocus={(e) => e.target.select()}
-            className="w-24 text-center text-2xl font-display font-bold border-2 border-gray-200 dark:border-surface-800 rounded-lg py-2 tabular-nums
-                       bg-white dark:bg-surface-900 dark:text-white focus:border-primary-500 focus:ring-0 transition-colors"
+            className={`w-24 text-center text-2xl font-display font-bold border-2 rounded-lg py-2 tabular-nums
+                       bg-white dark:bg-surface-900 focus:ring-0 transition-colors
+                       ${assisted
+                         ? 'border-accent-300 dark:border-accent-700 text-accent-700 dark:text-accent-300 focus:border-accent-500'
+                         : 'border-gray-200 dark:border-surface-800 dark:text-white focus:border-primary-500'}`}
           />
           <button
             onClick={() => updateWeight(weight + 2.5)}
-            className="w-14 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
+            className="w-12 h-12 rounded-lg text-sm font-semibold bg-gray-200 dark:bg-surface-800 text-gray-700 dark:text-gray-300 active:scale-95 transition-all"
           >
             +2.5
           </button>
         </div>
-        <span className="text-sm text-gray-400 dark:text-gray-500 w-8 shrink-0">lbs</span>
+        <AssistToggle assisted={assisted} onToggle={toggleAssisted} className="w-12" />
       </div>
 
       {/* Plate Calculator */}
@@ -222,7 +240,7 @@ export function SetInput({
             +1
           </button>
         </div>
-        <span className="w-8 shrink-0"></span>
+        <span className="w-12 shrink-0"></span>
       </div>
 
       {/* Log Button */}

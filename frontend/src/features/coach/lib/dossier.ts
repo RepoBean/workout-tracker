@@ -18,6 +18,7 @@ import type { Program, Session, Set as WorkoutSet, StatsResponse } from '../../.
 import { isCardioSet } from '../../../shared/api/predicates';
 import { exerciseTargetSummary } from '../../../shared/api/cardio';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
+import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 import { computeAge, type UserProfile } from '../../../shared/lib/hrZones';
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
 
@@ -153,9 +154,16 @@ interface ExerciseRollup {
   lastDate: string;
   /** date -> heaviest working weight that day, for stall detection. */
   topByDate: Map<string, number>;
+  /** Any assisted (negative-weight) set counted — loads are then bodyweight − assistance. */
+  assisted: boolean;
 }
 
-function rollupExercises(sessions: Session[]): Map<string, ExerciseRollup> {
+/**
+ * Weight figures use effective load: an assisted set (−40 = 40 lb of help) counts as
+ * bodyweight − 40, on the same scale as history hand-entered as an effective load. Without
+ * a bodyweight, assisted sets add to counts but not to any weight figure.
+ */
+function rollupExercises(sessions: Session[], bodyweight: number | null): Map<string, ExerciseRollup> {
   const out = new Map<string, ExerciseRollup>();
   // Oldest first so first/last weight land the right way round.
   const ordered = [...sessions].sort((a, b) =>
@@ -185,6 +193,7 @@ function rollupExercises(sessions: Session[]): Map<string, ExerciseRollup> {
           firstDate: date,
           lastDate: date,
           topByDate: new Map(),
+          assisted: false,
         };
         out.set(set.exerciseName, r);
       }
@@ -205,17 +214,20 @@ function rollupExercises(sessions: Session[]): Map<string, ExerciseRollup> {
         continue;
       }
 
-      if (!r.firstWeight && set.weight > 0) r.firstWeight = set.weight;
-      if (set.weight > 0) r.lastWeight = set.weight;
-      if (set.weight > 0 && set.reps > 0) {
-        const e1rm = epleyOneRepMax(set.weight, set.reps);
+      const weight = effectiveWeight(set.weight, bodyweight);
+      if (weight == null) continue;
+      if (set.weight < 0) r.assisted = true;
+      if (!r.firstWeight && weight > 0) r.firstWeight = weight;
+      if (weight > 0) r.lastWeight = weight;
+      if (weight > 0 && set.reps > 0) {
+        const e1rm = epleyOneRepMax(weight, set.reps);
         if (e1rm > r.best1RM) {
           r.best1RM = e1rm;
-          r.bestWeight = set.weight;
+          r.bestWeight = weight;
           r.bestReps = set.reps;
         }
       }
-      r.topByDate.set(date, Math.max(r.topByDate.get(date) ?? 0, set.weight));
+      r.topByDate.set(date, Math.max(r.topByDate.get(date) ?? 0, weight));
     }
   }
   return out;
@@ -259,10 +271,11 @@ function renderRollup(r: ExerciseRollup, today: string): string {
     }
   } else {
     if (r.firstWeight || r.lastWeight) {
+      const unit = r.assisted ? 'lb effective (assisted)' : 'lb';
       parts.push(
         r.firstWeight === r.lastWeight
-          ? `${r.lastWeight} lb`
-          : `${r.firstWeight}→${r.lastWeight} lb`
+          ? `${r.lastWeight} ${unit}`
+          : `${r.firstWeight}→${r.lastWeight} ${unit}`
       );
     }
     if (r.best1RM > 0) parts.push(`best ${r.bestWeight}x${r.bestReps} (1RM ${r.best1RM})`);
@@ -289,8 +302,12 @@ function renderRollup(r: ExerciseRollup, today: string): string {
  * (49, a handful added per year), not with sessions — which is why the dossier stays flat
  * at ~3k tokens no matter how long the history gets.
  */
-export function buildAllTimeBlock(sessions: Session[], today: string): string {
-  const rollups = [...rollupExercises(sessions).values()].sort(
+export function buildAllTimeBlock(
+  sessions: Session[],
+  today: string,
+  bodyweight: number | null = null
+): string {
+  const rollups = [...rollupExercises(sessions, bodyweight).values()].sort(
     (a, b) => b.sets - a.sets || a.name.localeCompare(b.name)
   );
   if (rollups.length === 0) return 'All-time per exercise: none yet.';
@@ -379,6 +396,7 @@ export function buildAthleteLine(
   if (age != null) parts.push(`${age}${sexLabel}`);
   else if (sexLabel) parts.push(sexLabel);
   if (profile.restingHr != null) parts.push(`resting HR ${profile.restingHr}`);
+  if (profile.bodyweight != null) parts.push(`bodyweight ${profile.bodyweight} lb`);
   parts.push(
     progression.enabled
       ? `auto-progression on (+${progression.incrementLbs} lb)`
@@ -434,10 +452,11 @@ export function assembleDossier(parts: DossierParts): string {
  */
 export function buildAllTimeParts(
   sessions: Session[],
-  today: string
+  today: string,
+  bodyweight: number | null
 ): { allTime: string; notes: string } {
   return {
-    allTime: buildAllTimeBlock(sessions, today),
+    allTime: buildAllTimeBlock(sessions, today, bodyweight),
     notes: buildNotesBlock(sessions),
   };
 }

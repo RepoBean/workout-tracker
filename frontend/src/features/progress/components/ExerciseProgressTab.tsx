@@ -2,7 +2,9 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { useProgressData } from '../hooks/useProgressData';
 import { ProgressChart } from './ProgressChart';
-import { formatMMSS } from '../../../shared/utils/format';
+import { formatMMSS, formatWeight } from '../../../shared/utils/format';
+import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 
 function formatSessionDate(dateString: string): string {
     const date = new Date(dateString);
@@ -42,6 +44,7 @@ export function ExerciseProgressTab() {
         allCardioExerciseNames,
         getCardioExerciseHistory,
     } = useProgressData();
+    const { profile: { bodyweight } } = useUserProfile();
 
     // Filter autocomplete suggestions to cardio-only when in cardio mode.
     const cardioNameSet = useMemo(
@@ -334,7 +337,12 @@ export function ExerciseProgressTab() {
                                                     <span className="w-12">
                                                         {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
                                                     </span>
-                                                    <span>{set.weight} lbs x {set.reps}</span>
+                                                    <span>
+                                                        {formatWeight(set.weight)} lbs x {set.reps}
+                                                        {set.weight < 0 && bodyweight != null && (
+                                                            <span className="text-gray-400"> · {effectiveWeight(set.weight, bodyweight)} eff</span>
+                                                        )}
+                                                    </span>
                                                     {set.perceivedEffort && (
                                                         <span className="text-gray-400">RPE {set.perceivedEffort}</span>
                                                     )}

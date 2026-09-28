@@ -5,6 +5,8 @@ export interface UserProfile {
   sex: Sex;
   restingHr: number | null;
   maxHrOverride: number | null;
+  /** lbs. Only used to turn assisted (negative-weight) sets into an effective load. */
+  bodyweight: number | null;
 }
 
 export const DEFAULT_PROFILE: UserProfile = {
@@ -12,12 +14,14 @@ export const DEFAULT_PROFILE: UserProfile = {
   sex: 'unspecified',
   restingHr: null,
   maxHrOverride: null,
+  bodyweight: null,
 };
 
 export const PROFILE_LIMITS = {
   age: { min: 10, max: 120 },
   restingHr: { min: 30, max: 100 },
   maxHrOverride: { min: 100, max: 220 },
+  bodyweight: { min: 50, max: 700 },
 } as const;
 
 const DOB_PATTERN = /^\d{4}-\d{2}-\d{2}$/;

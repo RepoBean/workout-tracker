@@ -93,6 +93,18 @@ describe('suggestReps', () => {
     ).toBe(8);
   });
 
+  it('resets to the bottom of the range when assistance drops (−40 → −35)', () => {
+    expect(
+      suggestReps({
+        setNumber: 1,
+        targetReps: '8-12',
+        previousSets: sets(-40, 12, 12),
+        currentSessionSets: [],
+        plannedWeight: -35,
+      })
+    ).toBe(8);
+  });
+
   it('does not bump when the weight is dropped', () => {
     expect(
       suggestReps({

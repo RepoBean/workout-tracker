@@ -121,7 +121,7 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 ### Bundle 4 — Settings + bodyweight
 - [ ] `Settings` key/value (or Profile) table: DOB, sex, resting/max HR, progression settings. **Coach API key stays browser-only by default** (decide explicitly). Theme stays local.
 - [ ] `BodyweightLog` (date, lbs). Makes the assisted-lift plan's effective-weight calc honest over time.
-- [ ] Revisit the unshipped **assisted lifts** plan here: either keep its sign-as-notation approach (`weight < 0`) or use the catalog `isAssisted` flag. Both work; the plan file has the full site list.
+- [x] **Assisted lifts shipped early (2026-09-28)** with the sign-as-notation approach (`weight < 0`) and a single profile bodyweight (localStorage). A `BodyweightLog` would make old assisted sets' effective loads honest over time; `effectiveWeight()` is the one place to swap in a dated lookup.
 
 ### Bundle 5 — Derived-read endpoints
 - [ ] `/api/exercises/:catalogId/history`, a progress summary endpoint, `/sessions/:id/previous` rewritten, `/api/coach/dossier` text built server-side. Frontend stops downloading the full history; `useProgressData` and `dossier.ts` shrink or move.

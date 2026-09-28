@@ -5,6 +5,9 @@ import { queryKeys, type ExerciseAllSet } from '../../../shared/api/queries';
 import type { Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
+import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import { formatWeight } from '../../../shared/utils/format';
 import { computeBestOneRepMax, epleyOneRepMax } from '../logic/personalRecord';
 
 /**
@@ -16,6 +19,7 @@ import { computeBestOneRepMax, epleyOneRepMax } from '../logic/personalRecord';
 export function usePrCelebration(sessionId: number) {
   const queryClient = useQueryClient();
   const toast = useToast();
+  const { profile: { bodyweight } } = useUserProfile();
 
   const sessionPRsRef = useRef<Map<string, number>>(new Map());
 
@@ -32,7 +36,10 @@ export function usePrCelebration(sessionId: number) {
   async function checkAndCelebratePR(savedSet: Set): Promise<void> {
     if (savedSet.dropIndex > 0) return;
     if (isCardioSet(savedSet)) return;
-    if (savedSet.weight <= 0 || savedSet.reps <= 0) return;
+    // 1RM uses effective load (assisted sets: bodyweight + weight); the toast
+    // shows the raw entry.
+    const weight = effectiveWeight(savedSet.weight, bodyweight);
+    if (weight == null || weight <= 0 || savedSet.reps <= 0) return;
 
     const key = savedSet.exerciseName.toLowerCase();
     let runningBest = sessionPRsRef.current.get(key);
@@ -50,7 +57,7 @@ export function usePrCelebration(sessionId: number) {
           },
           staleTime: 5 * 60 * 1000,
         });
-        const preSessionBest = computeBestOneRepMax(data.sets);
+        const preSessionBest = computeBestOneRepMax(data.sets, bodyweight);
         // Skip first-ever exercise — silent baseline establishment.
         if (preSessionBest <= 0) return;
         sessionPRsRef.current.set(key, preSessionBest);
@@ -61,10 +68,10 @@ export function usePrCelebration(sessionId: number) {
       }
     }
 
-    const new1RM = epleyOneRepMax(savedSet.weight, savedSet.reps);
+    const new1RM = epleyOneRepMax(weight, savedSet.reps);
     if (new1RM > runningBest) {
       toast.success(
-        `🎉 New PR! ${savedSet.exerciseName}: ${savedSet.weight}×${savedSet.reps} (est 1RM ${new1RM})`
+        `🎉 New PR! ${savedSet.exerciseName}: ${formatWeight(savedSet.weight)}×${savedSet.reps} (est 1RM ${new1RM})`
       );
       sessionPRsRef.current.set(key, new1RM);
     }

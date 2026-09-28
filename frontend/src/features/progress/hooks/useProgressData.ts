@@ -3,6 +3,8 @@ import { useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioExercise, isCardioSet } from '../../../shared/api/predicates';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
+import { effectiveWeight, setVolume } from '../../../shared/lib/effectiveWeight';
+import { useUserProfile } from '../../../shared/context/UserProfileContext';
 
 export interface ExerciseSession {
     sessionId: number;
@@ -86,6 +88,10 @@ export function useProgressData(): UseProgressDataReturn {
     // backend clamps limit at 2000, so 1000 covers a personal lifetime of data.
     const { data: sessions, isLoading: historyLoading, error: historyError } = useHistory(1000, 0);
     const { data: programs, isLoading: programsLoading } = usePrograms();
+    // Assisted (negative-weight) sets score as bodyweight + weight; without a
+    // bodyweight they are skipped from bests/volume, like 0-weight sets.
+    const { profile: { bodyweight } } = useUserProfile();
+    const volumeOf = useMemo(() => (set: Set) => setVolume(set, bodyweight), [bodyweight]);
 
     // Derive unique exercise names from history
     const allExerciseNames = useMemo(() => {
@@ -184,7 +190,14 @@ export function useProgressData(): UseProgressDataReturn {
                 // Bests exclude drop sets (dropIndex > 0) to match the PR
                 // celebration in active-session/logic/personalRecord.ts;
                 // the display list below keeps them.
-                const workingSets = exerciseSets.filter(s => (s.dropIndex || 0) === 0);
+                // Bests use effective load so an assisted lift's chart stays on one
+                // scale (−40 at 185 bw plots as 145, like hand-entered effective sets).
+                const workingSets = exerciseSets
+                    .filter(s => (s.dropIndex || 0) === 0)
+                    .flatMap(s => {
+                        const weight = effectiveWeight(s.weight, bodyweight);
+                        return weight == null ? [] : [{ weight, reps: s.reps }];
+                    });
 
                 const bestWeight = workingSets.length > 0
                     ? Math.max(...workingSets.map(s => s.weight))
@@ -233,7 +246,7 @@ export function useProgressData(): UseProgressDataReturn {
                 new Date(a.date).getTime() - new Date(b.date).getTime()
             );
         };
-    }, [sessions]);
+    }, [sessions, bodyweight]);
 
     const getCardioExerciseHistory = useMemo(() => {
         return (name: string): CardioExerciseSession[] => {
@@ -331,7 +344,7 @@ export function useProgressData(): UseProgressDataReturn {
 
             let sessionVolume = 0;
             session.sets?.forEach((set: Set) => {
-                sessionVolume += set.weight * set.reps;
+                sessionVolume += volumeOf(set);
             });
 
             volumeByWeek.set(weekKey, (volumeByWeek.get(weekKey) || 0) + sessionVolume);
@@ -355,7 +368,7 @@ export function useProgressData(): UseProgressDataReturn {
         }
 
         return weeks;
-    }, [sessions]);
+    }, [sessions, volumeOf]);
 
     // Calculate current and previous week volumes
     const { thisWeekVolume, lastWeekVolume } = useMemo(() => {
@@ -390,7 +403,7 @@ export function useProgressData(): UseProgressDataReturn {
 
             let sessionVolume = 0;
             session.sets?.forEach((set: Set) => {
-                sessionVolume += set.weight * set.reps;
+                sessionVolume += volumeOf(set);
             });
 
             if (sessionMonth === thisMonth && sessionYear === thisYear) {
@@ -401,7 +414,7 @@ export function useProgressData(): UseProgressDataReturn {
         });
 
         return { thisMonthVolume: thisMonthTotal, lastMonthVolume: lastMonthTotal };
-    }, [sessions]);
+    }, [sessions, volumeOf]);
 
     // Calculate personal records (best volume set per exercise)
     const personalRecords = useMemo((): PersonalRecord[] => {
@@ -428,21 +441,24 @@ export function useProgressData(): UseProgressDataReturn {
                 if (isCardioSet(set)) return;
                 // Drop sets don't count toward PRs (matches personalRecord.ts)
                 if ((set.dropIndex || 0) > 0) return;
+                // Assisted sets use effective load; skipped without a bodyweight
+                const weight = effectiveWeight(set.weight, bodyweight);
+                if (weight == null) return;
 
                 // Track best volume set
-                const volume = set.weight * set.reps;
+                const volume = weight * set.reps;
                 const existingVolume = bestVolumeByExercise.get(set.exerciseName);
                 if (!existingVolume || volume > existingVolume.volume) {
                     bestVolumeByExercise.set(set.exerciseName, {
                         volume,
-                        weight: set.weight,
+                        weight,
                         reps: set.reps,
                         date: session.completedAt!,
                     });
                 }
 
                 // Track best estimated 1RM independently
-                const estimated1RM = epleyOneRepMax(set.weight, set.reps);
+                const estimated1RM = epleyOneRepMax(weight, set.reps);
                 const existing1RM = best1RMByExercise.get(set.exerciseName);
                 if (!existing1RM || estimated1RM > existing1RM.estimated1RM) {
                     best1RMByExercise.set(set.exerciseName, {
@@ -477,7 +493,7 @@ export function useProgressData(): UseProgressDataReturn {
 
         // Sort by estimated 1RM descending (strongest lifts first)
         return records.sort((a, b) => b.estimated1RM - a.estimated1RM);
-    }, [sessions]);
+    }, [sessions, bodyweight]);
 
     return {
         isLoading: historyLoading || programsLoading,

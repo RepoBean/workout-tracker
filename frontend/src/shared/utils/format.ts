@@ -11,6 +11,14 @@ export function formatMMSS(sec: number): string {
 }
 
 /**
+ * Format a set weight for display. Assisted (negative) weights get a real minus
+ * sign (U+2212) so "−40" stays legible at set-row size.
+ */
+export function formatWeight(weight: number): string {
+  return weight < 0 ? `\u2212${-weight}` : String(weight);
+}
+
+/**
  * Parse a user-entered duration string into whole seconds.
  * Accepts `m:ss` / `h:mm:ss` (e.g. "32:14", "1:02:30") or plain/decimal
  * minutes (e.g. "30", "32.5" -> 1950). Returns null when the input is

@@ -128,3 +128,30 @@ describe('computeProgression', () => {
     expect(result).toMatchObject({ suggestedWeight: 105, ready: true });
   });
 });
+
+describe('computeProgression — assisted (negative weight) lifts', () => {
+  it('suggests less assistance when the range is topped out (−40 → −35)', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: -40, reps: 12 },
+        { weight: -40, reps: 12 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ suggestedWeight: -35, suggestedReps: 8, ready: true });
+    expect(result?.reason).toBe('Last: −40×12 → Try: −35 ↑');
+  });
+
+  it('keeps the assistance when not topped out', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: -40, reps: 10 },
+        { weight: -40, reps: 9 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ suggestedWeight: -40, ready: false });
+  });
+});

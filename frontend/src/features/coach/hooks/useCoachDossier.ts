@@ -83,7 +83,11 @@ export function useCoachDossier() {
   // Identity of the current history: newest session + how many there are.
   const newestId = recentSessions?.[0]?.id ?? 0;
   const totalSessions = stats?.totalSessions ?? 0;
-  const cacheKey = newestId && totalSessions ? `${newestId}:${totalSessions}:${today}` : '';
+  // Bodyweight is in the key because assisted sets' effective loads depend on it.
+  const bodyweight = profile.bodyweight;
+  const cacheKey = newestId && totalSessions
+    ? `${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}`
+    : '';
 
   const cached = useMemo(() => {
     if (!cacheKey) return null;
@@ -102,7 +106,7 @@ export function useCoachDossier() {
         params: { limit: ALL_TIME_LIMIT },
         timeout: ALL_TIME_TIMEOUT_MS,
       });
-      const parts = buildAllTimeParts(data, today);
+      const parts = buildAllTimeParts(data, today, bodyweight);
       writeCache({ key: cacheKey, ...parts });
       return parts;
     },

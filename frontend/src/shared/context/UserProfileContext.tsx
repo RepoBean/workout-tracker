@@ -19,6 +19,7 @@ function parseProfile(raw: string | null): UserProfile {
       sex: obj.sex === 'male' || obj.sex === 'female' ? obj.sex : 'unspecified',
       restingHr: typeof obj.restingHr === 'number' ? obj.restingHr : null,
       maxHrOverride: typeof obj.maxHrOverride === 'number' ? obj.maxHrOverride : null,
+      bodyweight: typeof obj.bodyweight === 'number' ? obj.bodyweight : null,
     };
   } catch {
     return DEFAULT_PROFILE;

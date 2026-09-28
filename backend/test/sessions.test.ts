@@ -158,6 +158,60 @@ describe('PUT /api/sessions/:id/sets/:setId', () => {
   });
 });
 
+describe('assisted sets — negative weight', () => {
+  it('logs a negative (assisted) weight and round-trips it', async () => {
+    const { pull } = await seedProgram();
+    const session = await startSession(pull.id);
+
+    const res = await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseName: 'Neutral Grip Pull-Up', weight: -40, reps: 8, setNumber: 1,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.weight).toBe(-40);
+
+    const got = await request(app).get(`/api/sessions/${session.id}`);
+    expect(got.body.sets[0].weight).toBe(-40);
+  });
+
+  it('updates an existing set to a negative weight', async () => {
+    const { pull } = await seedProgram();
+    const session = await startSession(pull.id);
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseName: 'Neutral Grip Pull-Up', weight: 0, reps: 8, setNumber: 1,
+    });
+
+    const res = await request(app)
+      .put(`/api/sessions/${session.id}/sets/${logged.body.id}`)
+      .send({ weight: -35 });
+    expect(res.status).toBe(200);
+    expect(res.body.weight).toBe(-35);
+  });
+
+  it('rejects weights below the -500 floor', async () => {
+    const { pull } = await seedProgram();
+    const session = await startSession(pull.id);
+
+    const res = await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseName: 'Neutral Grip Pull-Up', weight: -600, reps: 8, setNumber: 1,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('exports a negative weight as a numeric CSV cell, not a quoted text cell', async () => {
+    const { pull } = await seedProgram();
+    const session = await startSession(pull.id);
+    await request(app).post(`/api/sessions/${session.id}/sets`).send({
+      exerciseName: 'Neutral Grip Pull-Up', weight: -40, reps: 8, setNumber: 1,
+    });
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+
+    const res = await request(app).get('/api/sessions/export-csv');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain(',-40,8,');
+    expect(res.text).not.toContain("'-40");
+  });
+});
+
 describe('sets ordering — performed order', () => {
   it('returns sets in insertion (id) order on GET /:id and /history', async () => {
     const { push } = await seedProgram();

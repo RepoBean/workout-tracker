@@ -21,10 +21,14 @@ const startSessionSchema = z.object({
   isAdHoc: z.boolean().optional().default(false),
 });
 
+// Floor for set weight. Negative weights log assisted lifts (assisted pull-up
+// at -40 = 40 lbs of help); analytics convert via bodyweight on the client.
+const MIN_WEIGHT = -500;
+
 const logSetSchema = z.object({
   exerciseId: z.number().int().nullable().optional(), // negative IDs allowed for ad-hoc
   exerciseName: z.string().min(1).max(255),
-  weight: z.number().min(0),
+  weight: z.number().min(MIN_WEIGHT), // negative = assisted (e.g. -40 = 40 lbs of assistance)
   reps: z.number().int().min(0),
   setNumber: z.number().int().min(1),
   perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
@@ -48,7 +52,7 @@ const logSetSchema = z.object({
 // re-pointed sets become name-keyed ad-hoc, never attached to another program
 // exercise's positive id.
 const updateSetSchema = z.object({
-  weight: z.number().min(0).optional(),
+  weight: z.number().min(MIN_WEIGHT).optional(),
   reps: z.number().int().min(0).optional(),
   perceivedEffort: z.number().int().min(1).max(10).nullable().optional(),
   heartRateAvg: z.number().int().min(20).max(250).nullable().optional(),
@@ -199,6 +203,9 @@ router.get('/export-csv', async (req: Request, res: Response) => {
     // CSV field escaping to prevent formula injection
     const escapeCSV = (value: string | number | null | undefined): string => {
       if (value === null || value === undefined) return '';
+      // Numbers are never a formula-injection vector; without this an assisted
+      // weight (-40) would export as the text cell "'-40".
+      if (typeof value === 'number') return String(value);
       const str = String(value);
       if (/^[=+\-@\t\r]/.test(str)) {
         return `"'${str.replace(/"/g, '""')}"`;

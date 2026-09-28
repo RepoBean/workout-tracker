@@ -8,6 +8,7 @@ const profile30M: UserProfile = {
   sex: 'male',
   restingHr: null,
   maxHrOverride: null,
+  bodyweight: null,
 };
 
 const noAge: UserProfile = {
@@ -15,6 +16,7 @@ const noAge: UserProfile = {
   sex: 'unspecified',
   restingHr: null,
   maxHrOverride: null,
+  bodyweight: null,
 };
 
 describe('computeTimeInZone', () => {

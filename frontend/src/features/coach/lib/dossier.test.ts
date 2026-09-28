@@ -248,6 +248,48 @@ describe('buildAllTimeBlock', () => {
   it('handles an empty history', () => {
     expect(buildAllTimeBlock([], TODAY)).toBe('All-time per exercise: none yet.');
   });
+
+  it('scores assisted sets at effective load and continues hand-entered history', () => {
+    const out = buildAllTimeBlock(
+      [
+        session({
+          completedAt: '2026-08-01T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Neutral Grip Pull-Up', weight: 135, reps: 8 })],
+        }),
+        session({
+          completedAt: '2026-09-02T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Neutral Grip Pull-Up', weight: -40, reps: 8 })],
+        }),
+      ],
+      TODAY,
+      185
+    );
+    expect(out).toContain('Neutral Grip Pull-Up: 2 sets, 2 dates, 135→145 lb effective (assisted), best 145x8');
+  });
+
+  it('fires stall detection on an unchanged assisted weight', () => {
+    const dates = ['2026-08-20', '2026-08-27', '2026-09-03'];
+    const out = buildAllTimeBlock(
+      dates.map((d) =>
+        session({
+          completedAt: `${d}T11:00:00.000Z`,
+          sets: [set({ exerciseName: 'Assisted Dip', weight: -50, reps: 10 })],
+        })
+      ),
+      TODAY,
+      185
+    );
+    expect(out).toContain('stalled 3 sessions @135');
+  });
+
+  it('leaves assisted sets out of weight figures without a bodyweight', () => {
+    const out = buildAllTimeBlock(
+      [session({ sets: [set({ exerciseName: 'Assisted Dip', weight: -50, reps: 10 })] })],
+      TODAY
+    );
+    expect(out).toMatch(/Assisted Dip: 1 sets, 1 dates, last /);
+    expect(out).not.toContain('1RM');
+  });
 });
 
 describe('buildNotesBlock', () => {
@@ -270,11 +312,20 @@ describe('buildNotesBlock', () => {
 describe('buildAthleteLine', () => {
   it('includes age, sex, resting HR and progression settings', () => {
     const line = buildAthleteLine(
-      { dob: '1985-03-01', sex: 'male', restingHr: 58, maxHrOverride: null },
+      { dob: '1985-03-01', sex: 'male', restingHr: 58, maxHrOverride: null, bodyweight: null },
       { enabled: true, incrementLbs: 5 },
       TODAY
     );
     expect(line).toBe('Athlete: 41M · resting HR 58 · auto-progression on (+5 lb)');
+  });
+
+  it('includes bodyweight when set', () => {
+    const line = buildAthleteLine(
+      { dob: null, sex: 'unspecified', restingHr: null, maxHrOverride: null, bodyweight: 185 },
+      { enabled: false, incrementLbs: 5 },
+      TODAY
+    );
+    expect(line).toBe('Athlete: bodyweight 185 lb · auto-progression off');
   });
 
   it('degrades gracefully with an empty profile', () => {
