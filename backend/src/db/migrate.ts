@@ -3,9 +3,10 @@ import { fileURLToPath } from 'node:url';
 import type { Database } from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { backfillCatalog } from './catalog.js';
 
 /**
- * Startup schema bootstrap, in two stages:
+ * Startup schema bootstrap, in three stages:
  *
  * 1. legacyColumns() — the pre-Drizzle additive column list. Sequelize's sync()
  *    created the base tables and this list added everything since launch. It is
@@ -15,6 +16,9 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
  *    EXISTS baseline that is a no-op on an existing database and a full create
  *    on an empty one; everything after it is a real change. Applied ones are
  *    recorded in __drizzle_migrations.
+ * 3. backfillCatalog() (src/db/catalog.ts) — fills Exercises/Sets.catalogId from
+ *    names. Every boot, not a migration: it also heals rows an older image wrote
+ *    while rolled back. Silent once converged.
  */
 
 // Resolves to backend/drizzle from both src/db (tsx) and dist/db (node).
@@ -78,4 +82,8 @@ export function bootstrap(sqlite: Database, migrationsFolder = MIGRATIONS_FOLDER
   const added = legacyColumns(sqlite);
   for (const col of added) console.log(`Added legacy column ${col}`);
   migrate(drizzle(sqlite), { migrationsFolder });
+  const c = backfillCatalog(sqlite);
+  if (c.created || c.sets || c.exercises || c.removed) {
+    console.log(`Catalog backfill: +${c.created} catalog rows, ${c.sets} sets, ${c.exercises} exercises resolved, ${c.removed} unused rows removed`);
+  }
 }
