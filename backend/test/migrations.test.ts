@@ -36,18 +36,24 @@ CREATE TABLE \`Sessions\` (\`id\` INTEGER PRIMARY KEY AUTOINCREMENT, \`programId
 CREATE TABLE \`Sets\` (\`id\` INTEGER PRIMARY KEY AUTOINCREMENT, \`sessionId\` INTEGER NOT NULL REFERENCES \`Sessions\` (\`id\`) ON DELETE CASCADE ON UPDATE CASCADE, \`exerciseId\` INTEGER REFERENCES \`Exercises\` (\`id\`) ON DELETE SET NULL ON UPDATE CASCADE, \`exerciseName\` VARCHAR(255) NOT NULL, \`weight\` DECIMAL(6,2) NOT NULL, \`reps\` INTEGER NOT NULL, \`setNumber\` INTEGER NOT NULL, \`perceivedEffort\` INTEGER, \`createdAt\` DATETIME NOT NULL, \`updatedAt\` DATETIME NOT NULL);
 `;
 
-const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets'];
+const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog'];
+const MIGRATIONS = 4; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
   Workouts: ['id', 'programId', 'name', 'orderIndex', 'createdAt', 'updatedAt'],
   Exercises: ['id', 'workoutId', 'name', 'targetSets', 'targetReps', 'orderIndex', 'supersetGroup',
-    'exerciseType', 'cardioModality', 'targetDurationSec', 'targetDistance', 'createdAt', 'updatedAt'],
+    'exerciseType', 'cardioModality', 'targetDurationSec', 'targetDistance', 'createdAt', 'updatedAt', 'catalogId'],
   Sessions: ['id', 'programId', 'programName', 'workoutId', 'workoutName', 'completedAt', 'isAdHoc',
     'heartRateAvg', 'heartRateMin', 'heartRateMax', 'heartRateSeries', 'exerciseNotes', 'createdAt', 'updatedAt'],
   Sets: ['id', 'sessionId', 'exerciseId', 'exerciseName', 'weight', 'reps', 'setNumber', 'perceivedEffort',
-    'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt'],
+    'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt', 'catalogId'],
+  ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt'],
 };
+
+// What 0002's ALTER TABLE ... ADD appends to a table's stored DDL.
+const withCatalogId = (ddl: string | null) =>
+  ddl?.replace(/\)$/, ', `catalogId` integer REFERENCES ExerciseCatalog(id))');
 
 function columns(db: Database.Database, table: string): string[] {
   return (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map(c => c.name).sort();
@@ -70,27 +76,28 @@ function fresh(ddl = '') {
 }
 
 describe('bootstrap on a fresh database', () => {
-  it('creates all five tables with every column, records both migrations, and is idempotent', () => {
+  it('creates all six tables with every column, records every migration, and is idempotent', () => {
     const db = fresh();
     bootstrap(db);
 
     for (const t of TABLES) {
       expect(columns(db, t)).toEqual([...EXPECTED_COLUMNS[t]].sort());
     }
-    expect(appliedMigrations(db)).toBe(2);
+    expect(appliedMigrations(db)).toBe(MIGRATIONS);
     const names = schemaObjects(db).map(o => o.name);
     expect(names).toContain('sets_exercise_name_lower');
     expect(names).toContain('sessions_completed_at');
+    expect(names).toEqual(expect.arrayContaining(['catalog_name_lower', 'exercises_catalog_id', 'sets_catalog_id']));
 
     const before = schemaObjects(db);
     bootstrap(db);
     expect(schemaObjects(db)).toEqual(before);
-    expect(appliedMigrations(db)).toBe(2);
+    expect(appliedMigrations(db)).toBe(MIGRATIONS);
   });
 });
 
 describe('bootstrap on the live (Sequelize-created) schema', () => {
-  it('changes nothing except adding the migrations table and the new index', () => {
+  it('adds only the migrations table, the indexes, the catalog table and the two catalogId columns', () => {
     const db = fresh(LIVE_DDL);
     const before = schemaObjects(db);
 
@@ -102,12 +109,21 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
       .map(o => o.name)
       .filter(n => !n.startsWith('sqlite_autoindex_')) // SQLite's own PK index on the migrations table
       .sort();
-    expect(added).toEqual(['__drizzle_migrations', 'sets_exercise_name_lower']);
-    // Every pre-existing object is byte-identical
+    expect(added).toEqual([
+      'ExerciseCatalog',
+      '__drizzle_migrations',
+      'catalog_name_lower',
+      'exercises_catalog_id',
+      'sets_catalog_id',
+      'sets_exercise_name_lower',
+    ]);
+    // Sets and Exercises gain exactly the appended column; every other
+    // pre-existing object is byte-identical.
     for (const b of before) {
-      expect(after.find(a => a.name === b.name)?.sql).toBe(b.sql);
+      const expected = b.name === 'Sets' || b.name === 'Exercises' ? withCatalogId(b.sql) : b.sql;
+      expect(after.find(a => a.name === b.name)?.sql).toBe(expected);
     }
-    expect(appliedMigrations(db)).toBe(2);
+    expect(appliedMigrations(db)).toBe(MIGRATIONS);
   });
 
   it('reads and writes rows in the Sequelize date/boolean/json formats', () => {
@@ -152,7 +168,7 @@ describe('bootstrap on a pre-legacy-column database', () => {
       expect(columns(db, t)).toEqual([...EXPECTED_COLUMNS[t]].sort());
     }
     expect(legacyColumns(db)).toEqual([]);
-    expect(appliedMigrations(db)).toBe(2);
+    expect(appliedMigrations(db)).toBe(MIGRATIONS);
   });
 });
 

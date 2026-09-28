@@ -32,7 +32,7 @@ export function createTestApp() {
 /** Empty every table and reset autoincrement — call in beforeEach for a clean slate. */
 export async function resetDb() {
   sqlite.pragma('foreign_keys = OFF');
-  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs']) {
+  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs', 'ExerciseCatalog']) {
     sqlite.exec(`DELETE FROM "${table}"`);
   }
   sqlite.exec('DELETE FROM sqlite_sequence');

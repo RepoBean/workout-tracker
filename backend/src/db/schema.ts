@@ -1,9 +1,9 @@
-// The five tables, mirroring the live Sequelize-created schema exactly: same
+// The five original tables mirror the live Sequelize-created schema exactly: same
 // table names, column names, defaults, foreign-key actions, and index names.
 // Existing databases are used as-is (see migrate.ts); do not rename anything
-// here without a migration.
-import { relations } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+// here without a migration. ExerciseCatalog (v3 Bundle 2) is the sixth.
+import { relations, sql } from 'drizzle-orm';
+import { index, integer, real, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sequelizeDate } from './columns.js';
 
 export type ExerciseType = 'strength' | 'cardio';
@@ -14,6 +14,21 @@ const timestamps = {
   createdAt: sequelizeDate('createdAt').notNull(),
   updatedAt: sequelizeDate('updatedAt').notNull(),
 };
+
+// One row per distinct lift. Names stay on every Exercises/Sets row (history
+// independence); catalogId is derived from them (src/db/catalog.ts) and is what
+// Progress, hints, PRs and the coach group by. The case-insensitive unique index
+// on name is an expression index, so it lives in migration 0003, not here.
+export const exerciseCatalog = sqliteTable('ExerciseCatalog', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  aliases: text('aliases', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  ...timestamps,
+});
+
+// No ON DELETE action on purpose (SQLite's NO ACTION): a catalog row history
+// points at cannot be deleted. drizzle-kit's ADD COLUMN drops actions anyway.
+const catalogRef = () => integer('catalogId').references((): AnySQLiteColumn => exerciseCatalog.id);
 
 export const programs = sqliteTable('Programs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -52,8 +67,10 @@ export const exercises = sqliteTable('Exercises', {
   targetDurationSec: integer('targetDurationSec'),
   targetDistance: real('targetDistance'), // miles
   ...timestamps,
+  catalogId: catalogRef(),
 }, (t) => [
   index('exercises_workout_id_order_index').on(t.workoutId, t.orderIndex),
+  index('exercises_catalog_id').on(t.catalogId),
 ]);
 
 export const sessions = sqliteTable('Sessions', {
@@ -96,13 +113,20 @@ export const sets = sqliteTable('Sets', {
   durationSec: integer('durationSec'),
   distance: real('distance'), // miles
   ...timestamps,
+  catalogId: catalogRef(),
 }, (t) => [
   index('sets_session_id').on(t.sessionId),
   index('sets_exercise_id').on(t.exerciseId),
   index('sets_session_id_exercise_id').on(t.sessionId, t.exerciseId),
+  index('sets_catalog_id').on(t.catalogId),
 ]);
 
 // ---- Relations (relational query API) ----
+
+export const exerciseCatalogRelations = relations(exerciseCatalog, ({ many }) => ({
+  exercises: many(exercises),
+  sets: many(sets),
+}));
 
 export const programsRelations = relations(programs, ({ many }) => ({
   workouts: many(workouts),
@@ -117,6 +141,7 @@ export const workoutsRelations = relations(workouts, ({ one, many }) => ({
 
 export const exercisesRelations = relations(exercises, ({ one, many }) => ({
   workout: one(workouts, { fields: [exercises.workoutId], references: [workouts.id] }),
+  catalog: one(exerciseCatalog, { fields: [exercises.catalogId], references: [exerciseCatalog.id] }),
   sets: many(sets),
 }));
 
@@ -129,10 +154,13 @@ export const sessionsRelations = relations(sessions, ({ one, many }) => ({
 export const setsRelations = relations(sets, ({ one }) => ({
   session: one(sessions, { fields: [sets.sessionId], references: [sessions.id] }),
   exercise: one(exercises, { fields: [sets.exerciseId], references: [exercises.id] }),
+  catalog: one(exerciseCatalog, { fields: [sets.catalogId], references: [exerciseCatalog.id] }),
 }));
 
 // ---- Row types ----
 
+export type CatalogEntry = typeof exerciseCatalog.$inferSelect;
+export type NewCatalogEntry = typeof exerciseCatalog.$inferInsert;
 export type Program = typeof programs.$inferSelect;
 export type NewProgram = typeof programs.$inferInsert;
 export type Workout = typeof workouts.$inferSelect;

@@ -72,7 +72,7 @@ describe('response shapes', () => {
       'createdAt', 'exercises', 'id', 'name', 'orderIndex', 'programId', 'updatedAt',
     ]);
     expect(Object.keys(bench).sort()).toEqual([
-      'cardioModality', 'createdAt', 'exerciseType', 'id', 'name', 'orderIndex', 'supersetGroup',
+      'cardioModality', 'catalogId', 'createdAt', 'exerciseType', 'id', 'name', 'orderIndex', 'supersetGroup',
       'targetDistance', 'targetDurationSec', 'targetReps', 'targetSets', 'updatedAt', 'workoutId',
     ]);
     expect(program.isActive).toBe(false);
@@ -89,7 +89,7 @@ describe('response shapes', () => {
     const set = await logSet(started.id, { exerciseId: bench.id, exerciseName: 'Bench Press' });
 
     expect(Object.keys(set).sort()).toEqual([
-      'createdAt', 'distance', 'dropIndex', 'durationSec', 'exerciseId', 'exerciseName', 'heartRateAvg',
+      'catalogId', 'createdAt', 'distance', 'dropIndex', 'durationSec', 'exerciseId', 'exerciseName', 'heartRateAvg',
       'heartRateMax', 'id', 'perceivedEffort', 'reps', 'sessionId', 'setNumber', 'updatedAt', 'weight',
     ]);
     expect(set.perceivedEffort).toBeNull();

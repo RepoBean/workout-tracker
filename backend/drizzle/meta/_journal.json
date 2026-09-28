@@ -15,6 +15,20 @@
       "when": 1789389283862,
       "tag": "0001_sets_exercise_name_lower_index",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790633768655,
+      "tag": "0002_exercise_catalog",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790633778639,
+      "tag": "0003_catalog_name_lower_unique",
+      "breakpoints": true
     }
   ]
 }
