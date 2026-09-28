@@ -11,6 +11,7 @@ import programsRouter from '../src/routes/programs.js';
 import workoutsRouter from '../src/routes/workouts.js';
 import exercisesRouter from '../src/routes/exercises.js';
 import sessionsRouter from '../src/routes/sessions.js';
+import catalogRouter from '../src/routes/catalog.js';
 
 if (process.env.DB_PATH !== ':memory:') {
   throw new Error('Tests must run against an in-memory database (see test/setup.ts)');
@@ -26,6 +27,7 @@ export function createTestApp() {
   app.use('/api/workouts', workoutsRouter);
   app.use('/api/exercises', exercisesRouter);
   app.use('/api/sessions', sessionsRouter);
+  app.use('/api/catalog', catalogRouter);
   return app;
 }
 

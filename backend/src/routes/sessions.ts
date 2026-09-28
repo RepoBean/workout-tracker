@@ -5,6 +5,7 @@ import { db, now } from '../db/index.js';
 import { exercises, programs, sessions, sets, workouts } from '../db/schema.js';
 import type { Exercise } from '../db/schema.js';
 import { latestSetsByName } from '../db/queries/setsByName.js';
+import { resolveCatalogId } from '../db/catalog.js';
 import { validate, validateParams, idParamSchema, sessionSetParamsSchema, paginationQuerySchema } from '../middleware/validate.js';
 
 const router = Router();
@@ -367,7 +368,7 @@ router.get('/:id/previous', validateParams(idParamSchema), (req: Request, res: R
     const exerciseData: Record<number, { sets: Array<{ setNumber: number; weight: number; reps: number }> }> = {};
 
     for (const exercise of workoutExercises(currentSession.workoutId)) {
-      const latest = latestSetsByName(exercise.name);
+      const latest = latestSetsByName(exercise.name, exercise.catalogId);
       if (latest) {
         exerciseData[exercise.id] = { sets: latest.sets };
       }
@@ -467,11 +468,14 @@ router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), 
       ? incomingExerciseId
       : null;
 
+    // catalogId is derived from the name, never taken from the client (the old
+    // APK sends exactly what it always sent and still gets a resolved set back).
     const ts = now();
-    const set = db.insert(sets).values({
+    const set = db.transaction((tx) => tx.insert(sets).values({
       sessionId,
       exerciseId,
       exerciseName: req.body.exerciseName,
+      catalogId: resolveCatalogId(tx, req.body.exerciseName),
       weight: req.body.weight,
       reps: req.body.reps,
       setNumber: req.body.setNumber,
@@ -483,7 +487,7 @@ router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), 
       distance: req.body.distance ?? null,
       createdAt: ts,
       updatedAt: ts,
-    }).returning().get();
+    }).returning().get());
 
     res.status(201).json(set);
   } catch (error) {
@@ -521,8 +525,8 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
       return;
     }
 
-    // Update only provided fields
-    const updated = db.update(sets).set({
+    // Update only provided fields. A re-pointed name (swap carry-over) re-resolves its catalogId.
+    const updated = db.transaction((tx) => tx.update(sets).set({
       ...(weight !== undefined && { weight }),
       ...(reps !== undefined && { reps }),
       ...(perceivedEffort !== undefined && { perceivedEffort }),
@@ -530,10 +534,10 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
       ...(heartRateMax !== undefined && { heartRateMax }),
       ...(durationSec !== undefined && { durationSec }),
       ...(distance !== undefined && { distance }),
-      ...(exerciseName !== undefined && { exerciseName }),
+      ...(exerciseName !== undefined && { exerciseName, catalogId: resolveCatalogId(tx, exerciseName) }),
       ...(exerciseId !== undefined && { exerciseId }),
       updatedAt: now(),
-    }).where(eq(sets.id, setId)).returning().get();
+    }).where(eq(sets.id, setId)).returning().get());
 
     res.json(updated);
   } catch (error) {

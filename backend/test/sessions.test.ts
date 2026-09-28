@@ -137,6 +137,10 @@ describe('PUT /api/sessions/:id/sets/:setId', () => {
     expect(res.body.exerciseName).toBe('Dumbbell Press');
     expect(res.body.exerciseId).toBeNull();
     expect(res.body.weight).toBe(185);
+    // The re-pointed name re-resolves the catalog identity
+    const catalog = (await request(app).get('/api/catalog')).body as Array<{ id: number; name: string }>;
+    expect(logged.body.catalogId).toBe(catalog.find((c) => c.name === 'Bench Press')!.id);
+    expect(res.body.catalogId).toBe(catalog.find((c) => c.name === 'Dumbbell Press')!.id);
   });
 
   it('rejects re-pointing a set at a positive exerciseId', async () => {

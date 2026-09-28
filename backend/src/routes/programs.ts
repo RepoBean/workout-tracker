@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { asc, desc, eq } from 'drizzle-orm';
 import { db, now } from '../db/index.js';
 import { programs, workouts, exercises } from '../db/schema.js';
+import { resolveCatalogId } from '../db/catalog.js';
 import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
@@ -102,6 +103,7 @@ function insertProgramTree(name: string, source: ImportProgram['workouts']): num
         tx.insert(exercises).values({
           workoutId: workout.id,
           name: e.name,
+          catalogId: resolveCatalogId(tx, e.name),
           targetSets: e.targetSets,
           targetReps: e.targetReps,
           orderIndex: e.orderIndex,

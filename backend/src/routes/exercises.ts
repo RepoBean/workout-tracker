@@ -4,6 +4,7 @@ import { asc, eq, like } from 'drizzle-orm';
 import { db, now } from '../db/index.js';
 import { exercises, sets, workouts } from '../db/schema.js';
 import { allStandardSetsByName, latestSetsByName } from '../db/queries/setsByName.js';
+import { resolveCatalogId } from '../db/catalog.js';
 import { validate, validateParams, idParamSchema } from '../middleware/validate.js';
 
 const router = Router();
@@ -171,9 +172,10 @@ router.post('/', validate(createExerciseSchema), (req: Request, res: Response) =
     }
 
     const ts = now();
-    const exercise = db.insert(exercises).values({
+    const exercise = db.transaction((tx) => tx.insert(exercises).values({
       workoutId,
       name,
+      catalogId: resolveCatalogId(tx, name),
       targetSets,
       targetReps,
       orderIndex,
@@ -184,7 +186,7 @@ router.post('/', validate(createExerciseSchema), (req: Request, res: Response) =
       targetDistance: targetDistance ?? null,
       createdAt: ts,
       updatedAt: ts,
-    }).returning().get();
+    }).returning().get());
 
     res.status(201).json(exercise);
   } catch (error) {
@@ -208,8 +210,10 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
       exerciseType, cardioModality, targetDurationSec, targetDistance,
     } = req.body;
 
-    const exercise = db.update(exercises).set({
-      ...(name !== undefined && { name }),
+    // A rename resolves to the catalog row for the NEW name ("this slot now does a
+    // different lift"); "same lift, new spelling" is the catalog merge, not a rename.
+    const exercise = db.transaction((tx) => tx.update(exercises).set({
+      ...(name !== undefined && { name, catalogId: resolveCatalogId(tx, name) }),
       ...(targetSets !== undefined && { targetSets }),
       ...(targetReps !== undefined && { targetReps }),
       ...(orderIndex !== undefined && { orderIndex }),
@@ -219,7 +223,7 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
       ...(targetDurationSec !== undefined && { targetDurationSec }),
       ...(targetDistance !== undefined && { targetDistance }),
       updatedAt: now(),
-    }).where(eq(exercises.id, id)).returning().get();
+    }).where(eq(exercises.id, id)).returning().get());
 
     res.json(exercise);
   } catch (error) {

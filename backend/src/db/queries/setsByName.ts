@@ -1,17 +1,23 @@
-import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { db } from '../index.js';
 import { sessions, sets } from '../schema.js';
+import { findCatalogId } from '../catalog.js';
 
-// Case-insensitive exercise-name lookups over logged sets. Backed by the
-// expression index sets_exercise_name_lower (migration 0001). Replaces the old
-// "load every set in the database, then filter by name in JS" path.
+// Exercise-name lookups over logged sets, by catalog identity: the name (or an
+// alias a merge left behind) resolves to a catalog row and the sets are matched on
+// catalogId (index sets_catalog_id), so a merged lift answers as one lift under
+// either spelling. A name the catalog doesn't know falls back to the old
+// case-insensitive name equality (expression index sets_exercise_name_lower).
 
-const nameMatches = (name: string) => sql`lower(${sets.exerciseName}) = lower(${name})`;
+function exerciseMatches(name: string, catalogId?: number | null): SQL {
+  const id = catalogId ?? findCatalogId(db, name);
+  return id !== null ? eq(sets.catalogId, id) : sql`lower(${sets.exerciseName}) = lower(${name})`;
+}
 
-const standardCompleted = (name: string) => and(
+const standardCompleted = (match: SQL) => and(
   eq(sets.dropIndex, 0),
   isNotNull(sessions.completedAt),
-  nameMatches(name),
+  match,
 );
 
 export interface HintSet {
@@ -24,13 +30,18 @@ export interface HintSet {
 /**
  * The most recent completed session's standard sets for an exercise name —
  * the "what did I do last time" hint. Null when the name has never been logged.
+ * Pass the row's catalogId when the caller has it (/previous) to skip the lookup.
  */
-export function latestSetsByName(name: string): { completedAt: Date; sets: HintSet[] } | null {
+export function latestSetsByName(
+  name: string,
+  catalogId?: number | null,
+): { completedAt: Date; sets: HintSet[] } | null {
+  const match = exerciseMatches(name, catalogId);
   const latest = db
     .select({ sessionId: sets.sessionId, completedAt: sessions.completedAt })
     .from(sets)
     .innerJoin(sessions, eq(sets.sessionId, sessions.id))
-    .where(standardCompleted(name))
+    .where(standardCompleted(match))
     .orderBy(desc(sessions.completedAt))
     .limit(1)
     .get();
@@ -45,7 +56,7 @@ export function latestSetsByName(name: string): { completedAt: Date; sets: HintS
       perceivedEffort: sets.perceivedEffort,
     })
     .from(sets)
-    .where(and(eq(sets.sessionId, latest.sessionId), eq(sets.dropIndex, 0), nameMatches(name)))
+    .where(and(eq(sets.sessionId, latest.sessionId), eq(sets.dropIndex, 0), match))
     .orderBy(asc(sets.setNumber))
     .all();
 
@@ -68,7 +79,7 @@ export function allStandardSetsByName(name: string) {
     })
     .from(sets)
     .innerJoin(sessions, eq(sets.sessionId, sessions.id))
-    .where(standardCompleted(name))
+    .where(standardCompleted(exerciseMatches(name)))
     .orderBy(desc(sessions.completedAt), asc(sets.setNumber))
     .all();
 }

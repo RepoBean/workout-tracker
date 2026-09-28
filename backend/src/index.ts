@@ -8,6 +8,7 @@ import programsRouter from './routes/programs.js';
 import workoutsRouter from './routes/workouts.js';
 import exercisesRouter from './routes/exercises.js';
 import sessionsRouter from './routes/sessions.js';
+import catalogRouter from './routes/catalog.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -39,6 +40,7 @@ app.use('/api/programs', programsRouter);
 app.use('/api/workouts', workoutsRouter);
 app.use('/api/exercises', exercisesRouter);
 app.use('/api/sessions', sessionsRouter);
+app.use('/api/catalog', catalogRouter);
 
 // SPA fallback — serve index.html for client-side routes
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {
