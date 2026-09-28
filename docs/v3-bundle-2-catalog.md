@@ -361,18 +361,23 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
 
 ## 4. Parity checklist (what must be provably unchanged)
 
-- [ ] All 78 backend tests and 143 frontend tests pass with zero assertion edits (fixtures may
-      gain `catalogId`).
-- [ ] `api-snapshot` diff (with `catalogId` stripped) empty before/after on staging, and again
-      after a restart, and again after merge → split.
-- [ ] Every `Set`/`Exercise` in every read endpoint has a non-null `catalogId` on the new image.
-- [ ] Request schemas unchanged: `POST/PUT /sets`, `POST/PUT /exercises`, import, start, complete
-      accept exactly what they accept today (the old APK is the client of record).
-- [ ] `exerciseName`, `Exercises.name`, `exerciseNotes` are never rewritten by any path in this
+- [x] All 78 backend tests and 143 frontend tests pass with zero assertion edits (fixtures may
+      gain `catalogId`). *(Fixtures gained `catalogId: null`; the only assertion edits are the
+      migration-test counts Step 1 prescribes and `'catalogId'` added to the two whole-row
+      key lists in `parity.test.ts` — §1.3's "any `toEqual` on a whole row".)*
+- [x] `api-snapshot` diff (with `catalogId` stripped) empty before/after on staging, and again
+      after a restart, and again after merge → split. *(Also after rollback, and main-after vs
+      staging-before.)*
+- [x] Every `Set`/`Exercise` in every read endpoint has a non-null `catalogId` on the new image.
+- [x] Request schemas unchanged: `POST/PUT /sets`, `POST/PUT /exercises`, import, start, complete
+      accept exactly what they accept today (the old APK is the client of record). *(A sent
+      `catalogId` is stripped by Zod — tested.)*
+- [x] `exerciseName`, `Exercises.name`, `exerciseNotes` are never rewritten by any path in this
       bundle (grep the diff for writes to those columns: only the pre-existing swap re-point).
-- [ ] Old image boots and serves on the new DB (`3fd7c03`; `34983c1` shares its journal).
-- [ ] Coach dossier text is byte-identical before/after for the same data when no merge exists
-      (the catalog name equals the set name for every row on a fresh backfill).
+- [x] Old image boots and serves on the new DB (`3fd7c03`; `34983c1` shares its journal).
+- [x] Coach dossier text is byte-identical before/after for the same data when no merge exists
+      (the catalog name equals the set name for every row on a fresh backfill). *(True for 52 of
+      53 lines on main; the exception is the intended case fold, see §7.)*
 
 ## 5. Risks
 
@@ -398,6 +403,57 @@ no changes to `exerciseNotes`, no wife deploy, no Node/Docker bumps.
 
 ---
 
-## 7. Results
+## 7. Results (2026-09-28)
 
-_(appended after Stage 2 ships)_
+Shipped as `3f86da8` … `bf7493b` (branch `a2-catalog`, one commit per step): staging 22:30,
+main 22:33 local. Wife not touched (still `34983c1`; she gets `3fd7c03` Wed 2026-09-30, A2 a few
+days after that).
+
+- **Tests:** backend 78 → 98 (catalog.test.ts 11: grouping, canonical rule, idempotence,
+  old-image healing, GC, aliases; catalog-routes.test.ts 9; swap test gains the re-resolve
+  assertion). Frontend 143 → 161 (Step 0 extraction pinned by 12 characterization tests, which
+  pass unchanged after the switch; 4 merged-identity cases; 2 dossier cases). No request(app)
+  assertion changed; see §4 for the two key-list edits.
+- **Backfill numbers.** On the spec's own backup (`main-20260914-234435`) the code gives exactly
+  **+65 rows / 1,634 sets / 136 exercises**. Live main on ship day: **+73 / 1,738 / 196** — main
+  gained 8 names since 09-14 (programs created 09-16 and 09-28: Barbell Bench Press, Barbell
+  RDL, Deadlift, Farmer Carry, Cable Crunch, Pull-Up, Back extension machine, and today's
+  Standing calf raise), and "Back extension" now has a live case variant "Back Extension"
+  (3 + 3 sets) that the fold rule turned into one row — the first real use of the rule that
+  §1.1 called future-proofing. Every boot after the first is silent. First boot ≈ 45 ms,
+  converged boot ≈ 1 ms (measured on a copy with the same code).
+- **Staging parity** (`WT_SNAPSHOT_STRIP=catalogId scripts/api-snapshot.sh`, 45 files, old image
+  `3fd7c03` vs new on the same seeded copy): **diff empty** after deploy, after a container
+  restart, after merge → split, and on the rolled-back old image; main after deploy vs staging
+  before: empty. Post-check: 0 of 1,738 sets, 0 of 196 exercises with a null `catalogId`.
+  Migrations recorded: 4. (Bundle 1's one flaky tie in `programs.json` did not reappear.)
+- **Merge rehearsal on the real split** (staging): data moved since the spec — Low Incline DB
+  Press 56 sets / 6 program rows (active program 21 uses this spelling), Low Incline Dumbbell
+  Press 66 / 4 (logged again today, 09-28). `merge 46 ← 47`: `all-sets-by-name` = 122 under
+  either spelling (was 56 / 66); `history-by-name` for either name → the 09-28 session; the real
+  Progress + dossier modules run over staging's API show one picker entry, one series
+  **2026-04-03 → 2026-09-28** (41 sessions) and one coach line (122 sets). `split` restored
+  56 / 6 and 66 / 4 exactly (new id 74 for the split-off row, as designed) and the snapshot diff
+  against `after/` was empty. **Not applied on main** — which spelling to keep is Jason's call in
+  Settings → Exercise catalog.
+- **Old-APK write lifecycle** (curl, no `catalogId` sent): program set → 46; brand-new ad-hoc
+  name → new catalog row 75 in `GET /catalog`; swap carry-over `PUT` → re-resolved to 74; session
+  deleted.
+- **Rollback rehearsal:** `rollback.sh staging 3fd7c03`, no restore → booted, snapshot diff
+  vs the original old-image snapshot empty; logged a set through it (no `catalogId` column
+  written); `ship.sh staging --force` again → boot log `+0 catalog rows, 1 sets, 0 exercises
+  resolved, 1 unused rows removed` (the orphaned test row 75 GC'd); the set read back with id 46.
+- **Coach dossier, no merge, live main:** 52 of 53 all-time lines byte-identical to the name-keyed
+  text; the one change is "Back extension" (falsely flagged `dropped 3.2mo`) + "Back Extension"
+  → one line, 6 sets / 2 dates.
+- **Browser smoke not done in this session** (no browser tool available to the implementing
+  session): verified instead that 8037/8035 serve the new bundle (the Settings chunk contains the
+  card), `/api/catalog` answers through nginx, `vite build` is clean, and the real Progress /
+  dossier modules produce the merged output above. Eyeball Settings → Exercise catalog and
+  Progress on the phone before the first real merge.
+- **Implementation notes.** Merge/split re-point `catalogId` only and deliberately leave the
+  rows' `updatedAt` alone — that is what makes merge → split snapshot-identical. Drizzle renders a
+  column in a single-table select unqualified, so the list's correlated count subqueries name
+  `ExerciseCatalog.id` literally (the interpolated column bound to the subquery's own `id` and
+  returned wrong counts — caught by the route tests). The boot `UPDATE`s guard on the resolved id
+  being non-null so a blank-named row can't make every boot "change" something.

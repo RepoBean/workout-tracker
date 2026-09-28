@@ -106,11 +106,11 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [x] `test/app.ts` builds the app on an in-memory better-sqlite3 DB. **Gate: all backend tests pass unchanged.** (HTTP assertions untouched; only seed helpers changed. Plus 22 HTTP-only characterization tests written first against Sequelize.)
 - [x] Verified on staging against a copy of main's data: 40/41 API snapshots byte-identical to the old image (the 41st is a tie-order of two archived programs both named "test"), full write lifecycle, **rollback to the old tag with no restore works** (dates kept in Sequelize's text format).
 
-### Bundle 2 — Exercise catalog
-- [ ] New table (name TBD: `ExerciseDefinitions`): id, name (unique, case-insensitive), aliases (JSON), movementPattern, equipment, isAssisted/bodyweight flag, defaultRestSec, archived.
-- [ ] Nullable `catalogId` on `Exercises` (program rows) and `Sets`; **names stay denormalized** for history independence.
-- [ ] Backfill: distinct lower(name) across Sets ∪ Exercises → catalog rows; fill `catalogId`. Merge tool in Settings (fold B into A; fixes the "Low Incline Dumbbell Press" / "Low Incline DB Press" split).
-- [ ] Progress, PR check, previous hints, coach dossier key by `catalogId`; renames become safe. Expand/contract: old name-based code keeps working until the new path is proven.
+### Bundle 2 — Exercise catalog — SHIPPED to main 2026-09-28 (plan + results: `docs/v3-bundle-2-catalog.md`; wife follows after her 3fd7c03 settles)
+- [x] New table `ExerciseCatalog(id, name, aliases, createdAt, updatedAt)`, unique on `lower(name)`. (movementPattern, equipment, isAssisted, defaultRestSec, archived dropped — no consumer yet; see bundle doc D1.)
+- [x] Nullable `catalogId` on `Exercises` (program rows) and `Sets`; **names stay denormalized** for history independence. FK with no ON DELETE action.
+- [x] Backfill: distinct lower(trim(name)) across Sets ∪ Exercises → catalog rows; fill `catalogId` — at every boot, idempotent, heals rows an old image wrote. Merge/split tool in Settings (fold B into A; rehearsed on the "Low Incline Dumbbell Press" / "Low Incline DB Press" split on staging, not applied on main — Jason's call).
+- [x] Progress, PR check, previous hints, coach dossier key by `catalogId`; renames become safe via merge. Request schemas unchanged (old APK keeps working); rollback = old tag, no restore (rehearsed).
 
 ### Bundle 3 — Session structure on the server
 - [ ] New table `SessionExercises`: sessionId, catalogId (nullable), name, orderIndex, targetSets, targetReps, supersetGroup, exerciseType + cardio targets, source (`program` | `adhoc` | `swap`), replacesId, skipped, note. Created at session start from the workout snapshot. Mutations: add, swap, reorder, skip. `Sets.sessionExerciseId`.
