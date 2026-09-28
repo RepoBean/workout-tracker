@@ -1,13 +1,14 @@
 # v3 Bundle 2 — Exercise catalog (plan + results)
 
-Written 2026-09-14 from a read-only survey of the repo at `34983c1` (B0 merged) plus fresh backups
+Written 2026-09-14 from a read-only survey of the repo at `34983c1` (B0 merged), re-verified 2026-09-28
+at `b44eb5e` (after assisted lifts `46181d9` and B1 fixes `3fd7c03`), plus fresh backups
 of `main` (`main-20260914-234435.sqlite`: 90 sessions / 1,634 sets / 136 exercise rows) and `wife`
 (`wife-20260914-234950.sqlite`: 54 / 997 / 74) taken that evening. Companion to `docs/v3-plan.md`
 §4 Bundle 2. This is the **one new table v3 allows**: `ExerciseCatalog`, plus a nullable
 `catalogId` on `Exercises` and `Sets`. Names stay on every row. Nothing about the API contract
 changes except that responses gain a field and three new catalog endpoints appear.
 
-**Gate:** the existing 74 backend + 121 frontend tests keep passing unchanged (the by-name
+**Gate:** the existing 78 backend + 143 frontend tests (counts at `b44eb5e`) keep passing unchanged (the by-name
 characterization tests from Bundle 1 *are* the lock on this bundle); `api-snapshot` diff on
 staging is empty once the new `catalogId` field is stripped; the old image boots on the new DB.
 
@@ -71,25 +72,26 @@ name with counts, so junk is visible but inert.
 ### 1.2 Every place history is joined by exercise name (26 sites; the plan guessed ~18)
 
 Sites marked **switch** move to `catalogId` in this bundle; **keep** stay name-based (with the
-reason). Line numbers are at `34983c1`.
+reason). Line numbers for the **switch** sites and #5–#8, #14–#16 are at `b44eb5e` (2026-09-28); the
+keep-only frontend sites #17–#26 were spot-checked (all still present, offsets of at most ~7 lines).
 
 | # | Site | What it does | This bundle |
 |---|---|---|---|
 | 1 | `backend/src/db/queries/setsByName.ts:9` (`nameMatches`), `:27` `latestSetsByName`, `:59` `allStandardSetsByName` | `lower(exerciseName) = lower(?)` over Sets | **switch** (server-side, API unchanged): resolve name → catalog row (name or alias) → `WHERE catalogId = ?`; fall back to the name equality when the name is unknown |
-| 2 | `backend/src/routes/sessions.ts:362-366` `/sessions/:id/previous` | per workout exercise, `latestSetsByName(exercise.name)` | **switch**: use `exercise.catalogId` directly |
-| 3 | `backend/src/routes/exercises.ts:74` `/history-by-name` | ad-hoc "last time" hint | **switch** via #1 |
-| 4 | `backend/src/routes/exercises.ts:99` `/all-sets-by-name` | PR check | **switch** via #1 |
-| 5 | `backend/src/routes/exercises.ts:116-135` `/suggestions` | distinct `LIKE` over `Exercises.name` ∪ `Sets.exerciseName` | keep — the catalog ⊇ both sources, and re-sourcing would reorder the snapshot for no gain; Bundle 5 |
-| 6 | `backend/src/routes/sessions.ts:550-555` `/exercise-note` | JSON keyed by name | keep — Bundle 3 moves notes onto `SessionExercises` |
-| 7 | `backend/src/routes/sessions.ts:224` CSV export | emits the logged name | keep — display of what was logged |
-| 8 | `backend/src/routes/sessions.ts:526-527` PUT set re-point | swap carry-over writes `exerciseName` + `exerciseId:null` | **write path**: re-resolve `catalogId` from the new name |
-| 9 | `frontend/src/features/progress/hooks/useProgressData.ts:96-97, 110-111` | picker names + most-trained, keyed by `set.exerciseName` | **switch** |
-| 10 | `useProgressData.ts:159-160, 179` | cardio names; `getExerciseHistory` filters `set.exerciseName === name` | **switch** |
-| 11 | `useProgressData.ts:248` | `getCardioExerciseHistory` | **switch** |
-| 12 | `useProgressData.ts:426-468` | personal records maps keyed by name | **switch** |
-| 13 | `progress/components/ExerciseProgressTab.tsx:27,103,113,162`, `PersonalRecordsTab.tsx:65,145` | `selectedExercise` is a name; PR sort/key by name | **switch** (display names come from the catalog) |
-| 14 | `frontend/src/features/coach/lib/dossier.ts:112-116` `renderSession` | per-session grouping by name | keep — shows what was logged, in that session |
-| 15 | `dossier.ts:169-189` `rollupExercises` | all-time rollup keyed by `set.exerciseName` | **switch**: key by `catalogId ?? name`, display the catalog name |
+| 2 | `backend/src/routes/sessions.ts:370` `/sessions/:id/previous` | per workout exercise, `latestSetsByName(exercise.name)` | **switch**: use `exercise.catalogId` directly |
+| 3 | `backend/src/routes/exercises.ts:66` `/history-by-name` | ad-hoc "last time" hint | **switch** via #1 |
+| 4 | `backend/src/routes/exercises.ts:91` `/all-sets-by-name` | PR check | **switch** via #1 |
+| 5 | `backend/src/routes/exercises.ts:107-140` `/suggestions` | distinct `LIKE` over `Exercises.name` ∪ `Sets.exerciseName` | keep — the catalog ⊇ both sources, and re-sourcing would reorder the snapshot for no gain; Bundle 5 |
+| 6 | `backend/src/routes/sessions.ts:545-549` `/exercise-note` | JSON keyed by name | keep — Bundle 3 moves notes onto `SessionExercises` |
+| 7 | `backend/src/routes/sessions.ts:195-249` CSV export | emits the logged name | keep — display of what was logged |
+| 8 | `backend/src/routes/sessions.ts:496` PUT set re-point (`updateSetSchema` :62-63) | swap carry-over writes `exerciseName` + `exerciseId:null` | **write path**: re-resolve `catalogId` from the new name |
+| 9 | `frontend/src/features/progress/hooks/useProgressData.ts:102-103, 116-117` | picker names + most-trained, keyed by `set.exerciseName` | **switch** |
+| 10 | `useProgressData.ts:165-166, 185` | cardio names; `getExerciseHistory` filters `set.exerciseName === name` | **switch** |
+| 11 | `useProgressData.ts:261` | `getCardioExerciseHistory` | **switch** |
+| 12 | `useProgressData.ts:439-484` | personal records maps keyed by name | **switch** |
+| 13 | `progress/components/ExerciseProgressTab.tsx:29,101,107,235`, `PersonalRecordsTab.tsx:65,145` | `selectedExercise` is a name; PR sort/key by name | **switch** (display names come from the catalog) |
+| 14 | `frontend/src/features/coach/lib/dossier.ts:115-117` `renderSession` | per-session grouping by name | keep — shows what was logged, in that session |
+| 15 | `dossier.ts:166-198` `rollupExercises` (now also takes `bodyweight` for assisted lifts) | all-time rollup keyed by `set.exerciseName` | **switch**: key by `catalogId ?? name`, display the catalog name |
 | 16 | `coach/lib/tools.ts:102-104, 147-148` `matchesExercise` | case-insensitive substring | keep — it is a search, and the "matched N names" note still helps; add catalog match later if needed |
 | 17 | `active-session/hooks/usePrCelebration.ts:37, 43-47` | session ref keyed by lowercased name; fetches #4 | keep the ref (session-local); history comes merged via #4 |
 | 18 | `active-session/index.tsx:240-251` | ad-hoc hint via `useExerciseHistoryByName(name)` (#3) | keep — history comes merged via #3 |
@@ -115,7 +117,7 @@ Progress, coach all-time block.
 | SQLite allows `ADD COLUMN … REFERENCES` with `foreign_keys = ON` only when the default is NULL. | `catalogId` is nullable with no default. Fine. |
 | drizzle-kit cannot express expression indexes (same as `0001`). | The case-insensitive unique index is a `--custom` migration `0003`. |
 | Drizzle's migrator applies journal entries whose `folderMillis` is newer than the last row in `__drizzle_migrations`. An image whose journal ends at `0001` sees a DB whose last row is `0003` and applies nothing. | Rollback to `34983c1` needs no restore. (Rehearse on staging, D6.) |
-| Sequelize image `1aeebcc` runs a plain `sync()` (no `alter`, no `force`) — `CREATE TABLE IF NOT EXISTS`. | Extra table + extra nullable columns are invisible to it. Wife (still on `1aeebcc`) is not shipped in this bundle; when she is, `0000`–`0003` apply in order on one boot. |
+| Sequelize image `1aeebcc` runs a plain `sync()` (no `alter`, no `force`) — `CREATE TABLE IF NOT EXISTS`. | Extra table + extra nullable columns are invisible to it. **No instance runs a Sequelize image any more** (2026-09-28: main + staging `3fd7c03`, wife `34983c1`, all Drizzle), so this is background only; the Sequelize rollback rehearsal is dropped from §3 step 6. |
 | `lower()` in SQLite is ASCII-only. | All 99 names on both instances are ASCII. A non-ASCII name would simply be its own entry. |
 | The frontend already downloads the full history for Progress and the coach; Sets rows gain one ~16-byte field. | ~26 KB on the 636 KB payload. Bundle 5 shrinks it; not this bundle's problem. |
 | Old APK (B0 build) sends `POST /sets {exerciseId, exerciseName, …}` and reads `Set`/`Exercise` objects. | Request schemas do **not** gain `catalogId`; the server derives it from the name. Responses gain a field the old APK ignores. |
@@ -223,9 +225,10 @@ via the alias → A.
   (derived reads) has a reason to touch it. The expression index `sets_exercise_name_lower`
   stays: the fallback path and `split` use it.
 
-**D6 — Rollback story.** Same property as Bundle 1: **old tag, no restore.** `34983c1` (Drizzle,
-journal ends at `0001`) boots on a `0003` DB and applies nothing; `1aeebcc` (Sequelize) ignores
-the extra table and columns. Sets and exercises the old image writes have `catalogId NULL`; the
+**D6 — Rollback story.** Same property as Bundle 1: **old tag, no restore.** `3fd7c03` (the tag main
+and staging run today; Drizzle, journal ends at `0001` — same journal as wife's `34983c1`) boots on a
+`0003` DB and applies nothing. A Sequelize image (`1aeebcc`) would also ignore the extra table and
+columns, but nothing runs it now. Sets and exercises the old image writes have `catalogId NULL`; the
 first boot of the new image afterwards backfills them. Rehearsed on staging in §3 step 8 before
 `main` is touched. Nothing in this bundle rewrites or drops anything.
 
@@ -254,10 +257,10 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
   from the live shape (two names, cardio + strength, drop sets, an incomplete session): the
   extracted functions must reproduce it exactly with an empty catalog map. Then the switch adds
   one test: two names sharing a `catalogId` become one series under the catalog name.
-- `dossier.test.ts` (27 tests) stays green with no catalog map (fallback to names); add one
+- `dossier.test.ts` (31 tests) stays green with no catalog map (fallback to names); add one
   merged-id case for `rollupExercises`/`buildAllTimeBlock`.
 - Backend: the Bundle 1 parity tests for `/previous`, `/history-by-name`, `/all-sets-by-name`
-  (`parity.test.ts:260-330`) are the characterization; they are not edited.
+  (`parity.test.ts:259-345`) are the characterization; they are not edited.
 
 ### Step 1 — Schema + migrations + migration tests
 - `schema.ts`: `exerciseCatalog` table; `catalogId` on `exercises` and `sets` with `references()`
@@ -305,8 +308,9 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
   `useSplitCatalog()` (mutation-hook pattern, invalidations per D7).
 - Progress: hook consumes `useCatalog()` and the Step-0 functions; `selectedExercise` remains a
   display string, resolved to a group key internally. Records tab keys by the group key.
-- Coach: `rollupExercises(sessions, catalogNames)`; `useCoachDossier` adds the catalog
-  fingerprint to `cacheKey`. The pinned-ref behaviour (byte-identical text per conversation) is
+- Coach: `rollupExercises(sessions, bodyweight, catalogNames)` (the `bodyweight` arg landed with
+  assisted lifts); `useCoachDossier` adds the catalog fingerprint to `cacheKey`, which already
+  carries `newestId:total:today:bodyweight`. The pinned-ref behaviour (byte-identical text per conversation) is
   untouched.
 - Settings: `features/settings/components/ExerciseCatalogCard.tsx` (D7), under the existing
   cards.
@@ -323,8 +327,8 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
   changelog row. Tick Bundle 2 in `docs/v3-plan.md`. Append §7 here. Memory: `project_v3_direction`.
 
 ### Step 6 — Ship (the §6 loop, with the extra checks this bundle needs)
-1. `scripts/seed-staging.sh` (fresh copy of main). Staging is on `f896358` — API-identical to
-   `34983c1` (the B0 fixes after it are frontend-only), so it serves as the "old image".
+1. `scripts/seed-staging.sh` (fresh copy of main). Staging and main are both on `3fd7c03`, so that
+   tag is the "old image" for every before/after and rollback step below.
 2. `WT_SNAPSHOT_STRIP=catalogId scripts/api-snapshot.sh staging before/` (the env is a no-op on
    the old image; it keeps both runs on one code path).
 3. `scripts/ship.sh staging` → boot log shows `0002`, `0003` applied and the backfill line with
@@ -342,21 +346,22 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
 5. Write lifecycle on staging as the **old APK** would: `curl POST /sets` with `exerciseId` +
    `exerciseName` only → response carries `catalogId`; a brand-new name → new catalog row in
    `GET /catalog`; swap carry-over `PUT` re-points the id; delete the session.
-6. **Rollback rehearsal:** `scripts/rollback.sh staging 34983c1` (no `--restore`) → boots, serves
+6. **Rollback rehearsal:** `scripts/rollback.sh staging 3fd7c03` (no `--restore`) → boots, serves
    history/previous/hints identically; start a session and log a set (its `catalogId` is NULL in
    the DB); `scripts/ship.sh staging` again → boot log shows `1 set resolved`; the set has an id
-   via the API. Then also `rollback.sh staging 1aeebcc` (Sequelize) once, same checks, roll
-   forward.
+   via the API. (`34983c1`, wife's current tag, has the same migration journal, so one rehearsal
+   covers both; the Sequelize `1aeebcc` rehearsal is no longer needed — no instance runs it.)
 7. Progress and Settings smoke on 8037 in the browser (and the Android app pointed at 8037,
    which is what the dev build already targets).
-8. `scripts/ship.sh main`. **Not wife** (she stays on `1aeebcc` until Bundle 1 + 2 go together,
-   days later, per the loop).
+8. `scripts/ship.sh main`. **Not wife in this bundle.** She is on `34983c1` and is scheduled to get
+   `3fd7c03` on Wed 2026-09-30; A2 follows her a few days after it has run on main, per the loop.
+   Her phone's APK must only be updated after her backend is on the matching commit.
 
 ---
 
 ## 4. Parity checklist (what must be provably unchanged)
 
-- [ ] All 74 backend tests and 121 frontend tests pass with zero assertion edits (fixtures may
+- [ ] All 78 backend tests and 143 frontend tests pass with zero assertion edits (fixtures may
       gain `catalogId`).
 - [ ] `api-snapshot` diff (with `catalogId` stripped) empty before/after on staging, and again
       after a restart, and again after merge → split.
@@ -365,7 +370,7 @@ Pure functions first, so the switch is a diff on tested code, not on a 500-line 
       accept exactly what they accept today (the old APK is the client of record).
 - [ ] `exerciseName`, `Exercises.name`, `exerciseNotes` are never rewritten by any path in this
       bundle (grep the diff for writes to those columns: only the pre-existing swap re-point).
-- [ ] Old image boots and serves on the new DB (both `34983c1` and `1aeebcc`).
+- [ ] Old image boots and serves on the new DB (`3fd7c03`; `34983c1` shares its journal).
 - [ ] Coach dossier text is byte-identical before/after for the same data when no merge exists
       (the catalog name equals the set name for every row on a fresh backfill).
 
