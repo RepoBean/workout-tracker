@@ -127,10 +127,10 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 ### Bundle 5 — Derived-read endpoints
 - [ ] `/api/exercises/:catalogId/history`, a progress summary endpoint, `/sessions/:id/previous` rewritten, `/api/coach/dossier` text built server-side. Frontend stops downloading the full history; `useProgressData` and `dossier.ts` shrink or move.
 
-### Bundle 6 — Rules and docs rewrite
-- [ ] CLAUDE.md: v3 sacred rules; changelog → `CHANGELOG.md`; delete GUARDIAN.md; architecture tree refreshed.
-- [ ] Zod schemas as the single source of validation + types; delete stale `backend/src/types/index.ts` duplication.
-- [ ] Carry-overs still open from May plan: sample default programs (needs a content decision), recharts memo (minor).
+### Bundle 6 — Rules and docs rewrite — DONE 2026-09-28
+- [x] CLAUDE.md: v3 sacred rules (six tables, additive migrations, API-only-gains-fields compatibility, multi-instance ship loop, scope line recording the 2026-09-28 no-offline / no-cross-device decisions); "dumb backend" restated as *data + lookups on the server, decisions on the client*; changelog → `CHANGELOG.md` (74 KB → 40 KB); GUARDIAN.md deleted; tree refreshed (Android/hrTransport/baseUrl/download/foreground-service files, backend test layout); Key Features 18–20 (catalog, assisted lifts, Android).
+- [~] Zod as the single source of validation **and** client types: **not done, by decision.** It needs a shared package between `backend/` and `frontend/` (or `z.infer` re-exports across the Docker build boundary) for a benefit the hand-written `shared/api/types.ts` already delivers in practice. The stale `backend/src/types/index.ts` (zero importers) is deleted; backend Zod schemas remain the validation source, the frontend types file the client source.
+- [ ] Carry-overs still open from May plan: sample default programs (needs a content decision), recharts memo (minor). Neither is v3 work.
 
 ---
 

@@ -4,20 +4,22 @@
 
 A self-hosted workout tracking app built with TypeScript, React, and Express.
 
-**This is a personal app.** Single user, self-hosted, used at the gym on a phone. No multi-user, no cloud sync, no enterprise features.
+**This is a personal app.** One user per instance, self-hosted, used at the gym on a phone (the Android app, or the web app over the VPN). Two instances (Jason, wife) run the same images from one checkout — multi-instance, never multi-user. No cloud sync, no offline mode, no cross-device resume, no enterprise features.
 
 ---
 
 ## Core Philosophy
 
-### Smart Frontend, Dumb Backend
+### Client owns interaction, server owns data
 
 | Layer | Responsibility |
 |-------|----------------|
-| **Frontend** | All UX logic, "What's Next?" calculation, sorting, filtering, optimistic updates |
-| **Backend** | Validation + persistence only. No business logic. |
+| **Frontend** | Everything the user feels: "What's Next?", navigation, sorting/filtering for display, progression and rep hints, PR rules, optimistic updates, the coach |
+| **Backend** | Validates (Zod), persists (Drizzle/SQLite), keeps identity straight (exercise catalog), answers indexed lookups (previous sets, all sets by name), exports. No product decisions. |
 
-**Why?** The phone is powerful. The UI should be instant. The server is just a backup drive that validates before saving.
+**Why?** The phone is powerful and the UI must be instant. The server is the durable copy plus the few
+reads that would otherwise mean downloading everything. The original "dumb backend" rule was relaxed in
+v3 (`docs/v3-plan.md` §2) — the line now is *data and lookups on the server, decisions on the client*.
 
 ---
 
@@ -38,12 +40,15 @@ A self-hosted workout tracking app built with TypeScript, React, and Express.
 
 | Rule | Constraint |
 |------|------------|
-| Tables | 6 maximum: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog (v3 allowed exactly one new table — the catalog; see `docs/v3-plan.md`) |
-| Database | SQLite only — no Postgres. Schema changes are drizzle-kit SQL migrations (`backend/drizzle/`), applied at boot; never hand-edit the live DB |
-| State | React state + TanStack Query + Context only — NO Redux, NO Zustand |
+| Tables | Six: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog. A new table needs a written case in `docs/` first (v3 allowed exactly one; `SessionExercises` was parked on 2026-09-28) |
+| Database | SQLite only. Schema changes are drizzle-kit SQL migrations in `backend/drizzle/`, applied at boot, **additive until an explicit cutover**. Never hand-edit the live DB. Dates stay in Sequelize's text format |
+| Compatibility | The API only ever **gains** fields. An older frontend/APK must keep working against a newer backend, and an older backend image must boot on a newer DB (rollback = old tag, no restore) |
+| Instances | One checkout, three compose profiles (main / wife / staging). Every change ships staging → main → wife, same commit. Never `docker compose down -v` |
+| State | React state + TanStack Query + Context only — NO Redux, NO Zustand. Per-session localStorage keys are scoped by session id and swept on complete/discard |
 | Design | Mobile-first — this runs on a phone at the gym |
-| Units | Pounds (lbs) for weight |
+| Units | Pounds (lbs). A kg toggle, if ever, is display-only |
 | Auth | None — self-hosted behind VPN |
+| Scope | No multi-user, no cloud sync, no offline mode, no cross-device resume (decided 2026-09-28; do not re-propose) |
 
 ---
 
@@ -53,7 +58,7 @@ Local dev database lives at `backend/database.sqlite` (throwaway). In Docker eac
 
 ## Database Schema
 
-**Do not change the schema** unless absolutely necessary (and document why).
+Schema changes go through drizzle-kit migrations and get a written reason: a `docs/` bundle doc for anything structural, a `CHANGELOG.md` row for a column.
 
 ### Tables & Relationships
 
@@ -131,7 +136,8 @@ src/
 │   │   │   ├── useAdHocExercises.ts   # Ad-hoc exercise state + set lookups
 │   │   │   ├── useDiscardSession.ts   # Discard incomplete session (shared with dashboard)
 │   │   │   ├── useExerciseOrdering.ts # Single source of truth for order
-│   │   │   └── useRpeFlow.ts          # RPE prompt orchestration
+│   │   │   ├── useRpeFlow.ts          # RPE prompt orchestration
+│   │   │   └── useWorkoutForegroundService.ts # Android: mounted at app root; foreground service while a server session is active + strap connected
 │   │   ├── lib/
 │   │   │   ├── sessionStorage.ts  # Session-scoped localStorage keys + cleanup sweep
 │   │   │   └── virtualExercise.ts # Synthetic Exercise builder for ad-hoc/swap inserts
@@ -227,12 +233,18 @@ src/
 │   │   ├── types.ts               # Shared API request/response types
 │   │   ├── queries.ts             # TanStack Query definitions
 │   │   ├── predicates.ts          # isCardioExercise / isCardioSet type guards
-│   │   └── cardio.ts              # Cardio modality display labels
+│   │   ├── cardio.ts              # Cardio modality labels + exerciseTargetSummary
+│   │   ├── baseUrl.ts             # API base URL normalisation (relative on web, configured server URL in the app)
+│   │   └── download.ts            # openServerDownload — attachments open in the system browser inside the app
 │   ├── lib/
 │   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
-│   │   └── oneRepMax.ts           # Epley 1RM estimate
+│   │   ├── oneRepMax.ts           # Epley 1RM estimate
+│   │   ├── platform.ts            # isNativeApp() — the one runtime gate for Android-only code
+│   │   ├── foregroundService.ts   # Desired-state loop over the Android foreground-service plugin (+ tests)
+│   │   ├── restNotification.ts    # Exact local notification for the rest timer (Android)
+│   │   └── hrTransport/           # HR strap transport: types, webBluetooth (browser), nativeBle (app), parseHr
 │   ├── utils/
 │   │   ├── format.ts              # formatMMSS, parseDurationToSec, etc. (+ tests)
 │   │   └── heartRate.ts           # downsampleHr — bucket HR samples for storage/charts
@@ -240,7 +252,7 @@ src/
 │       ├── TimerContext.tsx       # Global rest timer (survives navigation)
 │       ├── OfflineContext.tsx     # Online/offline status
 │       ├── ThemeContext.tsx       # Dark mode state
-│       ├── HeartRateContext.tsx   # Web Bluetooth HR strap connection + live samples
+│       ├── HeartRateContext.tsx   # HR strap connection (via hrTransport) + live samples
 │       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones)
 │       ├── ProgressionContext.tsx # Auto-progression settings (enabled, increment)
 │       └── AiCoachContext.tsx     # AI Coach settings + enabled state
@@ -253,9 +265,9 @@ src/
 
 ---
 
-## Backend Architecture ("Dumb Storage")
+## Backend Architecture
 
-The backend validates and persists. That's it.
+The backend validates, persists, keeps exercise identity straight, and answers indexed lookups. It makes no product decisions.
 
 ```
 backend/
@@ -276,29 +288,27 @@ backend/
 │   │       └── setsByName.ts # Name → catalog → sets by catalogId (previous hints, PR check); name fallback
 │   ├── middleware/
 │   │   └── validate.ts      # Zod schema validation (body + URL params)
-│   ├── types/
-│   │   └── index.ts         # Stale hand-written types (nothing imports it; removed in v3 Bundle 6)
 │   └── index.ts             # Express app setup
 ├── drizzle/                 # drizzle-kit SQL migrations + meta/ (committed; copied into the image)
 ├── drizzle.config.ts
-├── test/                    # Vitest + supertest API tests (in-memory SQLite, `npm test`)
-├── database.sqlite              # SQLite database
+├── test/                    # Vitest + supertest API tests over in-memory SQLite (`npm test`): per-router tests,
+│                            #   parity.test.ts (HTTP characterization), migrations/catalog tests replaying the live DDL
+├── database.sqlite          # Throwaway local-dev DB (gitignored) — the real DBs are the docker volumes
 ├── package.json
 └── tsconfig.json
 ```
 
 ### What the Backend Does NOT Do
-- ❌ Calculate "What's Next?" (frontend does this)
-- ❌ Sort or filter history (frontend does this)
-- ❌ Business logic decisions (frontend owns this)
-- ❌ Complex queries (return raw data, frontend processes)
+- ❌ Calculate "What's Next?", progression hints, rep suggestions, PR rules (frontend logic, tested there)
+- ❌ Sort or filter for display (History, Progress, the coach dossier are built client-side)
+- ❌ Guess at data: the catalog backfill groups only by `lower(trim(name))`; merging near-duplicates is the user's call
 
 ### What the Backend DOES
-- ✅ Validate request bodies with Zod schemas
-- ✅ Reject invalid data (negative weights, bad dates, missing fields)
-- ✅ Persist to SQLite via Drizzle
-- ✅ Return raw data for frontend to process
-- ✅ Handle database transactions where needed
+- ✅ Validate request bodies and URL params with Zod; `validate()` writes the parsed result back so defaults/stripping apply
+- ✅ Persist via Drizzle with `foreign_keys = ON` (SQLite does the cascades)
+- ✅ Resolve `catalogId` from `exerciseName` on every write; backfill NULLs on every boot
+- ✅ Indexed lookups by name/catalog (`/previous`, `history-by-name`, `all-sets-by-name`) instead of the client downloading everything
+- ✅ The few derived bits that predate v3 and stay: week streak in `/stats`, rotation advance in `/complete`, CSV export
 
 ---
 
@@ -466,6 +476,22 @@ backend/
 
 ---
 
+### 18. Exercise Catalog (v3 Bundle 2)
+- `ExerciseCatalog` gives every lift a stable id; `catalogId` on program exercises and sets, names still stored everywhere
+- Server resolves the id from the name on every write; boot-time backfill heals rows an old client wrote without one
+- Settings → Exercise catalog (collapsed; **Manage** expands): merge B into A (B becomes an alias, all rows re-pointed), split an alias back off
+- Progress, PR check, previous hints and the coach all-time block group by catalog identity, so a rename is one lift
+
+### 19. Assisted Lifts
+- Negative weight = assistance (`−40` is 40 lb of help); `lbs`/`assist` toggle in SetInput; backend floor −500
+- Volume, 1RM, PRs and the coach use `effectiveWeight()` = profile bodyweight + weight (set skipped without a bodyweight)
+
+### 20. Android App
+- Capacitor WebView around the same React build; native BLE for the strap, exact local notification for the timer, foreground service while a session is active
+- Built in Docker (`scripts/build-apk.sh`), published as a GitHub Release (`scripts/release-apk.sh`); the APK bundles the frontend, so UI changes need a new release
+
+---
+
 ## Established Patterns
 
 These are conventions established in the codebase. New features should follow them.
@@ -572,7 +598,7 @@ Run the frontend and backend directly when iterating on code. This uses a **sepa
 
 If you need real data in dev, copy it out of the container first (`docker cp ...` above).
 
-### Android app (spike)
+### Android app
 
 The native Android app wraps the existing React build in a Capacitor WebView (`frontend/android/`, `Dockerfile.android`). It is built in Docker without requiring Android SDK installed on the host: `scripts/build-apk.sh` compiles the frontend, syncs native assets, runs `./gradlew assembleDebug` in a container with a persisted keystore volume (`workout-tracker-android-home`), and outputs `~/apk/latest.apk`. `scripts/serve-apk.sh` serves the APK over the local network / VPN on port 8038 for sideloading onto test devices. `scripts/release-apk.sh` publishes it as a GitHub Release instead (stable link: `https://github.com/RepoBean/workout-tracker/releases/latest/download/workout-tracker.apk`) — built locally so the keystore volume signs every release and updates install over the old app. The APK bundles the frontend, so UI changes need a new release; backend changes reach the app via `ship.sh` alone. Both Jason and his wife run it (main 8035 / wife 8036).
 
@@ -580,80 +606,9 @@ The native Android app wraps the existing React build in a Capacitor WebView (`f
 
 ## Changelog
 
-| Commit | Description |
-|--------|-------------|
-| 841bd3e | Phase 1: Foundation (Vite, Express, routing, dark mode, PWA skeleton) |
-| 3749438 | Phase 2: Active session (set logging, optimistic UI, "What's Next?") |
-| fff95b2 | Phase 3: Persistent rest timer with notifications |
-| 1673588 | Phase 4: Plate calculator, drop set support, swipe gestures |
-| 0f2b133 | Phase 5: Program builder, history view, dashboard calendar, PWA offline |
-| c94db51 | Phase 6: Resume sessions, stats, CSV export, ad-hoc workouts, polish |
-| 8749d28 | Fix: Sync TypeScript types with Zod schemas and model |
-| 7437412 | Feature: Program export/import (JSON format) |
-| 2ddc1b9 | Feature: Delete session from history (swipe + button) |
-| — | UX Overhaul: focused exercise view, per-exercise RPE, inline set editing, ad-hoc picker |
-| e241939 | Feature: Add exercise mid-workout with history auto-population |
-| 273bbb7 | Cleanup: Remove deprecated /next-workout endpoint, fix UpdateProgramRequest type |
-| 397903e | Resilience: Add ErrorBoundary, backend param validation |
-| bb0d4a5 | Refactor: Extract focused hooks from ActiveSession (useAdHocExercises, useExerciseOrdering, useRpeFlow) |
-| 519a323 | Docs: Update CLAUDE.md with new hooks, components, and patterns |
-| 543ddfe | Fix: Stale state in RPE flow / auto-advance |
-| bf2d797 | Feature: Calendar day click navigates to session in History |
-| eda400b | Feature: Progress Page Phase 1 (Exercise Progress Tab) |
-| d07757a | Feature: Progress Page Volume Trends Tab (Phase 2) |
-| 040c7b2 | Feature: Personal Records Tab (Phase 3) |
-| b36ae52 | Feature: Metric toggle (Volume, 1RM, Weight) on Progress Chart |
-| 3127227 | Fix: RPE prompt now works for ad-hoc exercises |
-| 58f775f | UX: Replace prompt() with Modal for adding workouts |
-| cb992d2 | Feature: Show detailed set history in Progress tab |
-| e1ffff7 | Fix: Exercise history lookup by name, case-insensitive matching |
-| 327ec72 | Fix: Weight hints prioritize current session, preserve manual input changes |
-| 865ebd9 | Remove service worker (stable VPN, no offline need) |
-| bb1427a | UX: Tappable Up Next + remove inline timer |
-| 1d0c5cd | Feature: Week Streak stats + Completion Celebration |
-| 9d9afea | Fix: Add toast notifications to discardMutation + staleTime |
-| 8ab5d53 | Fix: Add missing toast notifications to program mutations + staleTime |
-| 29239f9 | Fix: SessionHeader shows workout name, Complete confirmation, session-scoped nav state |
-| 4a4c1e0 | Fix: History staleTime, swipe confirmation, calendar highlight pagination |
-| 9c148f1 | Fix: Progress page dark mode tooltips, 1RM calculation, dropdown, error states |
-| — | Schema: Add `Session.exerciseNotes` JSON column (per-exercise notes captured in RPE prompt). Keyed by exercise name. Chose Session-level over Set-level to avoid replicating the same string across every set of an exercise. |
-| c685617 | Feature: Auto-Progression — opt-in deterministic double-progression hint. When every working set tops the rep range at one weight, suggests a weight bump (default 5 lb) and resets reps to the bottom of the range. Pure logic + tests, localStorage context, Settings card. Session-time hint only; never edits the program. |
-| — | Feature: BYO-Key AI Coach — opt-in chat coach in `features/coach/`. Multi-provider (Anthropic via `@anthropic-ai/sdk`; OpenAI/OpenRouter/Google AI Studio/Custom via a fetch-based OpenAI-compatible adapter). Provider abstraction in `lib/providers/`, neutral agentic loop (`coachLoop.ts`), read-only tools over existing `/api` endpoints (`tools.ts`), persisted thread in localStorage. Settings card with dynamic model fetch (`listModels`) + free-text fallback. AI never writes the DB — "build a program" emits version-1 export JSON into the existing import preview Modal. Google routed through a same-origin `/ai-proxy/google/` nginx+Vite proxy (no CORS header). Config in `shared/context/AiCoachContext.tsx`; `/coach` route + tab shown only when enabled. Backend untouched. Also extracted `epleyOneRepMax` to `shared/lib/oneRepMax.ts`. |
-| — | UX: ExerciseCard interaction pass — whole logged-set row is the tap-to-edit target with a pencil hint at row end, full-width edit row (44px select-on-focus inputs + 44px Save/Cancel), note/swap header icons bumped to 44px hit areas, set rows min-h 44px. Note view/edit/clear widget extracted to `ExerciseNote.tsx`; ExerciseCard back under 500 lines. |
-| — | UX: Superset fixed-position cards — cards stay in program order and the active exercise expands in place (no more physical reordering on rotation). Extracted superset block to `SupersetStep.tsx` with a `renderExerciseCard` render prop shared with the single-exercise branch (kills the duplicated ExerciseCard wiring). Collapsed-card tap now uses a direct `setSupersetActive(idx)` on the navigation hook instead of loop-rotating — tapping a completed card now reliably expands it. Rotation-after-set logic unchanged. |
-| — | Fix: SetInput localStorage override leak — weight/reps overrides are now session-scoped (`wt:setinput:${sessionId}:...`, key builders in `lib/sessionStorage.ts`; SetInput reads sessionId from route params like CardioSetInput). `clearSessionLocalState` sweeps the prefix on complete/delete; dashboard discard now also calls `clearSessionLocalState` (was missing). One-time legacy sweep of unscoped `set-weight-*`/`set-reps-*` keys at app start (`main.tsx`). |
-| — | UX: Coach polish — assistant bubbles render markdown via `react-markdown` + `remark-gfm` (`CoachMarkdown.tsx`; user messages stay plain, streaming draft renders live). Composer sticky offset now matches the tab bar exactly (`bottom-[calc(56px+env(safe-area-inset-bottom))]`). Starter chips send immediately instead of filling the input. Errors report once (in-thread ⚠️ bubble only; toast dropped). |
-| — | Dark token sweep — migrated all `dark:(bg\|border\|hover:bg)-gray-(600-900)` surface styles (~60 across 19 files) to `surface-*` tokens. Added missing `surface-600` (#3F3F4E) and `surface-700` (#32323F) palette stops — coach/HeartRatePill already referenced surface-700 but the token didn't exist (classes were silently dead). Conventions: inputs `dark:bg-surface-900 dark:border-surface-800`; popovers `dark:bg-surface-800` + `border-surface-700`; borders/dividers/skeletons `surface-700`; hover on card `surface-700`, on page bg `surface-800`. SwipeableRow backdrop `gray-900`→`surface-800` (matches card; removed ExerciseCard's opaque-wrapper workaround). text-gray-* untouched. |
-| — | Code health bundle — extracted `CompletedSessionSummary.tsx` from active-session index (633→542 lines); step↔flat-index math + "up next" scan moved into `useExerciseNavigation` (`flatIndexForStep`/`stepForFlatIndex`/`nextIncompleteExercise`; replaced `getCurrentFlatIndex`, `goToNext` shares the scan); PR detection extracted to `usePrCelebration.ts` and HR-window refs to `useHrWindow.ts` (useActiveSession 369→305 lines); raw `['history']`/`['stats']`/`['calendarSessions']` invalidations now use the `queryKeys` factory (added `calendarSessionsAll`); import-program mutation moved to `shared/api/queries.ts` as `useImportProgram` (coach no longer imports from program-builder; `useProgramMutations` delegates); ExerciseListDropdown drag hit-test scoped to a container ref instead of `document.querySelectorAll`. No behavior changes. |
-| — | UX odds and ends — Discard Workout action on the active session screen (red text button at page bottom; `confirm()` → delete session → stop timer → navigate home). Discard mutation extracted to `hooks/useDiscardSession.ts` (DELETE + `clearSessionLocalState` + activeSession invalidation + toasts); dashboard Resume card now uses the same hook. Progress tab labels shortened to "Exercises / Volume / Records" so all three fit without horizontal scroll. |
-| — | Cleanup: Drop-set dead code removal — removed unused `isDropSet`/`dropIndex` props and the orange drop input mode from `SetInput.tsx` (zero callers), plus the dead `dropIndex` field from ExerciseCard's `onLogSet` contract. Schema, historical drop-set display, and swipe-delete unchanged. |
-| — | Feature: Cardio manual entry + edit + save robustness — "Enter manually" button on the cardio idle card opens the finishing form with a blank duration field; the finishing form's duration is now always editable (pre-filled from the timer after Finish), parsed by new `parseDurationToSec` in `shared/utils/format.ts` (accepts `m:ss`, `h:mm:ss`, plain/decimal minutes; +tests). Logged cardio rows in ExerciseCard now tap-to-edit duration/distance like strength rows (`onUpdateSet` contract widened with `durationSec`/`distance` — hook + backend already accepted them). Failed saves no longer lose the elapsed time: CardioSetInput clears its persisted timer state only after the POST succeeds (`onLogSet` gained an optional `{ onSuccess }` second arg, threaded ExerciseCard → page `handleLogSet`). Persist effect no longer rewrites identical JSON every 250 ms tick (`elapsedSec` dropped from deps); finishing-phase `durationStr` is persisted, manual entries persist without `startedAt`. |
-| — | Fix: Blank-session ad-hoc exercises survive reload — `useAdHocExercises` now persists the blank-session `adHocExercises` list (full shape incl. `exerciseType`/`cardioModality`/targets) under `wt:adhoc-blank:${sessionId}` (the program flavor already owns `adhoc-exercises-${id}`), restored in the lazy initializer. Fixes Quick Cardio mid-run reload losing the seeded cardio card (no set logged yet, so reconstruction-from-sets couldn't recover it; re-adding produced a strength card). Key swept in `clearSessionLocalState`. Load/save helpers unified into generic `loadStoredList`/`saveStoredList`. |
-| — | Perf: Kill 10 Hz re-renders from context providers — `TimerContext.tick()` now bails with the same state object when `timeRemaining` (whole seconds) hasn't changed, so the 100 ms drift-correction interval no longer re-renders every `useTimer` consumer (incl. the whole ActiveSession tree via `useActiveSession`) ten times a second during rest. Timer completion path (sound/vibration/notification, runs inside `tick()`) untouched. Provider `value` objects memoized with `useMemo` in `TimerContext`, `ToastContext` (consumers no longer re-render when a toast appears/expires), and `HeartRateContext`. No behavior changes. |
-| — | Consistency + small-fix bundle — Progress bests (per-session bestWeight/bestVolume/best1RM in `getExerciseHistory` and the Personal Records tab) now exclude drop sets, matching the PR-celebration rules in `personalRecord.ts` (drop rows still shown in set lists). PersonalRecordsTab `indigo-*` → `primary-*` (teal). Dashboard discard now uses `confirm()` with set count (same wording as the active-session Discard); custom Modal deleted from `ResumeWorkout.tsx`. ExerciseCard `isBetter` green highlight requires one metric up and the other not down (100×9 no longer "beats" 185×8). `SessionHRChart` imports shared `formatMMSS` instead of a local copy. ExerciseListDropdown long-press drag moved to the `touch-none` drag handle (enlarged hit area) so dragging from the row body no longer scrolls the page; removed the no-op `preventDefault` in passive `onTouchMove`. |
-| — | Cleanup: Dead code + hardening sweep — removed zero-caller exports: `useExerciseAllSetsByName` hook (PR check uses `queryClient.fetchQuery` directly; `ExerciseAllSet` type + `queryKeys.exerciseAllSets` kept), `getWorkoutByIndex` (whatIsNext.ts), `Toast()` stub export, `NextWorkoutResponse` type (referenced the removed `/next-workout` endpoint), `options?.onSetLogged` plumbing in `useActiveSession` (page wires completion via `logSet`'s per-call `onSuccess`), `updateExerciseInOrder` (useExerciseOrdering), `setsByExercise` dropped from `useAdHocExercises`' result interface (still used internally). Hardening: `useExerciseNavigation` persist effects include the storage keys in deps, and `useRpeFlow` now takes `sessionId` and resets `completedExercisesRef` when it changes — both guard a sessionId change without remount. No behavior changes. |
-| — | Docs: CLAUDE.md drift fix (no code changes) — API table corrected against the live routers: complete is `POST` (was PUT), workout/exercise creation are flat `POST /api/workouts` + `POST /api/exercises` with the parent id in the body (was nested paths), added missing `GET :id` routes, `duplicate` endpoints, `all-sets-by-name`, and `exercise-note`. Schema diagram now lists the cardio columns on Exercises/Sets, HR columns on Sessions/Sets, and `exerciseNotes`; Key Patterns rows added for Cardio, Heart Rate, and Exercise Notes. Architecture tree caught up (CardioSetInput, SwapExercise, LiveHRChart, SessionHRChart, active-session `lib/` + logic files, `features/settings/`, HeartRatePill, TimeInZoneBar, `shared/lib` + `shared/utils`, predicates/cardio API helpers, HR/profile/progression contexts). Style guide color line fixed: teal `primary-*`, not indigo. |
-| — | A11y: Modal + Calendar polish — `Modal` gets `role="dialog"`, `aria-modal="true"`, `aria-labelledby` wired to the title (`useId`), and an `aria-label="Close"` on the X button. Focus moves into the dialog on open (skipped when a child `autoFocus`es itself, e.g. the Add Workout input), restores to the opener on close, with a minimal Tab/Shift+Tab focus trap (query-based, no library). Calendar workout-day cells are now real `<button>`s with "View workout on {Month} {day}" labels (keyboard/AT operable — were `div onClick`); non-workout days stay plain spans. |
-| — | Perf: Route code-splitting — all seven route components in `App.tsx` are now `React.lazy` behind one `Suspense` (spinner fallback matching the active-session loader). Provider stack (incl. `@anthropic-ai/sdk`) moved behind dynamic `import()` at call time: `AiCoachSettingsCard` imports `PROVIDER_ORDER`/`PROVIDER_PRESETS` from `lib/providers/presets` directly and loads `createProvider` inside "Load models"; coach `send()` loads it on first message. Entry chunk 1,211 kB → 301 kB (360 → 95 kB gzip); recharts (341 kB) loads with Progress/History/ActiveSession chunks, the coach markdown stack (175 kB) with the Coach tab, the SDK (158 kB) only on first send/model-fetch. The 500 kB build warning is gone. |
-| — | Fix: Rest timer stuck at 0:01 on completion — `new Notification()` throws "Illegal constructor" on Android Chrome (page-scoped notifications need a service worker, which was removed), aborting `tick()`'s completion branch after the buzzer/vibration but before `setState(initialState)`, so the header indicator froze at the last second. Notification call now wrapped in try/catch, and state/localStorage cleanup reordered ahead of `triggerCompletion()` so completion effects can never strand the UI. |
-| — | Docs: README drift fix (no code changes) — feature list gains AI Coach, auto-progression hints, cardio logging, live BLE heart rate, mid-workout add/swap, and plate calculator; stale "Offline support" bullet (service worker removed 865ebd9) reworded to the offline banner that actually exists. LLM-Friendly Workflow section now leads with the built-in coach. Local dev ports corrected (5174/3002, were 5173/3001) and dev script reference fixed to `start-dev.sh` (`start.sh` is the production build script). Project structure tree updated. Screenshots not retaken (programs-*.png predate the Jun 10 visual refresh). |
-| — | Fix: Navigation bounced to exercise 1 after the first logged set when the user skipped ahead (occupied machine) — `useExerciseNavigation`'s smart-resume effect stayed armed on fresh sessions (the zero-sets early return never set `hasResumedRef`), so the first set re-fired the first-incomplete scan and reset the step. Resume decision is now one-shot: gated on a new `isReady` prop (session loaded; steps built — waits out the `orderedExercises` state sync) and disarms on every path. First hook-level tests in the suite (`useExerciseNavigation.test.ts`, renderHook; regression test verified to fail against the old code). |
-| — | Fix bundle: Backend review round 1 + first backend tests — (1) workout duplicate now copies cardio fields (`exerciseType`/`cardioModality`/`targetDurationSec`/`targetDistance`; copies of cardio exercises silently became strength — program duplicate already copied them). (2) `validate()` assigns the Zod parse result back to `req.body`, so schema defaults/transforms/unknown-key stripping actually apply (import JSON omitting `workouts`/`exercises` 500'd before; now imports as empty). (3) `validateParams(idParamSchema)` wired into every `:id` route across all four routers — non-numeric ids returned 500, now 400; dead `validateQuery`/`parseParams` helpers removed. (4) Startup migrations extracted to `src/migrations.ts` — only `duplicate column name` errors are swallowed, anything else fails startup (was bare `catch {}` that ate locked-DB/disk errors too). (5) `isActive` dropped from the PUT `/api/programs/:id` schema and `UpdateProgramRequest` types (backend + frontend) — `/set-active` is the only path that changes it, making the single-active-program invariant unbreakable. First backend test suite: vitest + supertest over in-memory SQLite (`backend/test/`, 34 tests, `npm test`; forks pool — sqlite3 addon isn't worker-thread safe). Verified live against a copy of the production DB: boot migrations, all five fixes, full session lifecycle, dropped-column re-add. |
-| — | UX: Blank ad-hoc ("Quick Workout") sessions now use the same focused view as program workouts — one exercise at a time, "Up next", collapsible All-Exercises dropdown with drag-reorder, resume-positioning, per-exercise RPE prompt, and previous weight/reps by name (the "what did I lift last time" hint that program ad-hoc exercises already got). Mechanism: `useAdHocExercises` now feeds blank-session exercises through `mergedExercises` as virtual Exercises (new `blankMergedExercises`, keyed by `hashName(name)` — deterministic, survives reload, collapses a blank-list entry and its logged-set twin to one id) instead of a separate flat list. `active-session/index.tsx` collapses its two render branches into one (focused view gated on `orderedExercises.length`, empty state otherwise) and unifies the Add-Exercise handler (blank appends to the blank list → flows to navigation; program path unchanged). Swap stays program-only. Program-path code is untouched (branch only changes the `exercises.length===0` case). Tests: new `useAdHocExercises.test.ts`; `useExerciseNavigation.test.ts` extended with all-negative-id (ad-hoc) coverage. |
-| — | Fix: Silent 50-session history truncation — `GET /api/sessions/history` rejected any `limit > 100` and fell back to 50, so the Progress page (`useHistory(200,0)`) computed "all-time" Personal Records / Volume Trends / Exercise Progress from only the last 50 sessions, and the History page's 10th "Load More" (limit 101) shrank the list from 90→50 with sessions past 100 permanently unreachable (live DB has 70). Fix: out-of-range limits now **clamp toward the request, never below it** — `paginationQuerySchema.limit` clamps to `[1, 2000]` (a personal lifetime) instead of a `.max(100)` pipe that failed parse; the /history route dropped its stale `Math.min(…, 100)` (schema owns clamping). Non-numeric limit still falls back to the default 50. Progress `useHistory(200)`→`1000`, coach `getPersonalRecords` fetch `100`→`1000` (both summarize client-side; payload unchanged). History paging untouched — clamp semantics make its growing-limit paging correct up to 2000. Tests: 4 new /history limit-contract cases in `backend/test/sessions.test.ts`. |
-| — | UX: Program builder card refresh — WorkoutCard header stacks the day name over a meta line (`N exercises · name preview`) instead of one row of name + count + 4 icon buttons, so names stop truncating; Duplicate/Delete workout moved to a quiet footer row inside the expanded card. Exercise rows are whole-row tap-to-edit with a pencil hint (active-session convention), keeping only the reorder arrows inline; exercise Delete moved into ExerciseForm's edit mode (`confirm()` kept). Exercise target line is cardio-aware ("Running · 30 min · 3 mi" instead of the stored placeholder "1 × 1"). ProgramCard drops the top-right count for a meta line under the name (`N workouts · M exercises`; hero appends `· N workouts` to its "Up next" line), and the active program's rotation pointer shows as an "Up next" pill on the matching workout row. |
-| — | Fix: HR samples survive navigation and reloads — the session page's clear-on-mount effect wiped the app-root HR buffer on every remount, so navigating Home and back emptied the live chart AND truncated the `heartRateAvg/Min/Max` + `heartRateSeries` saved at completion (both read the same buffer). Effect deleted — every consumer already windows by session start; `clearSamples` dropped from HeartRateContext (zero callers), replaced by `restoreSamples` (validate/dedupe/sort merge + retention trim). New `useHrPersistence` hook flushes the session window to `wt:hrsamples:${sessionId}` (delta-encoded `encodeHrSamples`/`decodeHrSamples` in `shared/utils/heartRate.ts`) every 25 s while connected plus on visibilitychange-hidden/pagehide, restoring before the first flush on load — reload or tab discard mid-workout no longer loses the series. Deliberately no cleanup-flush (it would race `clearSessionLocalState`'s sweep on complete/discard and resurrect the key; the page's active gate includes `!showCelebration` for the same reason). HR lag: LiveHRChart pins a live tail point at the latest raw reading so the chart tip tracks the header pill instead of lagging the partial 5 s bucket average (the pill itself was never delayed — it renders every strap notification). Tests: codec round-trip/garbage, restoreSamples merge semantics, persistence restore/flush/inactive gating. |
-| — | Feature: Swap carries logged sets to the new exercise — swapping an exercise that already had sets logged used to orphan them (still in the DB under the old name, rendered under no card, uncounted toward the new card's targets, wrong name in history). The swap modal now shows a default-ON checkbox ("Move N logged sets to the new exercise") when sets exist; checked, the new `moveSets` mutation in `useActiveSession` re-points each set to `{ exerciseName: newName, exerciseId: null }` (optimistic, RPE-bulk-update pattern) so they regroup under the swapped-in virtual exercise via `adHocSetsByName`. Unchecked covers the machine-broke case — real sets of the old exercise keep their name in history. Backend `updateSetSchema` gains `exerciseName` + `exerciseId` (null only — a re-pointed set can never claim another program exercise's positive id; positive ids 400). Known edge (pre-existing for plain swaps): swapping to a name that collides with a program exercise in the same workout leaves null-id sets unresolvable after reload. Tests: 2 new PUT-set re-pointing cases in `backend/test/sessions.test.ts`. |
-| — | UX: Out-of-order workout support — three fixes for the skip-ahead flow (occupied machine). (1) "Up next" now wraps: `nextIncompleteStepIndex` scans forward with modulo instead of stopping at the last step, so finishing a later exercise points back at earlier incomplete ones (previously the label vanished and `goToNext` went dead). (2) All-Exercises dropdown pins completed exercises to the top with their check — display-only partition in `ExerciseListDropdown` (`displayList` of `{ex, idx}` entries); underlying order, navigation steps, and drag persistence untouched. Drag state uses display indices, translated back to underlying indices at the callbacks; completed rows lose the drag handle (spacer keeps alignment) and the hit-test clamps to the incomplete suffix. Trap for future edits: the parent speaks flat/underlying indices — never leak display indices without translating via `entry.idx`. (3) History performed-order is now guaranteed, not accidental: all five `sets` includes in the sessions router order by `id ASC` (insertion = performed; `createdAt` is 1 s resolution), and `SessionCard.exerciseGroups` sorts by id before first-seen grouping as a cache-path tiebreak. Tests: 2 wrap-around hook cases (regression-verified against the old scan) + 1 backend performed-order contract case. |
-| — | Fix: Rep prefill is realistic — new `logic/suggestReps.ts` anchors each set on last session's SAME-numbered set instead of aiming at the top of the rep range. `computeProgression`'s not-topped-out branch returned `suggestedReps: high`, which backtested worst of every rule tried over 1103 real working sets (set-1 MAE 2.32, 28% exact); it now delegates to `suggestReps` and keeps only the WEIGHT decision. Rules, in normative order: base on previous set N → reset to range bottom if the weight went up (double progression) → +1 on set 1 only when fresh and below the range top → clamp (set 1 to `[low, high]`, **sets 2+ top-only, no floor**) → decay cap at what was just logged. The no-floor rule is the point: last session's `8/6/6` on an 8-12 target pre-fills `9/6/6`, not `9/8/8` — aspirational when fresh, honest when fatigued. `parseRepTarget` moved into `suggestReps.ts` (re-exported from `progression.ts`; dependency is one-directional) and ExerciseCard's third rep parser deleted. 28 tests. |
-| — | Feature: Coach dossier + 6→2 tools — the AI coach's data is now preloaded into the system prompt instead of fetched a piece at a time (see Key Features §17). New `lib/dossier.ts` (pure, 27 tests) and `hooks/useCoachDossier.ts`; the ~618 KB all-time fetch runs once behind a 60 s timeout override and its *computed text* is memoized to `wt:coach-dossier-alltime`, keyed by newest session id + count + date. Deleted `get_active_program`, `list_recent_sessions`, `get_stats`, `get_personal_records`; `get_exercise_history` replaced by `get_workout_history({monthsBack?, from?, to?, exerciseName?})`. That tool takes `monthsBack` as its primary form (no model calendar arithmetic), **sends `to` as `${date}T23:59:59.999Z`** (verified live: a bare `to=2026-09-07` returns 0 sessions, the suffixed form returns the session on that day), rejects unparseable dates rather than forwarding them (`?from=garbage` silently returns 0), and matches `exerciseName` as a case-insensitive **substring** so renamed lifts stay whole (live: "Low Incline Dumbbell Press" → "Low Incline DB Press" on 2026-06-26; exact matching returned half the history and read as if the lift began in June). Prompt caching added: `systemCacheable` on `RunTurnArgs`, an Anthropic `cache_control` breakpoint at the end of the stable prefix, concatenation for OpenAI-compatible. Persona rewritten off "call a tool first". Backend untouched. |
-| — | UX: Dashboard design pass — first focused pass since the April overhaul. Header is date-led (weekday + date; app name dropped — it's on the PWA icon), with a shared `.eyebrow` label class (index.css) used by every dashboard section. Hero: decorative blob removed, workout name to 3xl/extrabold, meta line shows rotation position ("Workout 2 of 3"), targets via new shared `exerciseTargetSummary` (moved from WorkoutCard to `shared/api/cardio.ts` — cardio no longer shows the "1 × 1" placeholder), expanded rows prefix "last", cardio rows skip the meaningless 0×0 history fetch, skeleton matches the teal surface (no white flash), empty state links to Programs. `StatsCard` (3-tile KPI row; giant teal 0 for a dead streak) replaced by `ThisWeek.tsx`: Sun–Sat disc strip (filled+check = trained, ring = today, dashed = future) fed by the calendar-month queries, streak as amber flame chip only when > 0, counts as one quiet text line. Calendar: workout days are filled tappable discs (dots-under-numbers removed, rows now constant height), today ringed to match the strip, adjacent-month cells blank, single-letter day headers, aria-labels on month nav, count reads "N workouts in July". ResumeWorkout: amber-tinted card + "In progress" eyebrow + elapsed right-aligned; Discard demoted from lg danger button to quiet red ghost (still 48px, still `confirm()`). Quick Workout button demoted to md secondary, "(Ad-hoc)" jargon dropped; picker modal copy pass ("Start from Scratch", "Cardio" with activity-pulse icon — heart glyph stays reserved for HR). HeartRatePill hit targets 28→40px (all three states; renders in dashboard + session headers). ThemeContext now syncs `meta[name=theme-color]` to the page surface (#FAFAF8/#0F0F12) — status bar no longer bright teal over a dark page. |
-| — | Ops: Step Zero (v3 Bundle 0) — single-checkout `docker-compose.yml` with `main`/`wife`/`staging` profiles (8035/8036/8037), one image pair tagged by git sha (`TAG`), private network per pair with the backend aliased `backend`, all volumes `external`. Wife stack migrated in from its separate clone (zero data movement; old clone removed). New `scripts/`: `backup.sh` (VACUUM INTO via in-container node), `backup-cron.sh` (nightly, 60 d local / 365 d NAS mirror at `/mnt/faster/backups/workout-tracker-db/`), `restore.sh`, `seed-staging.sh`, `ship.sh` (tests → active-session gate → backup → tagged build → wait healthy → `deploys.log`), `rollback.sh`, `prune-images.sh`. CI workflow `.github/workflows/test.yml`; dead `lint` script removed. v3 plan copied to `docs/v3-plan.md` (canonical). No product change. |
-| — | Refactor: Sequelize → Drizzle (v3 Bundle 1; plan in `docs/v3-bundle-1-drizzle.md`). `sequelize`+`sqlite3` replaced by `drizzle-orm`+`better-sqlite3`+`drizzle-kit`; `src/models/` → `src/db/{schema,columns,index,migrate}.ts`. Schema mirrors the live DDL exactly (names, defaults, FK actions, index names) so both instances' DBs are used as-is; **dates keep Sequelize's text format** via a custom column (`columns.ts`) so a DB the new image has written stays readable by the old image (rollback = old tag, no restore). Migration runner: table-guarded legacy column adds → drizzle migrator over `backend/drizzle/` (`0000_baseline` is `IF NOT EXISTS`, hand-edited from drizzle-kit output; `0001` adds the `sets_exercise_name_lower` expression index). SQLite does the cascades now (`foreign_keys = ON`; the DDL always declared them). The two full-table loads (`/sessions/:id/previous`, `/exercises/history-by-name`, also `all-sets-by-name`) became indexed `lower(exerciseName) = lower(?)` queries in `db/queries/setsByName.ts`. `/history?from|to` bounds are parsed explicitly; unparseable → 400 (was a silent empty 200). Tests: 22 HTTP-only characterization tests (`parity.test.ts`) written first against Sequelize and passed unchanged on Drizzle — shapes, timestamps, cascades, date bounds, case-insensitive lookups, ordering; migration tests replay the literal live DDL and a pre-2026-06 shape; `columns.test.ts`. Existing tests changed only in seed helpers (`test/app.ts` `seed`/`find`, rows carry a `reload()`); zero `request(app)` lines touched. vitest no longer needs `pool: forks`. Ops: `scripts/lib/snapshot.js` supports both drivers (backup runs inside whichever image is live), `Dockerfile.backend` copies `drizzle/` into the image, `ship.sh` refuses Node < 20 (host moved to Node 22 via nvm, `.nvmrc` added; apt `/usr/bin/node` is still 18 and serves cron), new `scripts/api-snapshot.sh` for before/after diffs. Deleted: `seed.ts`, `scripts/import_legacy.ts`, `types/associations.ts`. |
-| — | Feature: Capacitor Android spike (v3 Bundle B0; plan in `docs/v3-bundle-b0-capacitor.md`). Capacitor 8 wrapper of the existing React build (`@capacitor/android`, `@capacitor-community/bluetooth-le`, `@capacitor/local-notifications`, `@capawesome-team/capacitor-android-foreground-service`, `@capacitor/app`). Platform runtime gate (`isNativeApp()`) and lazy imports ensure the web bundle and entry chunk remain clean and untouched. Configurable API base URL with first-run server entry on native and CORS origins on backend. Bundled fonts locally (`@fontsource/dm-sans`, `@fontsource/outfit`) removing Google Fonts CDN dependency. HR transport layer (`hrTransport/`) delegating to Web Bluetooth on web or native BLE on Android. Rest-timer exact notification scheduling via local notifications. Android foreground service (`connectedDevice` type 16) keeping HR connection and timer active with screen off. Android back-button handler (minimize on root, history back elsewhere). Settings "Android" card with permissions, battery optimization instructions, and live 2-second refreshing diagnostics panel with clipboard copy. Hermetic Dockerized Android build (`Dockerfile.android`, `scripts/build-apk.sh`, `scripts/serve-apk.sh`) with reproducible debug signing keystore persisted in named volume. |
-| — | Feature: Assisted lifts — log assistance as a negative weight (`−40` = 40 lbs of help). Keypad has no minus key, so the `lbs` unit label in SetInput (and the inline edit row) is now an `AssistToggle` that flips to amber **assist**; the box holds the magnitude, steppers move the signed value (+2.5 = less help, crosses zero). Backend floor `min(0)` → `min(-500)` on log/update set; CSV export emits numbers raw (the formula-injection guard turned `-40` into the text cell `'-40`). New Profile field **bodyweight** (Settings, localStorage); `effectiveWeight`/`setVolume` in `shared/lib/effectiveWeight.ts` convert assisted sets to bodyweight + weight for volume (session card, celebration, completed summary, weekly/monthly), Progress bests/1RM/PRs, PR celebration (`computeBestOneRepMax` takes bodyweight) and the coach all-time rollup (labelled "lb effective (assisted)"; stall detection works on it; bodyweight in the athlete line + dossier cache key; persona explains the notation). Without a bodyweight assisted sets drop out of those figures, like 0-weight sets. The effective scale matches the hand-entered pull-up history (105→145), so charts stay continuous. Progression needed no change (`−40 + 5 = −35`). `formatWeight` renders U+2212. Tests: backend negative round-trip/update/floor/CSV; effectiveWeight, formatWeight, personalRecord (new), progression + suggestReps assisted cases, dossier assisted rollup/stall/no-bodyweight. |
-| — | Android B1 fixes — (1) Foreground service now lives at app level (`useWorkoutForegroundService()` in `AppContent`), bound to the **server** active session (`useActiveSessionCheck`, native-only) + strap connected, instead of "session page open": going Home mid-workout no longer lets the strap drop with the screen off. Notification body shows the start time; tapping it routes to `/workout/:id` (`notificationTapped`). `shared/lib/foregroundService.ts` rewritten as a desired-state loop (`setWorkoutServiceActive`) — interleaved start/stop can no longer leave a stale flag or let a superseded start kill a newer one (+3 tests). `useStartSession` now invalidates `activeSession` (the dashboard Resume card was also stale for up to 30 s after a start). (2) Coach Google provider works in the app: server-relative preset URLs are prefixed with the configured server URL, and nginx `/ai-proxy/google/` answers CORS (incl. preflight) for `http(s)://localhost` only. (3) Downloads in the app: CSV and program export open the absolute server URL (`shared/api/download.ts` `openServerDownload`) so the system browser saves the attachment; web program export keeps the blob path. (4) Real launcher icon: vector adaptive icon from the `icon.svg` barbell on teal `#0D9488` with a monochrome layer (Pixel themed icons). (5) `versionCode` = git commit count, `versionName` = short sha (`build-apk.sh` passes `-P` props); shown in the Android diagnostics panel. Release signing deliberately stays on the persisted debug keystore — switching keys would force an uninstall and wipe each phone's localStorage (server URL, profile, settings). |
-| — | Feature: Exercise catalog (v3 Bundle 2; plan + results in `docs/v3-bundle-2-catalog.md`) — the one new table v3 allows: `ExerciseCatalog(id, name, aliases, …)` (unique `lower(name)`), nullable `catalogId` on `Exercises` + `Sets` (FK, no ON DELETE action). Migrations `0002` (generated) + `0003` (custom expression unique index). Names stay authoritative: the server derives `catalogId` on every write (`resolveCatalogId`), request schemas never accept it (old APK unaffected), and `backfillCatalog()` runs every boot after migrations — fills NULL ids (first boot: +73 rows / 1,738 sets / 196 exercises on main; also heals rows an old image wrote while rolled back) and GCs unreferenced alias-less rows; silent once converged. `setsByName.ts` resolves name/alias → catalogId (name fallback), so `/previous`, `history-by-name`, `all-sets-by-name` see a merged lift as one. New `routes/catalog.ts`: `GET /api/catalog` (counts), `POST /:id/merge {fromId}`, `POST /:id/split {alias}` — identity only, never rewrites names/notes/`updatedAt`. Frontend: Progress math extracted to `progress/logic/exerciseIndex.ts` (characterization-tested first), Progress + coach all-time rollup group by catalog name (`shared/lib/catalog.ts`), dossier memo key gains a catalog fingerprint, Settings → Exercise catalog card (merge into… / split off alias, `confirm()` with counts). `api-snapshot.sh` gains `WT_SNAPSHOT_STRIP` + a null-`catalogId` post-check. Staging: 45-file snapshot diff empty after deploy / restart / merge→split / rollback; rollback to `3fd7c03` needs no restore. Main shipped; the Low Incline split is rehearsed but not merged (user's call). Tests 78→98 backend, 143→161 frontend. |
+Lives in `CHANGELOG.md` (one row per shipped change). Add a row for every change you ship; v3 bundles
+also get a plan + results doc in `docs/v3-bundle-*.md`. The v3 checklist and decision record is
+`docs/v3-plan.md`.
 
 ---
 
