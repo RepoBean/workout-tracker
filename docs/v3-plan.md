@@ -113,6 +113,7 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [x] Progress, PR check, previous hints, coach dossier key by `catalogId`; renames become safe via merge. Request schemas unchanged (old APK keeps working); rollback = old tag, no restore (rehearsed).
 
 ### Bundle 3 — Session structure on the server
+**2026-09-28: Jason does not need cross-device resume.** That removes A3's headline payoff; what remains is history fidelity (skipped exercises) and retiring the per-session localStorage families. Deprioritised — only if the localStorage bug class bites again.
 - [ ] New table `SessionExercises`: sessionId, catalogId (nullable), name, orderIndex, targetSets, targetReps, supersetGroup, exerciseType + cardio targets, source (`program` | `adhoc` | `swap`), replacesId, skipped, note. Created at session start from the workout snapshot. Mutations: add, swap, reorder, skip. `Sets.sessionExerciseId`.
 - [ ] localStorage keeps only transient per-device state (nav position, input overrides, cardio timer, HR sample buffer). Resume from any device. History shows skipped exercises.
 - [ ] `Session.exerciseNotes` likely migrates to `SessionExercises.note` (decide then).
@@ -152,6 +153,7 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [~] Release signing: **decided to keep the persisted debug keystore** (volume `workout-tracker-android-home`). A new key forces uninstall on both phones and wipes their localStorage. Release APK built from the **same commit** as the web deploy; an old APK keeps working because the API only ever gains fields.
 
 ### Bundle B2 — Offline (after Track A Bundle 3, not before)
+**2026-09-28: DROPPED — Jason does not need an offline version.** VPN model stays.
 - [ ] Service worker (vite-plugin-pwa / Workbox): precache the shell so the app opens without the VPN; API network-first.
 - [ ] Set-log outbox: TanStack Query paused mutations + a persister (IndexedDB), replayed in order when online. Stays inside the no-new-state-library rule. Single user → conflicts are minimal. Background Sync optional.
 - [ ] **Sequencing rule:** moving session structure to the server (A3) and adding an offline queue pull in opposite directions. Do A3 first, then design the queue to carry structure mutations too; the other order builds the queue twice.
@@ -174,6 +176,8 @@ rollback = previous tag + restored backup; the wife stack lags by days, never le
 ---
 
 ## 7. Still open / not decided
+
+- **2026-09-28 decisions:** no cross-device resume (A3 deprioritised), no offline (B2 dropped). With those gone the remaining Track A value is A4's bodyweight log (honest assisted-lift history) and A6's docs rewrite; A5 only if Progress/coach get slow (payload ~640 KB, grows ~7 KB/session).
 
 - Which track goes first. **Recommendation:** Step Zero → Drizzle (A1) → Capacitor spike (B0) → then interleave A2… and B1 as desired. B0 is the fastest visible payoff; A1 is foundations. *(Step Zero, A1 and B0 done as of 2026-09-14; next is B1 or A2.)*
 - Coach write access (e.g. adjusting next session's targets with confirmation). Deferred; `project_coach_usage` memory says the coach is for at-home review.
