@@ -24,9 +24,12 @@ export function ExerciseCatalogCard() {
   const { data: entries, isLoading, error } = useCatalog();
   const merge = useMergeCatalog();
   const split = useSplitCatalog();
+  const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [mergeSource, setMergeSource] = useState<CatalogEntry | null>(null);
   const [targetFilter, setTargetFilter] = useState('');
+
+  const merged = useMemo(() => (entries ?? []).filter((e) => e.aliases.length > 0), [entries]);
 
   const visible = useMemo(() => (entries ?? []).filter((e) => matches(e, filter)), [entries, filter]);
   const targets = useMemo(
@@ -62,19 +65,50 @@ export function ExerciseCatalogCard() {
 
   return (
     <div className="card space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Exercise catalog</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Every exercise name you've used. If two entries are the same lift under different
-          names, merge them so Progress, PRs, "last time" hints and the coach treat them as one.
-          History keeps the names you logged.
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Exercise catalog</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            {open
+              ? 'If two entries are the same lift under different names, merge them so Progress, PRs, "last time" hints and the coach treat them as one. History keeps the names you logged.'
+              : 'Renamed a lift? Merge the old and new names so its history stays in one piece.'}
+          </p>
+        </div>
+        {entries && (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="shrink-0 min-h-[44px] px-2 text-sm font-medium text-primary-600 dark:text-primary-400"
+            aria-expanded={open}
+          >
+            {open ? 'Done' : 'Manage'}
+          </button>
+        )}
       </div>
 
       {isLoading && <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>}
       {error && <p className="text-sm text-red-600 dark:text-red-400">Couldn't load the catalog.</p>}
 
-      {entries && (
+      {entries && !open && (
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          <p>
+            {plural(entries.length, 'exercise')}
+            {merged.length > 0 && ` · ${plural(merged.length, 'merged name')}`}
+          </p>
+          {merged.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {merged.map((entry) => (
+                <li key={entry.id} className="text-gray-700 dark:text-gray-300">
+                  {entry.name}
+                  <span className="text-gray-500 dark:text-gray-400"> ← {entry.aliases.join(', ')}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {entries && open && (
         <>
           <Input
             type="search"
