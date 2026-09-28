@@ -1,10 +1,13 @@
 // Pure grouping / records math behind the Progress page. useProgressData is a thin
 // useMemo wrapper over these, so the rules can be tested without rendering.
+// Everything groups by exercise-catalog identity (shared/lib/catalog.ts), so a lift
+// logged under two spellings that were merged in Settings is one series.
 
 import type { Program, Session, Set } from '../../../shared/api/types';
 import { isCardioExercise, isCardioSet } from '../../../shared/api/predicates';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 
 export interface ExerciseSession {
     sessionId: number;
@@ -49,6 +52,8 @@ export interface CardioExerciseSession {
     }>;
 }
 
+const setName = (set: Set, catalog: CatalogNames) => groupName(set.catalogId, set.exerciseName, catalog);
+
 export interface ExerciseIndex {
     allExerciseNames: string[];       // Unique exercise names from history, sorted
     mostTrainedExercises: string[];   // Top 5 by set count
@@ -57,7 +62,7 @@ export interface ExerciseIndex {
     activeCardioExercises: string[];  // Cardio exercises from the active program
 }
 
-function activeProgramNames(programs: Program[], cardio: boolean): string[] {
+function activeProgramNames(programs: Program[], cardio: boolean, catalog: CatalogNames): string[] {
     const activeProgram = programs.find(p => p.isActive);
     if (!activeProgram?.workouts) return [];
 
@@ -65,13 +70,17 @@ function activeProgramNames(programs: Program[], cardio: boolean): string[] {
     activeProgram.workouts.forEach(workout => {
         workout.exercises?.forEach(exercise => {
             if (isCardioExercise(exercise) !== cardio) return;
-            names.add(exercise.name);
+            names.add(groupName(exercise.catalogId, exercise.name, catalog));
         });
     });
     return Array.from(names);
 }
 
-export function buildExerciseIndex(sessions: Session[], programs: Program[]): ExerciseIndex {
+export function buildExerciseIndex(
+    sessions: Session[],
+    programs: Program[],
+    catalog: CatalogNames = NO_CATALOG,
+): ExerciseIndex {
     const names = new Set<string>();
     const cardioNames = new Set<string>();
     const counts = new Map<string, number>();
@@ -79,9 +88,10 @@ export function buildExerciseIndex(sessions: Session[], programs: Program[]): Ex
     sessions.forEach(session => {
         session.sets?.forEach((set: Set) => {
             if (!set.exerciseName) return;
-            names.add(set.exerciseName);
-            counts.set(set.exerciseName, (counts.get(set.exerciseName) || 0) + 1);
-            if (isCardioSet(set)) cardioNames.add(set.exerciseName);
+            const name = setName(set, catalog);
+            names.add(name);
+            counts.set(name, (counts.get(name) || 0) + 1);
+            if (isCardioSet(set)) cardioNames.add(name);
         });
     });
 
@@ -92,8 +102,8 @@ export function buildExerciseIndex(sessions: Session[], programs: Program[]): Ex
             .slice(0, 5)
             .map(([name]) => name),
         allCardioExerciseNames: Array.from(cardioNames).sort(),
-        activeExercises: activeProgramNames(programs, false),
-        activeCardioExercises: activeProgramNames(programs, true),
+        activeExercises: activeProgramNames(programs, false, catalog),
+        activeCardioExercises: activeProgramNames(programs, true, catalog),
     };
 }
 
@@ -102,6 +112,7 @@ export function strengthHistory(
     sessions: Session[],
     name: string,
     bodyweight: number | null,
+    catalog: CatalogNames = NO_CATALOG,
 ): ExerciseSession[] {
     const result: ExerciseSession[] = [];
 
@@ -110,7 +121,7 @@ export function strengthHistory(
         if (!session.completedAt) return;
 
         const exerciseSets = session.sets?.filter(
-            (set: Set) => set.exerciseName === name && !isCardioSet(set)
+            (set: Set) => setName(set, catalog) === name && !isCardioSet(set)
         ) || [];
 
         if (exerciseSets.length === 0) return;
@@ -176,14 +187,18 @@ export function strengthHistory(
 }
 
 /** Per-session cardio history for one exercise, oldest first. */
-export function cardioHistory(sessions: Session[], name: string): CardioExerciseSession[] {
+export function cardioHistory(
+    sessions: Session[],
+    name: string,
+    catalog: CatalogNames = NO_CATALOG,
+): CardioExerciseSession[] {
     const result: CardioExerciseSession[] = [];
 
     sessions.forEach(session => {
         if (!session.completedAt) return;
 
         const cardioSets = session.sets?.filter(
-            (set: Set) => set.exerciseName === name && isCardioSet(set)
+            (set: Set) => setName(set, catalog) === name && isCardioSet(set)
         ) || [];
 
         if (cardioSets.length === 0) return;
@@ -242,6 +257,7 @@ export function personalRecords(
     sessions: Session[],
     bodyweight: number | null,
     now: Date = new Date(),
+    catalog: CatalogNames = NO_CATALOG,
 ): PersonalRecord[] {
     // Track best volume set and best 1RM per exercise independently
     const bestVolumeByExercise = new Map<string, {
@@ -267,12 +283,13 @@ export function personalRecords(
             // Assisted sets use effective load; skipped without a bodyweight
             const weight = effectiveWeight(set.weight, bodyweight);
             if (weight == null) return;
+            const exerciseName = setName(set, catalog);
 
             // Track best volume set
             const volume = weight * set.reps;
-            const existingVolume = bestVolumeByExercise.get(set.exerciseName);
+            const existingVolume = bestVolumeByExercise.get(exerciseName);
             if (!existingVolume || volume > existingVolume.volume) {
-                bestVolumeByExercise.set(set.exerciseName, {
+                bestVolumeByExercise.set(exerciseName, {
                     volume,
                     weight,
                     reps: set.reps,
@@ -282,9 +299,9 @@ export function personalRecords(
 
             // Track best estimated 1RM independently
             const estimated1RM = epleyOneRepMax(weight, set.reps);
-            const existing1RM = best1RMByExercise.get(set.exerciseName);
+            const existing1RM = best1RMByExercise.get(exerciseName);
             if (!existing1RM || estimated1RM > existing1RM.estimated1RM) {
-                best1RMByExercise.set(set.exerciseName, {
+                best1RMByExercise.set(exerciseName, {
                     estimated1RM,
                     date: session.completedAt!,
                 });

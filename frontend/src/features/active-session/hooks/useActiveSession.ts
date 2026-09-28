@@ -85,6 +85,7 @@ export function useActiveSession(sessionId: number) {
           heartRateMax: newSet.heartRateMax ?? hrStats?.max ?? null,
           durationSec: newSet.durationSec ?? null,
           distance: newSet.distance ?? null,
+          catalogId: null, // the server derives it from the name; arrives on refetch
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };

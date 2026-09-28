@@ -6,6 +6,7 @@ import {
     personalRecords,
     strengthHistory,
 } from './exerciseIndex';
+import { catalogNames } from '../../../shared/lib/catalog';
 
 // Characterization: these pin the Progress page's name-keyed behaviour as it was
 // inside useProgressData before the extraction. Fixture follows the live shape —
@@ -29,6 +30,7 @@ function set(over: Partial<WorkoutSet> = {}): WorkoutSet {
         heartRateMax: null,
         durationSec: null,
         distance: null,
+        catalogId: null,
         createdAt: '2026-01-01T10:00:00.000Z',
         updatedAt: '2026-01-01T10:00:00.000Z',
         ...over,
@@ -68,6 +70,7 @@ function exercise(name: string, over: Partial<Exercise> = {}): Exercise {
         cardioModality: null,
         targetDurationSec: null,
         targetDistance: null,
+        catalogId: null,
         createdAt: '2026-01-01T10:00:00.000Z',
         updatedAt: '2026-01-01T10:00:00.000Z',
         ...over,
@@ -264,5 +267,54 @@ describe('personalRecords', () => {
         expect(personalRecords(SESSIONS, null, NOW).map(r => r.exerciseName)).toEqual([
             'Leg Press', 'Low Incline DB Press', 'Low Incline Dumbbell Press',
         ]);
+    });
+});
+
+describe('catalog identity (after a merge)', () => {
+    // Both spellings point at catalog entry 7, named after the current program's spelling.
+    const PRESS = 7;
+    const merged: Session[] = SESSIONS.map(s => ({
+        ...s,
+        sets: s.sets!.map(set => set.exerciseName.startsWith('Low Incline')
+            ? { ...set, catalogId: PRESS }
+            : set),
+    }));
+    const catalog = catalogNames([{
+        id: PRESS, name: 'Low Incline DB Press', aliases: ['Low Incline Dumbbell Press'],
+        setCount: 5, exerciseCount: 1, createdAt: '', updatedAt: '',
+    }]);
+
+    it('two names sharing a catalogId become one series under the catalog name', () => {
+        const index = buildExerciseIndex(merged, PROGRAMS, catalog);
+        expect(index.allExerciseNames).toEqual([
+            'Leg Press', 'Low Incline DB Press', 'Neutral Grip Pull-Up', 'Treadmill',
+        ]);
+        expect(index.mostTrainedExercises[0]).toBe('Low Incline DB Press'); // 5 sets
+
+        const series = strengthHistory(merged, 'Low Incline DB Press', null, catalog);
+        expect(series.map(s => [s.sessionId, s.bestWeight])).toEqual([[1, 60], [2, 65]]);
+        expect(strengthHistory(merged, 'Low Incline Dumbbell Press', null, catalog)).toEqual([]);
+    });
+
+    it('records key by the catalog entry', () => {
+        const records = personalRecords(merged, 185, NOW, catalog);
+        expect(records.map(r => r.exerciseName)).toEqual(['Leg Press', 'Neutral Grip Pull-Up', 'Low Incline DB Press']);
+        expect(records[2]).toMatchObject({ bestVolume: 650, bestVolumeDate: JUN, estimated1RM: 87 });
+    });
+
+    it('active-program names display the catalog name too', () => {
+        const programs = PROGRAMS.map(p => ({
+            ...p,
+            workouts: p.workouts!.map(w => ({
+                ...w,
+                exercises: w.exercises!.map(e => e.name === 'Low Incline DB Press' ? { ...e, catalogId: PRESS } : e),
+            })),
+        }));
+        expect(buildExerciseIndex(merged, programs, catalog).activeExercises)
+            .toEqual(['Low Incline DB Press', 'Leg Press']);
+    });
+
+    it('a catalogId with no loaded catalog name falls back to the row name', () => {
+        expect(buildExerciseIndex(merged, PROGRAMS)).toEqual(buildExerciseIndex(SESSIONS, PROGRAMS));
     });
 });

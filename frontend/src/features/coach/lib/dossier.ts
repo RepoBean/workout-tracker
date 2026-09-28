@@ -19,6 +19,7 @@ import { isCardioSet } from '../../../shared/api/predicates';
 import { exerciseTargetSummary } from '../../../shared/api/cardio';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 import { computeAge, type UserProfile } from '../../../shared/lib/hrZones';
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
 
@@ -162,8 +163,15 @@ interface ExerciseRollup {
  * Weight figures use effective load: an assisted set (−40 = 40 lb of help) counts as
  * bodyweight − 40, on the same scale as history hand-entered as an effective load. Without
  * a bodyweight, assisted sets add to counts but not to any weight figure.
+ *
+ * Keyed by exercise-catalog identity: spellings merged in Settings roll up as one lift
+ * under the catalog name (a renamed lift otherwise reads as "dropped" + a new one).
  */
-function rollupExercises(sessions: Session[], bodyweight: number | null): Map<string, ExerciseRollup> {
+function rollupExercises(
+  sessions: Session[],
+  bodyweight: number | null,
+  catalog: CatalogNames
+): Map<string, ExerciseRollup> {
   const out = new Map<string, ExerciseRollup>();
   // Oldest first so first/last weight land the right way round.
   const ordered = [...sessions].sort((a, b) =>
@@ -174,10 +182,11 @@ function rollupExercises(sessions: Session[], bodyweight: number | null): Map<st
     const date = isoDate(session.completedAt);
     for (const set of session.sets ?? []) {
       if (!isWorkingSet(set)) continue;
-      let r = out.get(set.exerciseName);
+      const name = groupName(set.catalogId, set.exerciseName, catalog);
+      let r = out.get(name);
       if (!r) {
         r = {
-          name: set.exerciseName,
+          name,
           sets: 0,
           dates: new Set(),
           cardio: false,
@@ -195,7 +204,7 @@ function rollupExercises(sessions: Session[], bodyweight: number | null): Map<st
           topByDate: new Map(),
           assisted: false,
         };
-        out.set(set.exerciseName, r);
+        out.set(name, r);
       }
       r.sets += 1;
       r.dates.add(date);
@@ -305,9 +314,10 @@ function renderRollup(r: ExerciseRollup, today: string): string {
 export function buildAllTimeBlock(
   sessions: Session[],
   today: string,
-  bodyweight: number | null = null
+  bodyweight: number | null = null,
+  catalog: CatalogNames = NO_CATALOG
 ): string {
-  const rollups = [...rollupExercises(sessions, bodyweight).values()].sort(
+  const rollups = [...rollupExercises(sessions, bodyweight, catalog).values()].sort(
     (a, b) => b.sets - a.sets || a.name.localeCompare(b.name)
   );
   if (rollups.length === 0) return 'All-time per exercise: none yet.';
@@ -453,10 +463,11 @@ export function assembleDossier(parts: DossierParts): string {
 export function buildAllTimeParts(
   sessions: Session[],
   today: string,
-  bodyweight: number | null
+  bodyweight: number | null,
+  catalog: CatalogNames = NO_CATALOG
 ): { allTime: string; notes: string } {
   return {
-    allTime: buildAllTimeBlock(sessions, today, bodyweight),
+    allTime: buildAllTimeBlock(sessions, today, bodyweight, catalog),
     notes: buildNotesBlock(sessions),
   };
 }

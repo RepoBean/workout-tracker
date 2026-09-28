@@ -25,6 +25,7 @@ export function makeVirtualExercise(
     cardioModality: null,
     targetDurationSec: null,
     targetDistance: null,
+    catalogId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

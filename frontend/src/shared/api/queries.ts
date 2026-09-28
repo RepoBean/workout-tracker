@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, ProgramExportPayload, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest } from './types';
+import type { Program, ProgramExportPayload, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest, CatalogEntry } from './types';
 import { useToast } from '../ui/Toast';
 
 // ============================================
@@ -17,15 +17,19 @@ export const queryKeys = {
   session: (id: number) => ['sessions', id] as const,
   activeSession: ['activeSession'] as const,
   previousSession: (sessionId: number) => ['previousSession', sessionId] as const,
+  previousSessionAll: ['previousSession'] as const,
   // nextWorkout removed - frontend calculates locally via useNextWorkoutLocal
   history: (params?: { limit?: number; offset?: number }) => params ? ['history', params] as const : ['history'] as const,
   exerciseSuggestions: (query: string) => ['exerciseSuggestions', query] as const,
   exerciseHistoryByName: (name: string) => ['exerciseHistoryByName', name] as const,
+  exerciseHistoryByNameAll: ['exerciseHistoryByName'] as const,
   exerciseAllSets: (name: string) => ['exercises', 'all-sets', name] as const,
+  exerciseAllSetsAll: ['exercises', 'all-sets'] as const,
   calendarSessions: (year: number, month: number) => ['calendarSessions', year, month] as const,
   calendarSessionsAll: ['calendarSessions'] as const,
   stats: ['stats'] as const,
   progressHistory: ['progressHistory'] as const,
+  catalog: ['catalog'] as const,
 };
 
 // ============================================
@@ -288,5 +292,84 @@ export function useStats() {
       return data;
     },
     staleTime: 5 * 60 * 1000, // Stats don't change frequently
+  });
+}
+
+// ============================================
+// Exercise catalog
+// ============================================
+
+/**
+ * Every catalog entry (one per lift) with its aliases and usage counts, sorted by name.
+ * Progress and the coach group history by catalogId and display these names.
+ */
+export function useCatalog() {
+  return useQuery({
+    queryKey: queryKeys.catalog,
+    queryFn: async () => {
+      const { data } = await api.get<CatalogEntry[]>('/catalog');
+      return data;
+    },
+    staleTime: 5 * 60 * 1000, // Changes only on merge/split or a brand-new name
+  });
+}
+
+/** A merge or split changes which sets count as one lift everywhere history is read. */
+function useInvalidateCatalogReaders() {
+  const queryClient = useQueryClient();
+  return () => {
+    for (const queryKey of [
+      queryKeys.catalog,
+      queryKeys.history(),
+      queryKeys.previousSessionAll,
+      queryKeys.exerciseHistoryByNameAll,
+      queryKeys.exerciseAllSetsAll,
+      queryKeys.programs,
+    ]) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  };
+}
+
+/** Fold catalog entry `fromId` into `intoId`; the folded name becomes an alias. */
+export function useMergeCatalog() {
+  const invalidate = useInvalidateCatalogReaders();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async ({ intoId, fromId }: { intoId: number; fromId: number }) => {
+      const { data } = await api.post<CatalogEntry>(`/catalog/${intoId}/merge`, { fromId });
+      return data;
+    },
+    onSuccess: (entry) => {
+      invalidate();
+      toast.success(`Merged into ${entry.name}`);
+    },
+    onError: () => {
+      toast.error('Failed to merge exercises');
+    },
+  });
+}
+
+/** Undo a merge: split an alias back off into its own entry. */
+export function useSplitCatalog() {
+  const invalidate = useInvalidateCatalogReaders();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, alias }: { id: number; alias: string }) => {
+      const { data } = await api.post<{ entry: CatalogEntry; created: CatalogEntry }>(
+        `/catalog/${id}/split`,
+        { alias }
+      );
+      return data;
+    },
+    onSuccess: ({ created }) => {
+      invalidate();
+      toast.success(`${created.name} split off`);
+    },
+    onError: () => {
+      toast.error('Failed to split exercise');
+    },
   });
 }

@@ -19,6 +19,7 @@ import { useToast } from '../../shared/ui/Toast';
 import { AiCoachSettingsCard } from '../coach/components/AiCoachSettingsCard';
 import { ServerCard } from './components/ServerCard';
 import { AndroidCard } from './components/AndroidCard';
+import { ExerciseCatalogCard } from './components/ExerciseCatalogCard';
 import { isNativeApp } from '../../shared/lib/platform';
 
 const SEX_OPTIONS: Array<{ value: Sex; label: string }> = [
@@ -304,6 +305,7 @@ export default function Settings() {
       </div>
 
       <AiCoachSettingsCard />
+      <ExerciseCatalogCard />
       <ServerCard />
       {isNativeApp() && <AndroidCard />}
     </div>

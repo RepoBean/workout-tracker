@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../shared/api/client';
-import { usePrograms, useHistory, useStats } from '../../../shared/api/queries';
+import { useCatalog, usePrograms, useHistory, useStats } from '../../../shared/api/queries';
+import { catalogFingerprint, catalogNames } from '../../../shared/lib/catalog';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { useProgression } from '../../../shared/context/ProgressionContext';
 import type { Session } from '../../../shared/api/types';
@@ -63,8 +64,9 @@ function writeCache(value: CachedAllTime): void {
  *  - The recent-20 block is small and always fresh.
  *  - The all-time block needs every session (~618 KB). That fetch is made ONCE and the
  *    *computed text* — not the payload — is memoized to localStorage. The key is the newest
- *    session id + total session count + today, so it recomputes when a workout completes
- *    (every 2-3 days) or the date rolls over (the "dropped 2.5mo" flags are relative to today).
+ *    session id + total session count + today + bodyweight + a catalog fingerprint, so it
+ *    recomputes when a workout completes (every 2-3 days), the date rolls over (the "dropped
+ *    2.5mo" flags are relative to today), or an exercise merge/split regroups the rollup.
  *
  * Programs and stats ride the existing queries; profile and progression settings are
  * localStorage-backed contexts and cost no fetch at all.
@@ -79,15 +81,18 @@ export function useCoachDossier() {
   const { data: programs } = usePrograms();
   const { data: stats } = useStats();
   const { data: recentSessions } = useHistory(RECENT_SESSION_COUNT, 0);
+  const { data: catalogEntries } = useCatalog();
 
   // Identity of the current history: newest session + how many there are.
   const newestId = recentSessions?.[0]?.id ?? 0;
   const totalSessions = stats?.totalSessions ?? 0;
   // Bodyweight is in the key because assisted sets' effective loads depend on it.
   const bodyweight = profile.bodyweight;
-  const cacheKey = newestId && totalSessions
-    ? `${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}`
+  // Waits for the catalog so the big fetch runs once, already grouped.
+  const cacheKey = newestId && totalSessions && catalogEntries
+    ? `${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}`
     : '';
+  const catalog = useMemo(() => catalogNames(catalogEntries), [catalogEntries]);
 
   const cached = useMemo(() => {
     if (!cacheKey) return null;
@@ -106,7 +111,7 @@ export function useCoachDossier() {
         params: { limit: ALL_TIME_LIMIT },
         timeout: ALL_TIME_TIMEOUT_MS,
       });
-      const parts = buildAllTimeParts(data, today, bodyweight);
+      const parts = buildAllTimeParts(data, today, bodyweight, catalog);
       writeCache({ key: cacheKey, ...parts });
       return parts;
     },

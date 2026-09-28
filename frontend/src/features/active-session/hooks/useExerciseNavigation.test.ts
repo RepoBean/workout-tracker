@@ -18,6 +18,7 @@ function makeExercise(id: number, name: string, orderIndex: number): Exercise {
         cardioModality: null,
         targetDurationSec: null,
         targetDistance: null,
+        catalogId: null,
         createdAt: '',
         updatedAt: '',
     };
@@ -38,6 +39,7 @@ function makeSet(id: number, exercise: Exercise, setNumber: number): Set {
         heartRateMax: null,
         durationSec: null,
         distance: null,
+        catalogId: null,
         createdAt: '',
         updatedAt: '',
     };

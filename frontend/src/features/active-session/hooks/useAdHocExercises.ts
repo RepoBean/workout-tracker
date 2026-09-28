@@ -158,6 +158,7 @@ export function useAdHocExercises({
                 cardioModality: existingAdHoc?.cardioModality ?? null,
                 targetDurationSec: existingAdHoc?.targetDurationSec ?? null,
                 targetDistance: existingAdHoc?.targetDistance ?? null,
+                catalogId: existingAdHoc?.catalogId ?? null,
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
             });

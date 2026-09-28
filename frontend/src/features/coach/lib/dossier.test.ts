@@ -29,6 +29,7 @@ function set(over: Partial<WorkoutSet> = {}): WorkoutSet {
     heartRateMax: null,
     durationSec: null,
     distance: null,
+    catalogId: null,
     createdAt: '2026-09-07T10:00:00.000Z',
     updatedAt: '2026-09-07T10:00:00.000Z',
     ...over,
@@ -263,6 +264,28 @@ describe('buildAllTimeBlock', () => {
     expect(out).toMatch(/ {2}Low Incline Dumbbell Press: 1 sets, 1 dates, 60 lb, best 60x10 \(1RM 80\), last 2026-04-03 \[dropped/);
   });
 
+  it('rolls merged spellings up as one lift under the catalog name', () => {
+    const out = buildAllTimeBlock(
+      [
+        session({
+          completedAt: '2026-04-03T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Low Incline Dumbbell Press', weight: 60, reps: 10, catalogId: 7 })],
+        }),
+        session({
+          completedAt: '2026-09-02T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Low Incline DB Press', weight: 70, reps: 10, catalogId: 7 })],
+        }),
+      ],
+      TODAY,
+      null,
+      new Map([[7, 'Low Incline DB Press']])
+    );
+    expect(out).toBe([
+      'All-time per exercise (most trained first):',
+      '  Low Incline DB Press: 2 sets, 2 dates, 60→70 lb, best 70x10 (1RM 93), last 2026-09-02',
+    ].join('\n'));
+  });
+
   it('handles an empty history', () => {
     expect(buildAllTimeBlock([], TODAY)).toBe('All-time per exercise: none yet.');
   });
@@ -369,12 +392,12 @@ describe('buildProgramBlock', () => {
           {
             id: 1, workoutId: 1, name: 'Goblet Squat', targetSets: 3, targetReps: '10-12',
             orderIndex: 0, supersetGroup: null, exerciseType: 'strength', cardioModality: null,
-            targetDurationSec: null, targetDistance: null, createdAt: '', updatedAt: '',
+            targetDurationSec: null, targetDistance: null, catalogId: null, createdAt: '', updatedAt: '',
           },
           {
             id: 2, workoutId: 1, name: 'Treadmill', targetSets: 1, targetReps: '1',
             orderIndex: 1, supersetGroup: null, exerciseType: 'cardio', cardioModality: 'treadmill',
-            targetDurationSec: 1800, targetDistance: 3, createdAt: '', updatedAt: '',
+            targetDurationSec: 1800, targetDistance: 3, catalogId: null, createdAt: '', updatedAt: '',
           },
         ],
       },

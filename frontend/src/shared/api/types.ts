@@ -38,6 +38,7 @@ export interface Exercise {
   cardioModality: CardioModality | null;
   targetDurationSec: number | null;
   targetDistance: number | null; // miles
+  catalogId: number | null; // derived from name by the server; null only on virtual (ad-hoc) exercises
   createdAt: string;
   updatedAt: string;
 }
@@ -74,6 +75,18 @@ export interface Set {
   heartRateMax: number | null;
   durationSec: number | null;
   distance: number | null; // miles
+  catalogId: number | null; // exercise-catalog identity, derived from exerciseName by the server
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /api/catalog row: one lift, the spellings folded into it, and what points at it. */
+export interface CatalogEntry {
+  id: number;
+  name: string;
+  aliases: string[];
+  setCount: number;
+  exerciseCount: number;
   createdAt: string;
   updatedAt: string;
 }

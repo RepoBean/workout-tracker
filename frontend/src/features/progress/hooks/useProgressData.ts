@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { useHistory, usePrograms } from '../../../shared/api/queries';
+import { useCatalog, useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Program, Session, Set } from '../../../shared/api/types';
 import { setVolume } from '../../../shared/lib/effectiveWeight';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { catalogNames } from '../../../shared/lib/catalog';
 import {
     buildExerciseIndex,
     cardioHistory,
@@ -57,6 +58,10 @@ export function useProgressData(): UseProgressDataReturn {
     // backend clamps limit at 2000, so 1000 covers a personal lifetime of data.
     const { data: sessions, isLoading: historyLoading, error: historyError } = useHistory(1000, 0);
     const { data: programs, isLoading: programsLoading } = usePrograms();
+    // Group by catalog identity so a merged lift is one series under its catalog
+    // name. Until the catalog loads, rows fall back to their own names.
+    const { data: catalogEntries } = useCatalog();
+    const catalog = useMemo(() => catalogNames(catalogEntries), [catalogEntries]);
     // Assisted (negative-weight) sets score as bodyweight + weight; without a
     // bodyweight they are skipped from bests/volume, like 0-weight sets.
     const { profile: { bodyweight } } = useUserProfile();
@@ -64,20 +69,20 @@ export function useProgressData(): UseProgressDataReturn {
 
     // Picker names, most-trained, and active-program names (logic/exerciseIndex.ts)
     const index = useMemo(
-        () => buildExerciseIndex(sessions ?? NO_SESSIONS, programs ?? NO_PROGRAMS),
-        [sessions, programs]
+        () => buildExerciseIndex(sessions ?? NO_SESSIONS, programs ?? NO_PROGRAMS, catalog),
+        [sessions, programs, catalog]
     );
 
     // Get exercise history for chart/list
     const getExerciseHistory = useMemo(() => {
         return (name: string): ExerciseSession[] =>
-            sessions ? strengthHistory(sessions, name, bodyweight) : [];
-    }, [sessions, bodyweight]);
+            sessions ? strengthHistory(sessions, name, bodyweight, catalog) : [];
+    }, [sessions, bodyweight, catalog]);
 
     const getCardioExerciseHistory = useMemo(() => {
         return (name: string): CardioExerciseSession[] =>
-            sessions ? cardioHistory(sessions, name) : [];
-    }, [sessions]);
+            sessions ? cardioHistory(sessions, name, catalog) : [];
+    }, [sessions, catalog]);
 
     // Helper: Get Monday (week start) for a given date
     const getMonday = (date: Date): Date => {
@@ -184,8 +189,9 @@ export function useProgressData(): UseProgressDataReturn {
 
     // Calculate personal records (best volume set per exercise)
     const personalRecords = useMemo(
-        (): PersonalRecord[] => sessions ? computePersonalRecords(sessions, bodyweight) : [],
-        [sessions, bodyweight]
+        (): PersonalRecord[] =>
+            sessions ? computePersonalRecords(sessions, bodyweight, new Date(), catalog) : [],
+        [sessions, bodyweight, catalog]
     );
 
     return {

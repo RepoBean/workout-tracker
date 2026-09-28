@@ -25,6 +25,7 @@ function makeAdHocSet(
         heartRateMax: null,
         durationSec: null,
         distance: null,
+        catalogId: null,
         createdAt: '',
         updatedAt: '',
         ...overrides,
