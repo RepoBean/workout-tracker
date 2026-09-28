@@ -245,6 +245,24 @@ describe('buildAllTimeBlock', () => {
     expect(out).not.toContain('300');
   });
 
+  it('keeps two spellings of a lift as two lines when nothing links them', () => {
+    const out = buildAllTimeBlock(
+      [
+        session({
+          completedAt: '2026-04-03T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Low Incline Dumbbell Press', weight: 60, reps: 10 })],
+        }),
+        session({
+          completedAt: '2026-09-02T11:00:00.000Z',
+          sets: [set({ exerciseName: 'Low Incline DB Press', weight: 70, reps: 10 })],
+        }),
+      ],
+      TODAY
+    );
+    expect(out).toContain('  Low Incline DB Press: 1 sets, 1 dates, 70 lb, best 70x10 (1RM 93), last 2026-09-02');
+    expect(out).toMatch(/ {2}Low Incline Dumbbell Press: 1 sets, 1 dates, 60 lb, best 60x10 \(1RM 80\), last 2026-04-03 \[dropped/);
+  });
+
   it('handles an empty history', () => {
     expect(buildAllTimeBlock([], TODAY)).toBe('All-time per exercise: none yet.');
   });

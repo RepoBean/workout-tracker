@@ -1,0 +1,268 @@
+import { describe, expect, it } from 'vitest';
+import type { Exercise, Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
+import {
+    buildExerciseIndex,
+    cardioHistory,
+    personalRecords,
+    strengthHistory,
+} from './exerciseIndex';
+
+// Characterization: these pin the Progress page's name-keyed behaviour as it was
+// inside useProgressData before the extraction. Fixture follows the live shape —
+// the Low Incline Dumbbell/DB Press rename split, drop sets, a cardio lift, an
+// assisted lift, and an incomplete (in-progress) session.
+
+let nextId = 1;
+
+function set(over: Partial<WorkoutSet> = {}): WorkoutSet {
+    return {
+        id: nextId++,
+        sessionId: 1,
+        exerciseId: null,
+        exerciseName: 'Leg Press',
+        weight: 200,
+        reps: 10,
+        setNumber: 1,
+        perceivedEffort: null,
+        dropIndex: 0,
+        heartRateAvg: null,
+        heartRateMax: null,
+        durationSec: null,
+        distance: null,
+        createdAt: '2026-01-01T10:00:00.000Z',
+        updatedAt: '2026-01-01T10:00:00.000Z',
+        ...over,
+    };
+}
+
+function session(id: number, completedAt: string | null, workoutName: string, sets: WorkoutSet[]): Session {
+    return {
+        id,
+        programId: 1,
+        programName: 'Upper/Lower',
+        workoutId: 1,
+        workoutName,
+        completedAt,
+        isAdHoc: false,
+        heartRateAvg: null,
+        heartRateMin: null,
+        heartRateMax: null,
+        heartRateSeries: null,
+        exerciseNotes: null,
+        createdAt: '2026-01-01T10:00:00.000Z',
+        updatedAt: '2026-01-01T10:00:00.000Z',
+        sets,
+    };
+}
+
+function exercise(name: string, over: Partial<Exercise> = {}): Exercise {
+    return {
+        id: nextId++,
+        workoutId: 1,
+        name,
+        targetSets: 3,
+        targetReps: '8-12',
+        orderIndex: 0,
+        supersetGroup: null,
+        exerciseType: 'strength',
+        cardioModality: null,
+        targetDurationSec: null,
+        targetDistance: null,
+        createdAt: '2026-01-01T10:00:00.000Z',
+        updatedAt: '2026-01-01T10:00:00.000Z',
+        ...over,
+    };
+}
+
+function program(id: number, isActive: boolean, exercises: Exercise[]): Program {
+    return {
+        id,
+        name: `Program ${id}`,
+        isActive,
+        isArchived: false,
+        currentWorkoutIndex: 0,
+        createdAt: '2026-01-01T10:00:00.000Z',
+        updatedAt: '2026-01-01T10:00:00.000Z',
+        workouts: [{
+            id,
+            programId: id,
+            name: 'Day 1',
+            orderIndex: 0,
+            createdAt: '2026-01-01T10:00:00.000Z',
+            updatedAt: '2026-01-01T10:00:00.000Z',
+            exercises,
+        }],
+    };
+}
+
+const APR = '2026-04-03T11:00:00.000Z';
+const JUN = '2026-06-26T11:00:00.000Z';
+const SEP = '2026-09-11T11:00:00.000Z';
+const NOW = new Date('2026-09-28T12:00:00.000Z');
+
+// Newest first, as /sessions/history returns them.
+const SESSIONS: Session[] = [
+    session(4, null, 'Lower', [set({ exerciseName: 'Leg Press', weight: 500, reps: 10 })]),
+    session(3, SEP, 'Cardio', [
+        set({ exerciseName: 'Treadmill', weight: 0, reps: 0, setNumber: 2, durationSec: 600 }),
+        set({ exerciseName: 'Treadmill', weight: 0, reps: 0, setNumber: 1, durationSec: 1800, distance: 3, heartRateAvg: 140 }),
+        set({ exerciseName: 'Neutral Grip Pull-Up', weight: -40, reps: 8 }),
+    ]),
+    session(2, JUN, 'Upper', [
+        set({ exerciseName: 'Low Incline DB Press', weight: 65, reps: 10, setNumber: 1 }),
+        set({ exerciseName: 'Low Incline DB Press', weight: 65, reps: 9, setNumber: 2, perceivedEffort: 8 }),
+        set({ exerciseName: 'Leg Press', weight: 220, reps: 10 }),
+    ]),
+    session(1, APR, 'Upper', [
+        set({ exerciseName: 'Low Incline Dumbbell Press', weight: 40, reps: 10, setNumber: 2, dropIndex: 1 }),
+        set({ exerciseName: 'Low Incline Dumbbell Press', weight: 60, reps: 8, setNumber: 2 }),
+        set({ exerciseName: 'Low Incline Dumbbell Press', weight: 60, reps: 10, setNumber: 1 }),
+        set({ exerciseName: 'Leg Press', weight: 200, reps: 10 }),
+    ]),
+];
+
+const PROGRAMS: Program[] = [
+    program(9, false, [exercise('Squat')]),
+    program(1, true, [
+        exercise('Low Incline DB Press'),
+        exercise('Leg Press'),
+        exercise('Treadmill', { exerciseType: 'cardio', cardioModality: 'treadmill' }),
+        exercise('Leg Press'),
+    ]),
+];
+
+describe('buildExerciseIndex', () => {
+    const index = buildExerciseIndex(SESSIONS, PROGRAMS);
+
+    it('lists every logged name, sorted, including incomplete sessions', () => {
+        expect(index.allExerciseNames).toEqual([
+            'Leg Press',
+            'Low Incline DB Press',
+            'Low Incline Dumbbell Press',
+            'Neutral Grip Pull-Up',
+            'Treadmill',
+        ]);
+    });
+
+    it('ranks the top 5 by set count, ties in first-seen order', () => {
+        // Counts: Leg Press 3 (incl. the incomplete session), Low Incline Dumbbell 3,
+        // Treadmill 2, Low Incline DB 2, Pull-Up 1. Ties keep first-seen order, and
+        // history arrives newest first.
+        expect(index.mostTrainedExercises).toEqual([
+            'Leg Press',
+            'Low Incline Dumbbell Press',
+            'Treadmill',
+            'Low Incline DB Press',
+            'Neutral Grip Pull-Up',
+        ]);
+    });
+
+    it('splits cardio names out by their sets', () => {
+        expect(index.allCardioExerciseNames).toEqual(['Treadmill']);
+    });
+
+    it('takes active-program names in program order, deduped, split by type', () => {
+        expect(index.activeExercises).toEqual(['Low Incline DB Press', 'Leg Press']);
+        expect(index.activeCardioExercises).toEqual(['Treadmill']);
+    });
+
+    it('is empty without data', () => {
+        expect(buildExerciseIndex([], [])).toEqual({
+            allExerciseNames: [],
+            mostTrainedExercises: [],
+            allCardioExerciseNames: [],
+            activeExercises: [],
+            activeCardioExercises: [],
+        });
+    });
+});
+
+describe('strengthHistory', () => {
+    it('returns completed sessions oldest first with bests excluding drop sets', () => {
+        expect(strengthHistory(SESSIONS, 'Leg Press', null)).toEqual([
+            {
+                sessionId: 1, date: APR, workoutName: 'Upper',
+                sets: [{ weight: 200, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
+                bestWeight: 200, bestVolume: 2000, bestEstimated1RM: 267,
+            },
+            {
+                sessionId: 2, date: JUN, workoutName: 'Upper',
+                sets: [{ weight: 220, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
+                bestWeight: 220, bestVolume: 2200, bestEstimated1RM: 293,
+            },
+        ]);
+
+        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', null)).toEqual([{
+            sessionId: 1, date: APR, workoutName: 'Upper',
+            sets: [
+                { weight: 60, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 },
+                { weight: 60, reps: 8, setNumber: 2, perceivedEffort: undefined, dropIndex: 0 },
+                { weight: 40, reps: 10, setNumber: 2, perceivedEffort: undefined, dropIndex: 1 },
+            ],
+            bestWeight: 60, bestVolume: 600, bestEstimated1RM: 80,
+        }]);
+    });
+
+    it('keeps a renamed lift as two separate series (name-keyed)', () => {
+        expect(strengthHistory(SESSIONS, 'Low Incline DB Press', null).map(s => s.sessionId)).toEqual([2]);
+        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', null).map(s => s.sessionId)).toEqual([1]);
+    });
+
+    it('scores assisted sets at effective load, zero bests without a bodyweight', () => {
+        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', 185)[0]).toMatchObject({
+            bestWeight: 145, bestVolume: 1160, bestEstimated1RM: 184,
+        });
+        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', null)[0]).toMatchObject({
+            sets: [{ weight: -40, reps: 8, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
+            bestWeight: 0, bestVolume: 0, bestEstimated1RM: 0,
+        });
+    });
+
+    it('ignores cardio sets and unknown names', () => {
+        expect(strengthHistory(SESSIONS, 'Treadmill', null)).toEqual([]);
+        expect(strengthHistory(SESSIONS, 'Nope', null)).toEqual([]);
+    });
+});
+
+describe('cardioHistory', () => {
+    it('totals duration/distance with a duration-weighted HR', () => {
+        expect(cardioHistory(SESSIONS, 'Treadmill')).toEqual([{
+            sessionId: 3, date: SEP, workoutName: 'Cardio',
+            totalDurationSec: 2400, totalDistance: 3, avgPaceMph: 4.5, avgHr: 140,
+            sets: [
+                { setNumber: 1, durationSec: 1800, distance: 3, heartRateAvg: 140, perceivedEffort: undefined },
+                { setNumber: 2, durationSec: 600, distance: null, heartRateAvg: null, perceivedEffort: undefined },
+            ],
+        }]);
+        expect(cardioHistory(SESSIONS, 'Leg Press')).toEqual([]);
+    });
+});
+
+describe('personalRecords', () => {
+    it('keys by name, excludes cardio/drop/incomplete, sorts by 1RM', () => {
+        expect(personalRecords(SESSIONS, 185, NOW)).toEqual([
+            {
+                exerciseName: 'Leg Press', bestVolume: 2200, bestVolumeWeight: 220, bestVolumeReps: 10,
+                bestVolumeDate: JUN, estimated1RM: 293, isRecentPR: false,
+            },
+            {
+                exerciseName: 'Neutral Grip Pull-Up', bestVolume: 1160, bestVolumeWeight: 145, bestVolumeReps: 8,
+                bestVolumeDate: SEP, estimated1RM: 184, isRecentPR: true,
+            },
+            {
+                exerciseName: 'Low Incline DB Press', bestVolume: 650, bestVolumeWeight: 65, bestVolumeReps: 10,
+                bestVolumeDate: JUN, estimated1RM: 87, isRecentPR: false,
+            },
+            {
+                exerciseName: 'Low Incline Dumbbell Press', bestVolume: 600, bestVolumeWeight: 60, bestVolumeReps: 10,
+                bestVolumeDate: APR, estimated1RM: 80, isRecentPR: false,
+            },
+        ]);
+    });
+
+    it('drops assisted lifts without a bodyweight', () => {
+        expect(personalRecords(SESSIONS, null, NOW).map(r => r.exerciseName)).toEqual([
+            'Leg Press', 'Low Incline DB Press', 'Low Incline Dumbbell Press',
+        ]);
+    });
+});
