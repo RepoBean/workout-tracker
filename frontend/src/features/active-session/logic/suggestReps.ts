@@ -6,8 +6,13 @@
 // prefilled 12 even when last session was 8/8/7.
 //
 // The rule here instead anchors on what actually happened last session, set by set,
-// and only aims higher on set 1 — the one set where you're fresh. Backtested over
+// and aims one rep higher on set 1 — the one set where you're fresh. Backtested over
 // 1103 real working sets: MAE 1.39, 55% within +/-1.
+//
+// The +1 carries forward: if set 1 only TIES last session's set 1, set 2 is asked for
+// one more than last time, and so on — every session should beat last session by at
+// least one rep somewhere. Once any set beats its counterpart the rest stay honest. A set
+// that falls BEHIND last session stops the carry (bad day: don't chase).
 //
 // Pure functions. This module owns `parseRepTarget`, which progression.ts re-exports —
 // there must not be a second rep-target parser in this codebase. The dependency runs
@@ -60,15 +65,28 @@ function lastBySetNumber(sets: RepSetLike[]): RepSetLike | null {
   return best;
 }
 
+/** Last session's set that `setNumber` is measured against (same number, else its final set). */
+function counterpartOf(previousSets: RepSetLike[], setNumber: number): RepSetLike | null {
+  return previousSets.find((s) => s.setNumber === setNumber) ?? lastBySetNumber(previousSets);
+}
+
+/** Did this set beat last session's matching set (more weight, or more reps at the same weight)? */
+function beatCounterpart(set: RepSetLike, previousSets: RepSetLike[]): boolean {
+  const c = counterpartOf(previousSets, set.setNumber);
+  if (!c) return false;
+  return set.weight > c.weight || (set.weight === c.weight && set.reps > c.reps);
+}
+
 /**
  * Suggest a rep count for the set about to be logged.
  *
  * Rule precedence is normative — rules 4 and 6 can disagree, and this order is what
  * the tests encode:
  *   base (1) -> weight reset (2) -> set-1 bump (3) -> top clamp (6) -> decay cap (4)
+ *   -> carried bump (7)
  *
- * The decay cap applies last and can only ever pull a suggestion DOWN. Nothing may
- * push a set 2+ suggestion up to the bottom of the rep range.
+ * The decay cap can only ever pull a suggestion DOWN; only the carried bump may then lift
+ * it, by exactly one. Nothing may push a set 2+ suggestion up to the bottom of the rep range.
  */
 export function suggestReps({
   setNumber,
@@ -85,8 +103,7 @@ export function suggestReps({
 
   // 1. Base: last session's same-numbered set.
   // 5. Fallback: last session ran fewer sets, so use its final set.
-  const base =
-    previousSets.find((s) => s.setNumber === setNumber) ?? lastBySetNumber(previousSets);
+  const base = counterpartOf(previousSets, setNumber);
 
   let reps: number;
 
@@ -100,8 +117,8 @@ export function suggestReps({
     reps = low;
   } else {
     reps = base.reps;
-    // 3. Set-1 bump: fresh set, unchanged weight, room left in the range. Sets 2+ never
-    //    bump — aim higher when fresh, stay honest when fatigued.
+    // 3. Set-1 bump: fresh set, unchanged weight, room left in the range. Sets 2+ only
+    //    get the carried bump (7) when an earlier set tied instead of beating last time.
     if (isFirstSet && plannedWeight === base.weight && reps < high) {
       reps += 1;
     }
@@ -115,6 +132,22 @@ export function suggestReps({
   // 4. Decay cap. Reps fall within a session; set 3 > set 2 is never right.
   if (!isFirstSet && lastCurrent) {
     reps = Math.min(reps, lastCurrent.reps);
+  }
+
+  // 7. Carried bump. Nothing this session has beaten last session yet, and the set just
+  //    logged TIED its counterpart (on pace, not behind): ask this set for the +1 that
+  //    set 1 missed. May exceed the decay cap by one — 10/10/10 last time, 10 on set 1
+  //    today, means set 2 should aim for 11.
+  if (
+    !isFirstSet &&
+    base &&
+    lastCurrent &&
+    plannedWeight === base.weight &&
+    !currentSessionSets.some((s) => beatCounterpart(s, previousSets))
+  ) {
+    const c = counterpartOf(previousSets, lastCurrent.setNumber);
+    const onPace = c && lastCurrent.weight === c.weight && lastCurrent.reps === c.reps;
+    if (onPace && reps < high) reps += 1;
   }
 
   return Math.max(1, Math.round(reps));

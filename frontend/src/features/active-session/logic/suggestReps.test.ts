@@ -30,11 +30,11 @@ function walkSession(opts: {
 }
 
 describe('suggestReps', () => {
-  it('matches the previous session set-for-set', () => {
-    // Set 1 already tops the range, so the bump is suppressed.
+  it('carries the bump to set 2 when set 1 already tops the range', () => {
+    // Set 1 can't go past 12, so set 2 is where this session beats last time.
     expect(
       walkSession({ targetReps: '8-12', previousSets: sets(40, 12, 10, 8), weight: 40, count: 3 })
-    ).toEqual([12, 10, 8]);
+    ).toEqual([12, 11, 8]);
   });
 
   it('bumps set 1 by one and leaves fatigued sets honest', () => {
@@ -69,7 +69,7 @@ describe('suggestReps', () => {
     ).toBe(12);
   });
 
-  it('never bumps sets 2+', () => {
+  it('stops bumping once a set has beaten last session', () => {
     expect(
       suggestReps({
         setNumber: 2,
@@ -115,6 +115,56 @@ describe('suggestReps', () => {
         plannedWeight: 90,
       })
     ).toBe(10);
+  });
+
+  it('carries the +1 to set 2 when set 1 only tied last session', () => {
+    // 10/10/10 last time, 10 on set 1 today: set 2 aims for 11, past the decay cap.
+    expect(
+      suggestReps({
+        setNumber: 2,
+        targetReps: '8-12',
+        previousSets: sets(100, 10, 10, 10),
+        currentSessionSets: [{ setNumber: 1, weight: 100, reps: 10 }],
+        plannedWeight: 100,
+      })
+    ).toBe(11);
+  });
+
+  it('keeps carrying to set 3 while each set only ties', () => {
+    expect(
+      suggestReps({
+        setNumber: 3,
+        targetReps: '8-12',
+        previousSets: sets(100, 10, 9, 8),
+        currentSessionSets: [
+          { setNumber: 1, weight: 100, reps: 10 },
+          { setNumber: 2, weight: 100, reps: 9 },
+        ],
+        plannedWeight: 100,
+      })
+    ).toBe(9);
+  });
+
+  it('does not carry once an earlier set beat last session', () => {
+    // Set 1 beat (11 > 10), set 2 tied — the session already has its +1.
+    expect(
+      suggestReps({
+        setNumber: 3,
+        targetReps: '8-12',
+        previousSets: sets(100, 10, 9, 8),
+        currentSessionSets: [
+          { setNumber: 1, weight: 100, reps: 11 },
+          { setNumber: 2, weight: 100, reps: 9 },
+        ],
+        plannedWeight: 100,
+      })
+    ).toBe(8);
+  });
+
+  it('does not carry when no set has room left in the range', () => {
+    expect(
+      walkSession({ targetReps: '8-12', previousSets: sets(100, 12, 12, 12), weight: 100, count: 3 })
+    ).toEqual([12, 12, 12]);
   });
 
   it('caps a set at what was just logged this session', () => {
@@ -199,7 +249,7 @@ describe('suggestReps', () => {
           { setNumber: 2, weight: 100, reps: 10 },
         ],
         currentSessionSets: [
-          { setNumber: 2, weight: 100, reps: 10 },
+          { setNumber: 2, weight: 100, reps: 11 },
           { setNumber: 1, weight: 100, reps: 12 },
         ],
         plannedWeight: 100,

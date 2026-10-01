@@ -80,3 +80,4 @@ Larger pieces of work (v3 bundles) have their own plan + results docs in `docs/`
 
 ---
 | — | Docs: v3 Bundle 6 — CLAUDE.md rewritten for v3 (rules, philosophy, tree, Key Features 18–20), changelog moved here, GUARDIAN.md and the unused `backend/src/types/index.ts` deleted. No behaviour change. |
+| — | Rep prefill: the set-1 "+1 over last time" now carries forward — if a set only ties last session's matching set, the next set is asked for +1 (may exceed the decay cap by one), until a set beats its counterpart. A set that falls behind stops the carry. `suggestReps.ts` rule 7 + tests. |
