@@ -152,6 +152,15 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [ ] Status bar / safe areas — only if something looks wrong on the device.
 - [~] Release signing: **decided to keep the persisted debug keystore** (volume `workout-tracker-android-home`). A new key forces uninstall on both phones and wipes their localStorage. Release APK built from the **same commit** as the web deploy; an old APK keeps working because the API only ever gains fields.
 
+### Bundle B3 — Load the UI from the server (proposed 2026-10-01, not started)
+**Why:** the APK bundles the frontend, so every UI change means a new release + reinstall on both phones. Jason is always on the VPN, so the offline-shell benefit of bundling is worth nothing to us. Served-from-server UI = `ship.sh <inst>` updates that phone too, and each phone automatically runs its own instance's version (the wife-lags-main order holds with no extra step). APK releases then only for native changes (plugins, permissions, icon).
+- [ ] **Per-phone target.** `server.url` in `capacitor.config.ts` is build-time, but the phones point at different instances (8035 / 8036). Likely shape: the bundled build becomes a tiny launcher that reads the saved server URL (`wt:api-base-url`) and navigates to it, with both hosts in `server.allowNavigation`; keep the current Settings → Server card as the way to change it. Alternative: two APK flavours with baked URLs (simpler, but two installs to manage).
+- [ ] **Verify the Capacitor bridge on the remote origin** — BLE strap, rest-timer notification, foreground service, back button must all work from a page served at `http://<host>:<port>`. Device test on the Pixel (Claude can't run the APK).
+- [ ] **localStorage moves origin** (`https://localhost` → `http://<host>:<port>`): profile, bodyweight, progression settings, coach key + thread, theme, any in-progress session keys won't carry over. Either a one-time copy (launcher hands them over before navigating) or re-enter once. Never switch a phone mid-workout.
+- [ ] **Plugin JS ↔ native shell skew:** the served frontend must not call a plugin method the installed APK lacks. Rule: plugin additions/upgrades still need an APK release *first*; `isNativeApp()`-gated code should feature-check.
+- [ ] Insecure-context check: the page becomes plain http. Today only `navigator.clipboard` (Android diagnostics copy) needs a secure context — needs a fallback.
+- [ ] Error page when the server is unreachable (VPN off) instead of a blank WebView.
+
 ### Bundle B2 — Offline (after Track A Bundle 3, not before)
 **2026-09-28: DROPPED — Jason does not need an offline version.** VPN model stays.
 - [ ] Service worker (vite-plugin-pwa / Workbox): precache the shell so the app opens without the VPN; API network-first.
