@@ -36,7 +36,11 @@ export function LiftOverview({ overview, today, onSelect }: LiftOverviewProps) {
         <div className="card !p-0 overflow-hidden">
             <div className="px-4 pt-4 pb-2">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-300">Your lifts</h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{summaryLine(overview.counts)}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
+                    {summaryLine(overview.counts).split(' · ').map((part, i) => (
+                        <span key={part} className="whitespace-nowrap">{i > 0 && '· '}{part}</span>
+                    ))}
+                </p>
             </div>
             <ul className="divide-y divide-gray-100 dark:divide-surface-700">
                 {overview.rows.map((row) => {
@@ -59,7 +63,9 @@ export function LiftOverview({ overview, today, onSelect }: LiftOverviewProps) {
                                         </span>
                                         {row.lastSet && (
                                             <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums whitespace-nowrap">
-                                                {formatWeight(row.lastSet.weight)} lbs × {row.lastSet.reps} · {shortDate(row.lastSet.completedAt, today)}
+                                                {formatWeight(row.lastSet.weight)} lbs × {row.lastSet.reps}
+                                                {/* The inactive chip already carries the date */}
+                                                {kind !== 'inactive' && ` · ${shortDate(row.lastSet.completedAt, today)}`}
                                             </span>
                                         )}
                                     </div>
