@@ -30,6 +30,8 @@ public class MainActivity extends BridgeActivity {
 
     static final String PREFS = "workout_shell";
     static final String KEY_SERVER_URL = "server_url";
+    /** Set when the user picks the built-in UI, so the first-launch hand-off stays away. */
+    static final String KEY_BUNDLED_BY_CHOICE = "bundled_by_choice";
     private static final String ERROR_PATH = "offline.html";
 
     @Override
@@ -59,11 +61,23 @@ public class MainActivity extends BridgeActivity {
     }
 
     void saveServerUrl(String origin) {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putString(KEY_SERVER_URL, origin).apply();
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .edit()
+            .putString(KEY_SERVER_URL, origin)
+            .remove(KEY_BUNDLED_BY_CHOICE)
+            .apply();
     }
 
     void clearServerUrl() {
-        getSharedPreferences(PREFS, MODE_PRIVATE).edit().remove(KEY_SERVER_URL).apply();
+        getSharedPreferences(PREFS, MODE_PRIVATE)
+            .edit()
+            .remove(KEY_SERVER_URL)
+            .putBoolean(KEY_BUNDLED_BY_CHOICE, true)
+            .apply();
+    }
+
+    boolean isBundledByChoice() {
+        return getSharedPreferences(PREFS, MODE_PRIVATE).getBoolean(KEY_BUNDLED_BY_CHOICE, false);
     }
 
     /** The bundled capacitor.config.json with server.url + errorPath set, loaded from app files. */

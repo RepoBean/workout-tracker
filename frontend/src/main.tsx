@@ -38,7 +38,12 @@ const queryClient = new QueryClient({
 // to, so the UI comes from the server from now on. The activity restarts; don't render.
 const restarting = handOffToSavedServer(getApiBaseUrl());
 
-if (!restarting) createRoot(document.getElementById('root')!).render(
+// If the restart somehow doesn't happen, render anyway rather than sit on a blank screen.
+if (restarting) setTimeout(render, 3000);
+else render();
+
+function render() {
+createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
@@ -61,3 +66,4 @@ if (!restarting) createRoot(document.getElementById('root')!).render(
     </QueryClientProvider>
   </StrictMode>
 );
+}

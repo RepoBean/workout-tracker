@@ -11,7 +11,7 @@ import android.webkit.JavascriptInterface;
  */
 public class ShellInterface {
 
-    static final int VERSION = 1;
+    static final int VERSION = 2;
 
     private final MainActivity activity;
 
@@ -38,6 +38,12 @@ public class ShellInterface {
         if (origin == null) return false;
         activity.saveServerUrl(origin);
         return true;
+    }
+
+    /** v2: the user chose the built-in UI (clearServerUrl since the last setServerUrl). */
+    @JavascriptInterface
+    public boolean isBundledByChoice() {
+        return activity.isBundledByChoice();
     }
 
     /** Back to the bundled UI on restart(). */

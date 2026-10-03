@@ -1,6 +1,6 @@
 # v3 Bundle B3 — Load the Android UI from the server
 
-Status: built 2026-10-03, **device test pending** (Claude can't run the APK).
+Status: built 2026-10-03; device-tested on the Pixel the same day (results below).
 
 ## Why
 The APK bundled the frontend, so every UI change meant a release and a reinstall on both
@@ -65,5 +65,13 @@ Install the test APK over the current app (same signing key, so it upgrades in p
 9. [ ] Settings → Server shows the domain; *Use built-in app* restarts into the bundled UI;
        Settings → Server → Save the domain again → restarts back onto the server.
 
-## Results
-_(fill in after the device test)_
+## Results (Pixel, Jason, 2026-10-03, APK f82aa47)
+- Passed: hand-off to `https://gym.bootyhole23.com`, data present; profile/bodyweight/HR
+  re-entered once (expected); strap connects and shows HR; locked-phone foreground
+  notification returns to the workout; rest-timer alert fires.
+- Offline page appeared with Wi-Fi off. **Bug:** *Use built-in app* left a black screen —
+  the bundled UI still had the domain in its own storage, so the first-launch hand-off fired
+  again and bounced back to the unreachable server. Fixed: the shell remembers the choice
+  (`isBundledByChoice`, shell v2) and the hand-off stays away; `main.tsx` also renders after
+  3 s if a hand-off restart never happens. Re-entering the domain recovered as designed.
+- Jason doesn't need offline use; the built-in copy is only an escape hatch.

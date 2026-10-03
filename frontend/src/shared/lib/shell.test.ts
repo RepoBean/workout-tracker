@@ -101,6 +101,13 @@ describe('handOffToSavedServer', () => {
     expect(handOffToSavedServer('https://gym.bootyhole23.com', shell)).toBe(false);
   });
 
+  it('stays away after the user chose the built-in app', () => {
+    const shell = fakeShell();
+    shell.isBundledByChoice = () => true;
+    expect(handOffToSavedServer('https://gym.bootyhole23.com', shell)).toBe(false);
+    expect(shell.restart).not.toHaveBeenCalled();
+  });
+
   it('does nothing without a shell, a saved address, or once a server is set', () => {
     expect(handOffToSavedServer('https://gym.bootyhole23.com', null)).toBe(false);
     expect(handOffToSavedServer('', fakeShell())).toBe(false);

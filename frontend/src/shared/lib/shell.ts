@@ -15,6 +15,8 @@ export interface WorkoutShell {
   clearServerUrl(): void;
   restart(): void;
   openExternal(url: string): boolean;
+  /** v2+. True after "Use built-in app" — the first-launch hand-off must not undo it. */
+  isBundledByChoice?(): boolean;
 }
 
 export function getShell(): WorkoutShell | null {
@@ -76,5 +78,8 @@ export function handOffToSavedServer(
   shell: WorkoutShell | null = getShell()
 ): boolean {
   if (!shell || shellServerUrl(shell) || !savedApiBaseUrl) return false;
+  // "Use built-in app" clears the server, but this bundled copy still has the address it
+  // used to call — handing off again would bounce straight back (blank screen offline).
+  if (shell.isBundledByChoice?.()) return false;
   return switchShellServer(savedApiBaseUrl, shell);
 }
