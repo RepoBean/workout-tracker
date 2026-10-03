@@ -25,6 +25,9 @@ frontend/android/local.properties
 # Claude Code (local-only settings, hooks, transcripts)
 .claude/
 
+# Headless-browser snapshots and screenshots (Playwright MCP)
+.playwright-mcp/
+
 # OS
 .DS_Store
 Thumbs.db

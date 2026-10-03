@@ -9,6 +9,7 @@ import { useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
 import { createCoachToolset } from './lib/tools';
 import { runCoach } from './lib/coachLoop';
+import { describeCoachError } from './lib/errorMessage';
 import { COACH_SYSTEM_PROMPT } from './lib/persona';
 import { useCoachDossier } from './hooks/useCoachDossier';
 import {
@@ -110,8 +111,7 @@ export default function Coach() {
       });
       setThread([...base, { role: 'assistant', content: result.finalText || '(no response)' }]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong';
-      setThread([...base, { role: 'assistant', content: `⚠️ ${message}`, error: true }]);
+      setThread([...base, { role: 'assistant', content: `⚠️ ${describeCoachError(err)}`, error: true }]);
     } finally {
       setBusy(false);
       setDraft('');
@@ -135,7 +135,9 @@ export default function Coach() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto flex flex-col min-h-[60vh]">
+    // Fills the screen between <main>'s top padding and the tab bar (main is py-6 pb-24), so
+    // the composer sits just above the tabs on a short thread instead of floating mid-screen.
+    <div className="max-w-2xl mx-auto flex flex-col min-h-[calc(100dvh-5.5rem)] -mb-8">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-2xl font-display font-bold">AI Coach</h1>
         <button
