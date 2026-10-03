@@ -210,7 +210,6 @@ export default function ActiveSession() {
   } = useRpeFlow({
     sessionId,
     navigation,
-    mergedExercises,
     updateSetsEffort,
     setExerciseNote,
   });
@@ -219,12 +218,13 @@ export default function ActiveSession() {
   // only after the POST actually lands (e.g. CardioSetInput clears its
   // persisted timer state — a failed save must keep it for recovery).
   const handleLogSet = (
+    exercise: Exercise,
     data: Parameters<typeof logSet>[0],
     opts?: { onSuccess?: () => void }
   ) => {
     logSet(data, {
       onSuccess: () => {
-        handleSetLogged(data.exerciseId ?? null, data.exerciseName, data.dropIndex ?? 0);
+        handleSetLogged(exercise, data.dropIndex ?? 0);
         opts?.onSuccess?.();
       },
     });
@@ -398,7 +398,7 @@ export default function ActiveSession() {
         note={session?.exerciseNotes?.[exercise.name] ?? null}
         onLogSet={(data, opts) => {
           const exerciseIdForApi = isExerciseAdHoc ? null : exercise.id;
-          handleLogSet({ ...data, exerciseId: exerciseIdForApi }, opts);
+          handleLogSet(exercise, { ...data, exerciseId: exerciseIdForApi }, opts);
         }}
         onDeleteSet={deleteSet}
         onUpdateSet={updateSet}

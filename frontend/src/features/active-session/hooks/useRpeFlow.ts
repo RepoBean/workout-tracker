@@ -5,14 +5,14 @@ import type { UseExerciseNavigationResult } from './useExerciseNavigation';
 interface UseRpeFlowParams {
     sessionId: number;
     navigation: UseExerciseNavigationResult;
-    mergedExercises: Exercise[];
     updateSetsEffort: (exerciseId: number, effort: number, exerciseName?: string) => void;
     setExerciseNote?: (exerciseName: string, note: string | null) => void;
 }
 
 interface UseRpeFlowResult {
     rpePromptExercise: { id: number; name: string } | null;
-    handleSetLogged: (exerciseId: number | null, exerciseName: string, dropIndex: number) => void;
+    /** `exercise` is the card the set was logged on — never re-looked-up by name or id. */
+    handleSetLogged: (exercise: Exercise, dropIndex: number) => void;
     handleRpeSubmit: (rpe: number, note: string | null) => void;
     handleRpeSkip: () => void;
 }
@@ -20,7 +20,6 @@ interface UseRpeFlowResult {
 export function useRpeFlow({
     sessionId,
     navigation,
-    mergedExercises,
     updateSetsEffort,
     setExerciseNote,
 }: UseRpeFlowParams): UseRpeFlowResult {
@@ -45,13 +44,10 @@ export function useRpeFlow({
         }
     }, [navigation]);
 
-    const handleSetLogged = useCallback((exerciseId: number | null, exerciseName: string, dropIndex: number) => {
-        const exercise = exerciseId !== null
-            ? mergedExercises.find(e => e.id === exerciseId)
-            : mergedExercises.find(e => e.name === exerciseName);
-
-        if (!exercise) return;
-
+    // Takes the on-screen exercise rather than finding it by name: after swapping back to a
+    // lift that is also in the program, a name lookup found the hidden program entry (target
+    // 0 in navigation), so the first set read as complete and the view jumped ahead.
+    const handleSetLogged = useCallback((exercise: Exercise, dropIndex: number) => {
         const wasComplete = completedExercisesRef.current.has(exercise.id);
 
         // Predictive check: current count + 1 if we just logged a standard set
@@ -91,7 +87,7 @@ export function useRpeFlow({
         } else if (isStepEffectivelyComplete) {
             navigation.goToNext();
         }
-    }, [mergedExercises, navigation]);
+    }, [navigation]);
 
     const handleRpeSubmit = useCallback((rpe: number, note: string | null) => {
         if (rpePromptExercise) {
