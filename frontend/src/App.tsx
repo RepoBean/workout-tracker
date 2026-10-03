@@ -6,6 +6,7 @@ import { ErrorBoundary } from './shared/ui/ErrorBoundary';
 import { Button } from './shared/ui/Button';
 import { isNativeApp } from './shared/lib/platform';
 import { getApiBaseUrl } from './shared/api/baseUrl';
+import { isServedByShell } from './shared/lib/shell';
 import { ServerCard } from './features/settings/components/ServerCard';
 import { useWorkoutForegroundService } from './features/active-session/hooks/useWorkoutForegroundService';
 
@@ -215,7 +216,10 @@ function AppContent() {
 }
 
 function App() {
-  const [hasServerUrl, setHasServerUrl] = useState(() => !isNativeApp() || getApiBaseUrl() !== '');
+  // Served by the shell's server (B3): the API is same-origin, nothing to configure.
+  const [hasServerUrl, setHasServerUrl] = useState(
+    () => !isNativeApp() || isServedByShell() || getApiBaseUrl() !== ''
+  );
 
   if (!hasServerUrl) {
     return (

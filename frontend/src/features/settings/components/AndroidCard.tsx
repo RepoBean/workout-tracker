@@ -4,6 +4,7 @@ import { useToast } from '../../../shared/ui/Toast';
 import { useHeartRate } from '../../../shared/context/HeartRateContext';
 import { getHrTransport } from '../../../shared/lib/hrTransport';
 import { getApiBaseUrl } from '../../../shared/api/baseUrl';
+import { getShell, shellServerUrl } from '../../../shared/lib/shell';
 import { isWorkoutServiceRunning } from '../../../shared/lib/foregroundService';
 import {
   ensureNotificationPermission,
@@ -103,6 +104,10 @@ export function AndroidCard() {
   const lastScheduled = getLastScheduledNotificationTime();
   const lastScheduledStr = lastScheduled ? new Date(lastScheduled).toLocaleTimeString() : 'None';
   const apiBaseUrl = getApiBaseUrl() || '(same-origin/empty)';
+  const shell = getShell();
+  const uiSource = shell
+    ? `${shellServerUrl(shell) ?? 'bundled'} (shell v${shell.getVersion()})`
+    : 'bundled (no shell)';
 
   const diagnosticsText = [
     '=== Workout Tracker Android Diagnostics ===',
@@ -110,6 +115,7 @@ export function AndroidCard() {
     `Platform: ${platform}`,
     `App version: ${appVersion}`,
     `API Base URL: ${apiBaseUrl}`,
+    `UI loaded from: ${uiSource}`,
     `HR Transport: ${transportKind}`,
     `Connected: ${isConnected ? 'Yes' : 'No'} (${deviceName ?? 'None'})`,
     `Samples in last 60s: ${samples60.length}`,

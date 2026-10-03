@@ -244,6 +244,7 @@ src/
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
 │   │   ├── oneRepMax.ts           # Epley 1RM estimate
 │   │   ├── platform.ts            # isNativeApp() — the one runtime gate for Android-only code
+│   │   ├── shell.ts               # window.WorkoutShell (Android shell): server the UI loads from, hand-off, openExternal (+ tests)
 │   │   ├── foregroundService.ts   # Desired-state loop over the Android foreground-service plugin (+ tests)
 │   │   ├── restNotification.ts    # Exact local notification for the rest timer (Android)
 │   │   └── hrTransport/           # HR strap transport: types, webBluetooth (browser), nativeBle (app), parseHr
@@ -510,7 +511,8 @@ backend/
 
 ### 20. Android App
 - Capacitor WebView around the same React build; native BLE for the strap, exact local notification for the timer, foreground service while a session is active
-- Built in Docker (`scripts/build-apk.sh`), published as a GitHub Release (`scripts/release-apk.sh`); the APK bundles the frontend, so UI changes need a new release
+- Built in Docker (`scripts/build-apk.sh`), published as a GitHub Release (`scripts/release-apk.sh`)
+- **B3: the UI loads from the phone's server** (`docs/v3-bundle-b3-server-ui.md`). The shell (`MainActivity.java`) starts Capacitor with the saved server as `server.url` — the only way the plugin bridge reaches a remote page — and exposes `window.WorkoutShell` (`ShellInterface.java`, feature-checked via `shared/lib/shell.ts`). `ship.sh <inst>` updates that phone's UI; APK releases are for native changes only. **A server must run a B3-aware build before its phone installs a B3 APK.** Bundled `public/offline.html` covers an unreachable server
 
 ---
 
@@ -622,7 +624,7 @@ If you need real data in dev, copy it out of the container first (`docker cp ...
 
 ### Android app
 
-The native Android app wraps the existing React build in a Capacitor WebView (`frontend/android/`, `Dockerfile.android`). It is built in Docker without requiring Android SDK installed on the host: `scripts/build-apk.sh` compiles the frontend, syncs native assets, runs `./gradlew assembleDebug` in a container with a persisted keystore volume (`workout-tracker-android-home`), and outputs `~/apk/latest.apk`. `scripts/serve-apk.sh` serves the APK over the local network / VPN on port 8038 for sideloading onto test devices. `scripts/release-apk.sh` publishes it as a GitHub Release instead (stable link: `https://github.com/RepoBean/workout-tracker/releases/latest/download/workout-tracker.apk`) — built locally so the keystore volume signs every release and updates install over the old app. The APK bundles the frontend, so UI changes need a new release; backend changes reach the app via `ship.sh` alone. Both Jason and his wife run it (main 8035 / wife 8036).
+The native Android app wraps the existing React build in a Capacitor WebView (`frontend/android/`, `Dockerfile.android`). It is built in Docker without requiring Android SDK installed on the host: `scripts/build-apk.sh` compiles the frontend, syncs native assets, runs `./gradlew assembleDebug` in a container with a persisted keystore volume (`workout-tracker-android-home`), and outputs `~/apk/latest.apk`. `scripts/serve-apk.sh` serves the APK over the local network / VPN on port 8038 for sideloading onto test devices. `scripts/release-apk.sh` publishes it as a GitHub Release instead (stable link: `https://github.com/RepoBean/workout-tracker/releases/latest/download/workout-tracker.apk`) — built locally so the keystore volume signs every release and updates install over the old app. Since B3 the APK is a shell that loads the UI from the phone's server (`https://gym.bootyhole23.com` = main, `https://gym-e.bootyhole23.com` = wife), so UI and backend changes both reach the app via `ship.sh`; release a new APK only for native changes. Both Jason and his wife run it.
 
 ---
 

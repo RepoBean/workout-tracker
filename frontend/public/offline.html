@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Can't reach server</title>
+  <!--
+    Android shell error page (v3 bundle B3). Capacitor shows this bundled file when the
+    server the app loads from can't be reached. It has no Capacitor bridge (different
+    origin); it only uses window.WorkoutShell (ShellInterface.java). Self-contained on
+    purpose: the server is unreachable, so nothing can be fetched from it.
+  -->
+  <style>
+    :root { --bg: #f8fafc; --card: #ffffff; --text: #111827; --muted: #6b7280; --border: #e5e7eb; --primary: #0d9488; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #0f1115; --card: #181b21; --text: #f3f4f6; --muted: #9ca3af; --border: #2a2f37; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      padding: 16px; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 24px; }
+    h1 { font-size: 1.25rem; margin: 0 0 8px; }
+    p { color: var(--muted); font-size: 0.95rem; line-height: 1.45; margin: 0 0 16px; }
+    .server { color: var(--text); font-weight: 600; word-break: break-all; }
+    button { width: 100%; min-height: 48px; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; color: var(--text); margin-top: 10px; }
+    button.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    input { width: 100%; min-height: 44px; padding: 8px 12px; font-size: 1rem; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-top: 6px; }
+    #change { display: none; margin-top: 16px; }
+    .error { color: #dc2626; font-size: 0.875rem; min-height: 1.2em; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Can't reach your server</h1>
+    <p>The app loads from <span class="server" id="server">your server</span>. Check that the VPN is on, then try again.</p>
+    <button class="primary" id="retry">Try again</button>
+    <button id="show-change">Change server</button>
+    <button id="bundled">Use built-in app</button>
+    <div id="change">
+      <label for="url">Server address</label>
+      <input id="url" type="url" inputmode="url" autocomplete="off" placeholder="https://gym.example.com" />
+      <div class="error" id="error"></div>
+      <button class="primary" id="save">Switch server</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var shell = window.WorkoutShell;
+      var server = shell ? shell.getServerUrl() : '';
+      if (server) document.getElementById('server').textContent = server;
+
+      document.getElementById('retry').onclick = function () {
+        if (server) window.location.replace(server + '/');
+        else window.location.reload();
+      };
+      document.getElementById('show-change').onclick = function () {
+        document.getElementById('change').style.display = 'block';
+        var input = document.getElementById('url');
+        input.value = server;
+        input.focus();
+      };
+      document.getElementById('save').onclick = function () {
+        var value = document.getElementById('url').value.trim();
+        if (!/^https?:\/\//i.test(value)) value = 'https://' + value;
+        if (!shell || !shell.setServerUrl(value)) {
+          document.getElementById('error').textContent = 'That is not a usable address.';
+          return;
+        }
+        shell.restart();
+      };
+      document.getElementById('bundled').onclick = function () {
+        if (!shell) return;
+        shell.clearServerUrl();
+        shell.restart();
+      };
+    })();
+  </script>
+</body>
+</html>

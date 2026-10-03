@@ -10,6 +10,8 @@ import { ProgressionProvider } from './shared/context/ProgressionContext';
 import { AiCoachProvider } from './shared/context/AiCoachContext';
 import { ToastProvider } from './shared/ui/Toast';
 import App from './App';
+import { getApiBaseUrl } from './shared/api/baseUrl';
+import { handOffToSavedServer } from './shared/lib/shell';
 import { sweepLegacySetInputKeys } from './features/active-session/lib/sessionStorage';
 import '@fontsource/dm-sans/700.css';
 import '@fontsource/dm-sans/800.css';
@@ -32,7 +34,11 @@ const queryClient = new QueryClient({
   },
 });
 
-createRoot(document.getElementById('root')!).render(
+// B3: a newly installed shell running the bundled UI moves to the server it already talks
+// to, so the UI comes from the server from now on. The activity restarts; don't render.
+const restarting = handOffToSavedServer(getApiBaseUrl());
+
+if (!restarting) createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
