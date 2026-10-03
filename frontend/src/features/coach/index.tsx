@@ -4,6 +4,7 @@ import { useAiCoach, isCoachReady } from '../../shared/context/AiCoachContext';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
 import type { ProgramExportPayload } from '../../shared/api/types';
+import { exerciseTargetSummary } from '../../shared/api/cardio';
 import { useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
 import { createCoachToolset } from './lib/tools';
@@ -51,7 +52,7 @@ export default function Coach() {
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { dossier } = useCoachDossier();
+  const { dossier, isReady, error: dossierError, retry: retryDossier } = useCoachDossier();
   // Pinned on the first send of a thread. The dossier is assembled from live queries, and a
   // background refetch mid-conversation would change it byte-for-byte and silently kill every
   // prompt-cache hit. Stability has to be structural, not a matter of discipline.
@@ -73,9 +74,18 @@ export default function Coach() {
   const ready = isCoachReady(settings);
   if (!ready) return <DisabledState />;
 
+  // The persona promises a dossier follows; never call the provider without one. A thread
+  // already in flight keeps its pinned copy even if the live one is momentarily rebuilding.
+  const canSend = isReady || pinnedDossierRef.current !== null;
+
   async function send(text: string) {
     const content = text.trim();
     if (!content || busy) return;
+    if (pinnedDossierRef.current === null) {
+      if (!dossier) return;
+      pinnedDossierRef.current = dossier;
+    }
+    const pinned = pinnedDossierRef.current;
     const base: DisplayMessage[] = [...thread, { role: 'user', content }];
     setThread(base);
     setInput('');
@@ -87,11 +97,10 @@ export default function Coach() {
       // Provider stack (incl. @anthropic-ai/sdk) loads on first send, not with the page.
       const { createProvider } = await import('./lib/providers');
       const provider = createProvider(settings);
-      if (pinnedDossierRef.current === null && dossier) pinnedDossierRef.current = dossier;
       const result = await runCoach({
         provider,
         system: COACH_SYSTEM_PROMPT,
-        systemCacheable: pinnedDossierRef.current ?? undefined,
+        systemCacheable: pinned,
         messages: toCoachMessages(base),
         tools: toolset.defs,
         executeTool: toolset.execute,
@@ -102,7 +111,7 @@ export default function Coach() {
       setThread([...base, { role: 'assistant', content: result.finalText || '(no response)' }]);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Something went wrong';
-      setThread([...base, { role: 'assistant', content: `⚠️ ${message}` }]);
+      setThread([...base, { role: 'assistant', content: `⚠️ ${message}`, error: true }]);
     } finally {
       setBusy(false);
       setDraft('');
@@ -160,7 +169,13 @@ export default function Coach() {
                   : 'bg-white dark:bg-surface-800 text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-white/[0.06] rounded-bl-sm'
               }`}
             >
-              {msg.role === 'assistant' ? <CoachMarkdown content={msg.content} /> : msg.content}
+              {msg.error ? (
+                <span className="text-red-600 dark:text-red-400">{msg.content}</span>
+              ) : msg.role === 'assistant' ? (
+                <CoachMarkdown content={msg.content} />
+              ) : (
+                msg.content
+              )}
             </div>
           </div>
         ))}
@@ -183,12 +198,27 @@ export default function Coach() {
       </div>
 
       <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] mt-3 pt-2 bg-surface-50/90 dark:bg-surface-900/90 backdrop-blur">
+        {!canSend && (
+          dossierError ? (
+            <div className="flex items-center justify-between gap-2 pb-2 text-xs text-red-600 dark:text-red-400">
+              <span>Couldn't load your training history.</span>
+              <button
+                onClick={retryDossier}
+                className="shrink-0 font-medium text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                Retry
+              </button>
+            </div>
+          ) : (
+            <p className="pb-2 text-xs text-gray-500 dark:text-gray-400">Loading your training history…</p>
+          )
+        )}
         <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
           {STARTERS.map((s) => (
             <button
               key={s.label}
               onClick={() => send(s.prompt)}
-              disabled={busy}
+              disabled={busy || !canSend}
               className="shrink-0 text-xs px-3 py-1.5 rounded-full border border-gray-200 dark:border-surface-700 bg-white dark:bg-surface-800 text-gray-700 dark:text-gray-300 hover:border-primary-300 dark:hover:border-primary-700 disabled:opacity-40"
             >
               {s.label}
@@ -213,10 +243,10 @@ export default function Coach() {
             }}
             rows={1}
             placeholder="Ask your coach…"
-            disabled={busy}
+            disabled={busy || !canSend}
             className="flex-1 resize-none max-h-32 px-3 py-2.5 border-2 rounded-lg border-gray-200 dark:border-surface-800 bg-white dark:bg-surface-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:border-primary-500"
           />
-          <Button type="submit" variant="primary" disabled={busy || !input.trim()}>
+          <Button type="submit" variant="primary" disabled={busy || !canSend || !input.trim()}>
             Send
           </Button>
         </form>
@@ -229,18 +259,31 @@ export default function Coach() {
       >
         {importPreview && (
           <div className="space-y-4">
-            <div className="space-y-2 text-sm">
-              <p>
-                <span className="font-medium">Program:</span> {importPreview.program.name}
-              </p>
-              <p>
-                <span className="font-medium">Workouts:</span>{' '}
-                {importPreview.program.workouts.length}
-              </p>
-              <p>
-                <span className="font-medium">Total exercises:</span>{' '}
-                {importPreview.program.workouts.reduce((sum, w) => sum + w.exercises.length, 0)}
-              </p>
+            <p className="text-sm">
+              <span className="font-medium">Program:</span> {importPreview.program.name}
+            </p>
+            {/* Model-generated — show exactly what will be created, not just counts. */}
+            <div className="max-h-[45vh] overflow-y-auto space-y-3 rounded-lg border border-gray-200 dark:border-surface-700 p-3">
+              {importPreview.program.workouts.map((w, wi) => (
+                <div key={wi}>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-100">{w.name}</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {w.exercises.map((e, ei) => (
+                      <li key={ei} className="flex justify-between gap-3 text-sm text-gray-600 dark:text-gray-400">
+                        <span className="min-w-0 break-words">
+                          {e.supersetGroup && (
+                            <span className="mr-1 text-xs font-medium text-accent-600 dark:text-accent-400">
+                              {e.supersetGroup}
+                            </span>
+                          )}
+                          {e.name}
+                        </span>
+                        <span className="shrink-0 tabular-nums">{exerciseTargetSummary(e)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">
               This creates a new program. Start it any time from Quick Workout on the home screen.

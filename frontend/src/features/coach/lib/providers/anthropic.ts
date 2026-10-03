@@ -8,7 +8,8 @@ import type {
   RunTurnResult,
 } from './types';
 
-const MAX_TOKENS = 1500;
+/** Output cap per turn. Long reviews and propose_program input could hit the old 1,500. */
+const MAX_TOKENS = 4096;
 
 /**
  * Translate neutral messages to Anthropic's format. Tool results must arrive in
@@ -122,7 +123,7 @@ export function createAnthropicProvider(opts: { apiKey: string; model: string })
         }
       }
 
-      return { text, toolCalls };
+      return { text, toolCalls, truncated: final.stop_reason === 'max_tokens' };
     },
   };
 }

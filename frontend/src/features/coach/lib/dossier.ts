@@ -25,7 +25,7 @@ import type { ProgressionSettings } from '../../../shared/context/ProgressionCon
 
 /** A lift is treated as dropped once this many days pass without it. */
 const DROPPED_AFTER_DAYS = 42;
-/** Consecutive sessions at an unchanged top weight before it reads as a stall. */
+/** Sessions at one top weight with no added weight or reps before it reads as a stall. */
 const STALL_SESSIONS = 3;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -153,10 +153,25 @@ interface ExerciseRollup {
   lastDistance: number;
   firstDate: string;
   lastDate: string;
-  /** date -> heaviest working weight that day, for stall detection. */
-  topByDate: Map<string, number>;
+  /** date -> heaviest working weight that day + reps at it, for stall detection. */
+  topByDate: Map<string, DayTop>;
   /** Any assisted (negative-weight) set counted — loads are then bodyweight − assistance. */
   assisted: boolean;
+}
+
+/** One date's heaviest working weight, and the reps done at exactly that weight. */
+interface DayTop {
+  weight: number;
+  /** Best single-set reps at `weight`. */
+  bestReps: number;
+  /** Total reps across all sets at `weight`. */
+  totalReps: number;
+}
+
+function addToDayTop(day: DayTop | undefined, weight: number, reps: number): DayTop {
+  if (!day || weight > day.weight) return { weight, bestReps: reps, totalReps: reps };
+  if (weight < day.weight) return day;
+  return { weight, bestReps: Math.max(day.bestReps, reps), totalReps: day.totalReps + reps };
 }
 
 /**
@@ -236,28 +251,42 @@ function rollupExercises(
           r.bestReps = set.reps;
         }
       }
-      r.topByDate.set(date, Math.max(r.topByDate.get(date) ?? 0, weight));
+      r.topByDate.set(date, addToDayTop(r.topByDate.get(date), weight, set.reps));
     }
   }
   return out;
 }
 
 /**
- * Trailing run of sessions at an unchanged top weight, or 0. Precomputed because
- * "same weight across N sessions, for 49 lifts" is arithmetic over a wall of text —
- * exactly what a model does worst.
+ * Sessions since the lift last progressed, or 0. Precomputed because "same weight across
+ * N sessions, for 49 lifts" is arithmetic over a wall of text — exactly what a model does
+ * worst.
+ *
+ * Double progression holds the weight while reps climb, so weight alone is not a stall.
+ * Take the trailing run of dates at the latest top weight; the first is the baseline, and a
+ * later date "improves" if its best single-set reps or its total reps at that weight beat
+ * every earlier date in the run. The count runs from the last improvement (or the
+ * baseline) through the latest date, inclusive.
  */
-function stallRun(topByDate: Map<string, number>): { sessions: number; weight: number } {
+function stallRun(topByDate: Map<string, DayTop>): { sessions: number; weight: number } {
   const dates = [...topByDate.keys()].sort();
   if (dates.length === 0) return { sessions: 0, weight: 0 };
-  const weight = topByDate.get(dates[dates.length - 1]) as number;
+  const days = dates.map((d) => topByDate.get(d) as DayTop);
+  const weight = days[days.length - 1].weight;
   if (!weight) return { sessions: 0, weight: 0 };
-  let run = 0;
-  for (let i = dates.length - 1; i >= 0; i--) {
-    if (topByDate.get(dates[i]) !== weight) break;
-    run += 1;
+
+  let start = days.length - 1;
+  while (start > 0 && days[start - 1].weight === weight) start -= 1;
+
+  let lastImproved = start;
+  let bestReps = days[start].bestReps;
+  let totalReps = days[start].totalReps;
+  for (let i = start + 1; i < days.length; i++) {
+    if (days[i].bestReps > bestReps || days[i].totalReps > totalReps) lastImproved = i;
+    bestReps = Math.max(bestReps, days[i].bestReps);
+    totalReps = Math.max(totalReps, days[i].totalReps);
   }
-  return { sessions: run, weight };
+  return { sessions: days.length - lastImproved, weight };
 }
 
 function renderRollup(r: ExerciseRollup, today: string): string {

@@ -35,6 +35,7 @@ interface StreamChunk {
       content?: string | null;
       tool_calls?: StreamToolCallDelta[];
     };
+    finish_reason?: string | null;
   }>;
 }
 
@@ -144,6 +145,7 @@ export function createOpenAiCompatibleProvider(opts: {
       const decoder = new TextDecoder();
       let buffer = '';
       let text = '';
+      let truncated = false;
       const toolAcc: Record<
         number,
         { id: string; name: string; args: string; extraContent?: Record<string, unknown> }
@@ -157,6 +159,7 @@ export function createOpenAiCompatibleProvider(opts: {
         } catch {
           return;
         }
+        if (chunk.choices?.[0]?.finish_reason === 'length') truncated = true;
         const delta = chunk.choices?.[0]?.delta;
         if (!delta) return;
         if (delta.content) {
@@ -197,7 +200,7 @@ export function createOpenAiCompatibleProvider(opts: {
           ...(a.extraContent ? { extraContent: a.extraContent } : {}),
         }));
 
-      return { text, toolCalls };
+      return { text, toolCalls, truncated };
     },
   };
 }

@@ -21,6 +21,11 @@ export const RECENT_SESSION_COUNT = 20;
 export const ALL_TIME_LIMIT = 1000;
 
 const ALLTIME_STORAGE_KEY = 'wt:coach-dossier-alltime';
+/**
+ * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
+ * memo written by an older build under today's key is not served after a deploy.
+ */
+const ALLTIME_FORMAT_VERSION = 2;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -70,6 +75,10 @@ function writeCache(value: CachedAllTime): void {
  *
  * Programs and stats ride the existing queries; profile and progression settings are
  * localStorage-backed contexts and cost no fetch at all.
+ *
+ * `dossier` stays null until every block is real — the persona promises one, so the page
+ * must not send without it. A brand-new instance (no completed sessions) gets the empty
+ * all-time/notes blocks directly. `error` + `retry` cover a failed fetch.
  */
 export function useCoachDossier() {
   // Pinned for the life of the hook so the text cannot shift under a cached prompt prefix
@@ -78,20 +87,26 @@ export function useCoachDossier() {
 
   const { profile } = useUserProfile();
   const { settings: progression } = useProgression();
-  const { data: programs } = usePrograms();
-  const { data: stats } = useStats();
-  const { data: recentSessions } = useHistory(RECENT_SESSION_COUNT, 0);
-  const { data: catalogEntries } = useCatalog();
+  const programsQuery = usePrograms();
+  const statsQuery = useStats();
+  const recentQuery = useHistory(RECENT_SESSION_COUNT, 0);
+  const catalogQuery = useCatalog();
+  const programs = programsQuery.data;
+  const stats = statsQuery.data;
+  const recentSessions = recentQuery.data;
+  const catalogEntries = catalogQuery.data;
 
   // Identity of the current history: newest session + how many there are.
   const newestId = recentSessions?.[0]?.id ?? 0;
   const totalSessions = stats?.totalSessions ?? 0;
   // Bodyweight is in the key because assisted sets' effective loads depend on it.
   const bodyweight = profile.bodyweight;
-  // Waits for the catalog so the big fetch runs once, already grouped.
-  const cacheKey = newestId && totalSessions && catalogEntries
-    ? `${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}`
+  // Waits for stats + catalog so the big fetch runs once, under its final key, already grouped.
+  const cacheKey = newestId && stats && catalogEntries
+    ? `v${ALLTIME_FORMAT_VERSION}:${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}`
     : '';
+  // History answered and is empty: no completed sessions yet, nothing to fetch.
+  const noHistory = Boolean(recentSessions) && newestId === 0;
   const catalog = useMemo(() => catalogNames(catalogEntries), [catalogEntries]);
 
   const cached = useMemo(() => {
@@ -100,7 +115,7 @@ export function useCoachDossier() {
     return hit && hit.key === cacheKey ? hit : null;
   }, [cacheKey]);
 
-  const { data: allTimeParts } = useQuery({
+  const allTimeQuery = useQuery({
     queryKey: ['coachDossierAllTime', cacheKey],
     // Only pay for the big fetch when the memoized text is missing or stale.
     enabled: Boolean(cacheKey) && !cached,
@@ -117,21 +132,33 @@ export function useCoachDossier() {
     },
   });
 
-  const resolved = cached ?? allTimeParts ?? null;
+  const empty = useMemo(
+    () => (noHistory ? buildAllTimeParts([], today, bodyweight, catalog) : null),
+    [noHistory, today, bodyweight, catalog]
+  );
+  const resolved = cached ?? allTimeQuery.data ?? empty;
 
   const dossier = useMemo(() => {
-    if (!resolved || !recentSessions) return null;
+    // Every block real, or nothing: a dossier missing its program or stats is not pinned.
+    if (!resolved || !recentSessions || !programs || !stats) return null;
     return assembleDossier({
       today,
       athlete: buildAthleteLine(profile, progression, today),
-      programs: buildProgramBlock(programs ?? []),
+      programs: buildProgramBlock(programs),
       allTime: resolved.allTime,
       notes: resolved.notes,
       recent: renderSessions(recentSessions),
       recentCount: recentSessions.length,
-      stats: buildStatsBlock(stats ?? null),
+      stats: buildStatsBlock(stats),
     });
   }, [resolved, recentSessions, today, profile, progression, programs, stats]);
 
-  return { dossier, isReady: dossier !== null };
+  // Any query the dossier waits on can strand it; surface that instead of a dead input.
+  const failed = [allTimeQuery, recentQuery, statsQuery, catalogQuery, programsQuery].filter(
+    (q) => q.isError
+  );
+  const error = dossier === null && failed.length > 0 ? failed[0].error : null;
+  const retry = () => failed.forEach((q) => void q.refetch());
+
+  return { dossier, isReady: dossier !== null, error, retry };
 }

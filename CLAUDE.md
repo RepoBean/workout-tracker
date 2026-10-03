@@ -480,8 +480,21 @@ backend/
   byte-identical across turns. All builders are pure and take `today` explicitly, and the page
   pins the assembled string in a ref on first send (cleared by New Chat) so a background
   refetch cannot change it mid-conversation.
+- **Never sent without it**: the page disables input + starters until the dossier is assembled
+  (all blocks real; a brand-new instance gets the empty all-time/notes blocks directly), and
+  shows Retry if a fetch failed. The all-time memo key carries a format version
+  (`ALLTIME_FORMAT_VERSION` in `useCoachDossier.ts`) — bump it when the all-time/notes text changes.
+- **Stall flag** = sessions since the lift last progressed at its current top weight: over the
+  trailing run at that weight, a session progresses if its best single-set reps or total reps
+  at the weight beat every earlier one in the run. Flagged at 3+. Holding weight while reps
+  climb (double progression) is not a stall.
+- Thread (`lib/thread.ts`): failed sends are stored with `error: true` (legacy `⚠️` replies
+  count too) and, with the user turn behind them, are never sent to the model; the 12-message
+  window always starts on a user turn. A reply that hits the output cap (Anthropic 4,096) is
+  marked cut off and its tool calls are not run.
 - Toolset is 2: `get_workout_history` (the tail past the 20-session window; prefer `monthsBack`)
   and `propose_program`. The coach remains strictly read-only — no POST/PUT/DELETE anywhere.
+  The import preview lists every workout and exercise (sets × reps) before Import.
 
 ---
 

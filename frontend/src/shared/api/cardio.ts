@@ -29,7 +29,10 @@ export const CARDIO_MODALITY_OPTIONS: { value: CardioModality; label: string }[]
  * Target summary for an exercise row — cardio shows modality + duration/distance
  * targets instead of the placeholder "1 × 1" sets/reps it stores.
  */
-export function exerciseTargetSummary(exercise: Exercise): string {
+export function exerciseTargetSummary(
+  exercise: Pick<Exercise, 'targetSets' | 'targetReps'> &
+    Partial<Pick<Exercise, 'exerciseType' | 'cardioModality' | 'targetDurationSec' | 'targetDistance'>>
+): string {
   if (exercise.exerciseType === 'cardio') {
     const parts: string[] = [CARDIO_MODALITY_INFO[exercise.cardioModality ?? 'other'].long];
     if (exercise.targetDurationSec) parts.push(`${Math.round(exercise.targetDurationSec / 60)} min`);

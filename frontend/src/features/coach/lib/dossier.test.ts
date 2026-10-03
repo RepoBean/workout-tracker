@@ -211,6 +211,63 @@ describe('buildAllTimeBlock', () => {
     expect(out).not.toContain('stalled');
   });
 
+  it('does not flag a held weight while reps climb (double progression)', () => {
+    const out = buildAllTimeBlock(
+      [8, 9, 10, 11].map((reps, i) =>
+        session({
+          completedAt: `2026-09-0${i + 1}T11:00:00.000Z`,
+          sets: [set({ exerciseName: 'Row', weight: 100, reps }), set({ exerciseName: 'Row', weight: 100, reps: 8 })],
+        })
+      ),
+      TODAY
+    );
+    expect(out).not.toContain('stalled');
+  });
+
+  it('counts total reps at the weight as progress too', () => {
+    // Best single set stays at 10, but a third set gets added: 20 → 30 total reps.
+    const sets = [[10, 10], [10, 10], [10, 10, 10]];
+    const out = buildAllTimeBlock(
+      sets.map((reps, i) =>
+        session({
+          completedAt: `2026-09-0${i + 1}T11:00:00.000Z`,
+          sets: reps.map((r) => set({ exerciseName: 'Row', weight: 100, reps: r })),
+        })
+      ),
+      TODAY
+    );
+    expect(out).not.toContain('stalled');
+  });
+
+  it('flags a plateau after progress, counting from the last improving session', () => {
+    // 100: 8, 9, 10 (improving), then 10, 9, 10 — last improvement is the 3rd date, so the
+    // stall covers dates 3..6 = 4 sessions.
+    const out = buildAllTimeBlock(
+      [8, 9, 10, 10, 9, 10].map((reps, i) =>
+        session({
+          completedAt: `2026-09-0${i + 1}T11:00:00.000Z`,
+          sets: [set({ exerciseName: 'Row', weight: 100, reps })],
+        })
+      ),
+      TODAY
+    );
+    expect(out).toContain('stalled 4 sessions @100');
+  });
+
+  it('starts the run at the latest weight jump, with that first session as baseline', () => {
+    // 95 for a while, then 100 x 8, 8, 8: baseline + 2 non-improving = 3.
+    const out = buildAllTimeBlock(
+      [[95, 8], [95, 8], [95, 8], [100, 8], [100, 8], [100, 8]].map(([w, reps], i) =>
+        session({
+          completedAt: `2026-09-0${i + 1}T11:00:00.000Z`,
+          sets: [set({ exerciseName: 'Row', weight: w, reps }), set({ exerciseName: 'Row', weight: w - 20, reps: 15 })],
+        })
+      ),
+      TODAY
+    );
+    expect(out).toContain('stalled 3 sessions @100');
+  });
+
   it('summarises cardio without weight nonsense', () => {
     const out = buildAllTimeBlock(
       [

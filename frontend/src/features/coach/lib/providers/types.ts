@@ -58,6 +58,8 @@ export interface RunTurnArgs {
 export interface RunTurnResult {
   text: string;
   toolCalls: ChatToolCall[];
+  /** The turn hit the output-token cap: text may stop mid-sentence, tool input may be partial. */
+  truncated?: boolean;
 }
 
 export interface ChatProvider {

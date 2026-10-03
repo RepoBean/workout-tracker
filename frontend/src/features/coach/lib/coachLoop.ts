@@ -2,6 +2,10 @@ import type { ChatProvider, ChatToolCall, ChatToolDef, CoachMessage } from './pr
 
 const MAX_ITERATIONS = 6;
 
+/** Appended to a reply that hit the output cap, so a cut-off answer never reads as complete. */
+export const TRUNCATED_NOTE =
+  '_(My reply was cut off at the length limit. Ask me to continue, or narrow the question.)_';
+
 export interface RunCoachArgs {
   provider: ChatProvider;
   system: string;
@@ -24,6 +28,8 @@ export interface RunCoachResult {
   messages: CoachMessage[];
   /** The final assistant text (the answer shown to the user). */
   finalText: string;
+  /** The last turn hit the output cap; finalText carries TRUNCATED_NOTE. */
+  truncated?: boolean;
 }
 
 /**
@@ -37,13 +43,20 @@ export async function runCoach(args: RunCoachArgs): Promise<RunCoachResult> {
 
   for (let i = 0; i < MAX_ITERATIONS; i++) {
     args.onTurnStart?.();
-    const { text, toolCalls } = await args.provider.runTurn({
+    const { text, toolCalls, truncated } = await args.provider.runTurn({
       system: args.system,
       systemCacheable: args.systemCacheable,
       messages: convo,
       tools: args.tools,
       onTextDelta: args.onTextDelta,
     });
+
+    if (truncated) {
+      // Tool input may be cut mid-JSON: never execute it. End here with what was said.
+      convo.push({ role: 'assistant', content: text, toolCalls: [] });
+      finalText = text.trim() ? `${text}\n\n${TRUNCATED_NOTE}` : TRUNCATED_NOTE;
+      return { messages: convo, finalText, truncated: true };
+    }
 
     convo.push({ role: 'assistant', content: text, toolCalls });
     finalText = text;
