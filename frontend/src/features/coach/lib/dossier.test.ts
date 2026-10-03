@@ -198,6 +198,20 @@ describe('buildAllTimeBlock', () => {
     expect(out).toContain('stalled 3 sessions @140');
   });
 
+  it('does not also flag a stall on a dropped lift', () => {
+    const out = buildAllTimeBlock(
+      ['2026-06-10', '2026-06-17', '2026-06-24'].map((d) =>
+        session({
+          completedAt: `${d}T11:00:00.000Z`,
+          sets: [set({ exerciseName: 'Lat Pulldown Machine', weight: 140, reps: 10 })],
+        })
+      ),
+      TODAY
+    );
+    expect(out).toMatch(/Lat Pulldown Machine:.*\[dropped 2\.5mo\]$/m);
+    expect(out).not.toContain('stalled');
+  });
+
   it('does not flag a stall when the weight is still climbing', () => {
     const out = buildAllTimeBlock(
       [130, 135, 140].map((w, i) =>

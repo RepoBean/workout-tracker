@@ -21,14 +21,15 @@ import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 import { computeAge, type UserProfile } from '../../../shared/lib/hrZones';
+import {
+  addToDayTop,
+  daysBetween,
+  DROPPED_AFTER_DAYS,
+  STALL_SESSIONS,
+  stallRun,
+  type DayTop,
+} from '../../../shared/lib/liftTrend';
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
-
-/** A lift is treated as dropped once this many days pass without it. */
-const DROPPED_AFTER_DAYS = 42;
-/** Sessions at one top weight with no added weight or reps before it reads as a stall. */
-const STALL_SESSIONS = 3;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Small formatters
@@ -37,13 +38,6 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** ISO timestamp -> YYYY-MM-DD. Dates only; never emit a time-of-day. */
 export function isoDate(value: string | null): string {
   return value ? value.slice(0, 10) : 'unknown';
-}
-
-function daysBetween(fromIso: string, toIso: string): number {
-  const a = Date.parse(`${fromIso}T00:00:00Z`);
-  const b = Date.parse(`${toIso}T00:00:00Z`);
-  if (isNaN(a) || isNaN(b)) return 0;
-  return Math.round((b - a) / DAY_MS);
 }
 
 function months(days: number): string {
@@ -159,21 +153,6 @@ interface ExerciseRollup {
   assisted: boolean;
 }
 
-/** One date's heaviest working weight, and the reps done at exactly that weight. */
-interface DayTop {
-  weight: number;
-  /** Best single-set reps at `weight`. */
-  bestReps: number;
-  /** Total reps across all sets at `weight`. */
-  totalReps: number;
-}
-
-function addToDayTop(day: DayTop | undefined, weight: number, reps: number): DayTop {
-  if (!day || weight > day.weight) return { weight, bestReps: reps, totalReps: reps };
-  if (weight < day.weight) return day;
-  return { weight, bestReps: Math.max(day.bestReps, reps), totalReps: day.totalReps + reps };
-}
-
 /**
  * Weight figures use effective load: an assisted set (−40 = 40 lb of help) counts as
  * bodyweight − 40, on the same scale as history hand-entered as an effective load. Without
@@ -257,37 +236,9 @@ function rollupExercises(
   return out;
 }
 
-/**
- * Sessions since the lift last progressed, or 0. Precomputed because "same weight across
- * N sessions, for 49 lifts" is arithmetic over a wall of text — exactly what a model does
- * worst.
- *
- * Double progression holds the weight while reps climb, so weight alone is not a stall.
- * Take the trailing run of dates at the latest top weight; the first is the baseline, and a
- * later date "improves" if its best single-set reps or its total reps at that weight beat
- * every earlier date in the run. The count runs from the last improvement (or the
- * baseline) through the latest date, inclusive.
- */
-function stallRun(topByDate: Map<string, DayTop>): { sessions: number; weight: number } {
-  const dates = [...topByDate.keys()].sort();
-  if (dates.length === 0) return { sessions: 0, weight: 0 };
-  const days = dates.map((d) => topByDate.get(d) as DayTop);
-  const weight = days[days.length - 1].weight;
-  if (!weight) return { sessions: 0, weight: 0 };
-
-  let start = days.length - 1;
-  while (start > 0 && days[start - 1].weight === weight) start -= 1;
-
-  let lastImproved = start;
-  let bestReps = days[start].bestReps;
-  let totalReps = days[start].totalReps;
-  for (let i = start + 1; i < days.length; i++) {
-    if (days[i].bestReps > bestReps || days[i].totalReps > totalReps) lastImproved = i;
-    bestReps = Math.max(bestReps, days[i].bestReps);
-    totalReps = Math.max(totalReps, days[i].totalReps);
-  }
-  return { sessions: days.length - lastImproved, weight };
-}
+// Stall detection (stallRun) is shared with the Progress overview: shared/lib/liftTrend.ts.
+// Precomputed because "same weight across N sessions, for 49 lifts" is arithmetic over a
+// wall of text — exactly what a model does worst.
 
 function renderRollup(r: ExerciseRollup, today: string): string {
   const parts: string[] = [`${r.sets} sets`, `${r.dates.size} dates`];
@@ -324,7 +275,8 @@ function renderRollup(r: ExerciseRollup, today: string): string {
   const flags: string[] = [];
   const idle = daysBetween(r.lastDate, today);
   if (idle >= DROPPED_AFTER_DAYS) flags.push(`dropped ${months(idle)}`);
-  if (!r.cardio) {
+  // A stall on a lift abandoned months ago is noise: dropped wins.
+  if (!r.cardio && idle < DROPPED_AFTER_DAYS) {
     const stall = stallRun(r.topByDate);
     if (stall.sessions >= STALL_SESSIONS) {
       flags.push(`stalled ${stall.sessions} sessions @${stall.weight}`);

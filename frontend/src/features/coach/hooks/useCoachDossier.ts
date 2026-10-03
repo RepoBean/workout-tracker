@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../shared/api/client';
 import { useCatalog, usePrograms, useHistory, useStats } from '../../../shared/api/queries';
 import { catalogFingerprint, catalogNames } from '../../../shared/lib/catalog';
+import { localToday } from '../../../shared/lib/liftTrend';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { useProgression } from '../../../shared/context/ProgressionContext';
 import type { Session } from '../../../shared/api/types';
@@ -25,7 +26,7 @@ const ALLTIME_STORAGE_KEY = 'wt:coach-dossier-alltime';
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 2;
+const ALLTIME_FORMAT_VERSION = 3;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -33,13 +34,6 @@ interface CachedAllTime {
   key: string;
   allTime: string;
   notes: string;
-}
-
-/** Local calendar date as YYYY-MM-DD. Never UTC — "today" means the user's today. */
-function localToday(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function readCache(): CachedAllTime | null {
