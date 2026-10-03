@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useExerciseSuggestions } from '../../../shared/api/queries';
-import { useProgressData } from '../hooks/useProgressData';
+import { useProgressData, type ProgressMode } from '../hooks/useProgressData';
 import { ProgressChart } from './ProgressChart';
 import { formatMMSS, formatWeight } from '../../../shared/utils/format';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
@@ -12,9 +11,11 @@ function formatSessionDate(dateString: string): string {
 }
 
 
-type Mode = 'strength' | 'cardio';
+type Mode = ProgressMode;
 type ChartMetric = 'volume' | '1rm' | 'weight';
 type CardioMetric = 'pace' | 'distance' | 'duration' | 'hr';
+
+const QUICK_SELECT_COLLAPSED = 8;
 
 const CARDIO_METRIC_LABELS: Record<CardioMetric, string> = {
     pace: 'Pace',
@@ -30,37 +31,29 @@ export function ExerciseProgressTab() {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [chartMetric, setChartMetric] = useState<ChartMetric>('1rm');
     const [cardioMetric, setCardioMetric] = useState<CardioMetric>('pace');
+    const [showAllQuick, setShowAllQuick] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const { data: suggestions } = useExerciseSuggestions(searchQuery);
     const {
         isLoading,
         error,
-        mostTrainedExercises,
+        hasStrengthHistory,
+        mostTrainedStrength,
         activeExercises,
+        searchExercises,
         getExerciseHistory,
+        hasCardioHistory,
+        mostTrainedCardio,
         activeCardioExercises,
-        allCardioExerciseNames,
         getCardioExerciseHistory,
     } = useProgressData();
     const { profile: { bodyweight } } = useUserProfile();
 
-    // Filter autocomplete suggestions to cardio-only when in cardio mode.
-    const cardioNameSet = useMemo(
-        () => new Set(allCardioExerciseNames),
-        [allCardioExerciseNames]
-    );
-    const filteredSuggestions = mode === 'cardio'
-        ? (suggestions ?? []).filter(name => cardioNameSet.has(name))
-        : (suggestions ?? []);
-    const cardioMostTrained = useMemo(
-        () => mostTrainedExercises.filter(name => cardioNameSet.has(name)),
-        [mostTrainedExercises, cardioNameSet]
-    );
-    const strengthMostTrained = useMemo(
-        () => mostTrainedExercises.filter(name => !cardioNameSet.has(name)),
-        [mostTrainedExercises, cardioNameSet]
+    // Local, catalog-aware search over what this mode can chart (logic/exerciseSearch.ts)
+    const filteredSuggestions = useMemo(
+        () => searchExercises(searchQuery, mode),
+        [searchExercises, searchQuery, mode]
     );
 
     const handleModeChange = (newMode: Mode) => {
@@ -69,15 +62,12 @@ export function ExerciseProgressTab() {
         setSelectedExercise(null);
         setSearchQuery('');
         setShowSuggestions(false);
+        setShowAllQuick(false);
     };
 
     useEffect(() => {
-        if (filteredSuggestions.length > 0 && searchQuery.length >= 2) {
-            setShowSuggestions(true);
-        } else {
-            setShowSuggestions(false);
-        }
-    }, [filteredSuggestions, searchQuery]);
+        setShowSuggestions(filteredSuggestions.length > 0);
+    }, [filteredSuggestions]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -163,7 +153,11 @@ export function ExerciseProgressTab() {
     }
 
     const quickSelectNames = mode === 'cardio' ? activeCardioExercises : activeExercises;
-    const modeMostTrained = mode === 'cardio' ? cardioMostTrained : strengthMostTrained;
+    const visibleQuickSelect = showAllQuick
+        ? quickSelectNames
+        : quickSelectNames.slice(0, QUICK_SELECT_COLLAPSED);
+    const modeMostTrained = mode === 'cardio' ? mostTrainedCardio : mostTrainedStrength;
+    const modeHasHistory = mode === 'cardio' ? hasCardioHistory : hasStrengthHistory;
 
     return (
         <div className="space-y-4">
@@ -195,9 +189,7 @@ export function ExerciseProgressTab() {
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         onFocus={() => {
-                            if (filteredSuggestions.length > 0 && searchQuery.length >= 2) {
-                                setShowSuggestions(true);
-                            }
+                            if (filteredSuggestions.length > 0) setShowSuggestions(true);
                         }}
                         placeholder={mode === 'cardio' ? 'Search cardio exercise...' : 'Search exercise...'}
                         className="w-full px-3 py-2 border rounded-lg dark:bg-surface-900
@@ -208,9 +200,9 @@ export function ExerciseProgressTab() {
                     {showSuggestions && filteredSuggestions.length > 0 && (
                         <div className="absolute z-10 left-0 right-0 mt-1 bg-white dark:bg-surface-800
                             border dark:border-surface-700 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                            {filteredSuggestions.map((suggestion, i) => (
+                            {filteredSuggestions.map((suggestion) => (
                                 <button
-                                    key={i}
+                                    key={suggestion}
                                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100
                              dark:hover:bg-surface-700 transition-colors min-h-[44px] flex items-center"
                                     onClick={() => handleSelectExercise(suggestion)}
@@ -226,8 +218,8 @@ export function ExerciseProgressTab() {
                 {quickSelectNames.length > 0 && (
                     <div className="mt-3">
                         <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Quick select:</p>
-                        <div className="flex flex-wrap gap-2 overflow-x-auto">
-                            {quickSelectNames.slice(0, 8).map((name) => (
+                        <div className="flex flex-wrap gap-2">
+                            {visibleQuickSelect.map((name) => (
                                 <button
                                     key={name}
                                     onClick={() => handleSelectExercise(name)}
@@ -240,6 +232,15 @@ export function ExerciseProgressTab() {
                                     {name}
                                 </button>
                             ))}
+                            {quickSelectNames.length > QUICK_SELECT_COLLAPSED && (
+                                <button
+                                    onClick={() => setShowAllQuick(v => !v)}
+                                    className="px-3 py-2 rounded-full text-sm font-medium min-h-[44px]
+                                        text-primary-600 dark:text-primary-400 hover:bg-gray-100 dark:hover:bg-surface-700"
+                                >
+                                    {showAllQuick ? 'Show less' : `Show all (${quickSelectNames.length})`}
+                                </button>
+                            )}
                         </div>
                     </div>
                 )}
@@ -474,8 +475,8 @@ export function ExerciseProgressTab() {
                 </>
             )}
 
-            {/* Empty state when no exercise and nothing to suggest in this mode */}
-            {!selectedExercise && modeMostTrained.length === 0 && quickSelectNames.length === 0 && (
+            {/* Empty state when this mode has no logged history at all */}
+            {!selectedExercise && !modeHasHistory && (
                 <div className="card text-center py-8 text-gray-500">
                     {mode === 'cardio'
                         ? 'No cardio sessions yet. Log some cardio to see your progress!'

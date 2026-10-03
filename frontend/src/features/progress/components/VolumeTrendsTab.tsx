@@ -67,10 +67,7 @@ export function VolumeTrendsTab() {
         isLoading,
         error,
         weeklyVolumes,
-        thisWeekVolume,
-        lastWeekVolume,
-        thisMonthVolume,
-        lastMonthVolume,
+        volumeToDate,
     } = useProgressData();
     const { theme } = useTheme();
     const isDark = theme === 'dark';
@@ -104,22 +101,22 @@ export function VolumeTrendsTab() {
 
     return (
         <div className="space-y-4">
-            {/* Week comparison */}
+            {/* Week-to-date vs last week through the same weekday (weeks start Sunday) */}
             <ComparisonCard
-                title="This Week vs Last Week"
-                currentLabel="This Week"
-                currentValue={thisWeekVolume}
-                previousLabel="Last Week"
-                previousValue={lastWeekVolume}
+                title="Week to date"
+                currentLabel="This week so far"
+                currentValue={volumeToDate.thisWeek}
+                previousLabel="Last week, same point"
+                previousValue={volumeToDate.lastWeek}
             />
 
-            {/* Month comparison */}
+            {/* Month-to-date vs last month through the same day of month */}
             <ComparisonCard
-                title="This Month vs Last Month"
-                currentLabel="This Month"
-                currentValue={thisMonthVolume}
-                previousLabel="Last Month"
-                previousValue={lastMonthVolume}
+                title="Month to date"
+                currentLabel="This month so far"
+                currentValue={volumeToDate.thisMonth}
+                previousLabel="Last month, same point"
+                previousValue={volumeToDate.lastMonth}
             />
 
             {/* Weekly volume chart */}

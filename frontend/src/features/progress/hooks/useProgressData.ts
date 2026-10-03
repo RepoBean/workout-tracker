@@ -13,41 +13,44 @@ import {
     type ExerciseSession,
     type PersonalRecord,
 } from '../logic/exerciseIndex';
+import { searchExerciseNames } from '../logic/exerciseSearch';
+import {
+    volumeComparison,
+    weeklyVolumes as computeWeeklyVolumes,
+    type VolumeComparison,
+    type WeeklyVolume,
+} from '../logic/volumePeriods';
 
-export type { CardioExerciseSession, ExerciseSession, PersonalRecord };
+export type { CardioExerciseSession, ExerciseSession, PersonalRecord, VolumeComparison, WeeklyVolume };
 
-export interface WeeklyVolume {
-    weekStart: string;      // ISO date of Monday
-    weekLabel: string;      // e.g., "Jan 6"
-    totalVolume: number;    // sum of weight × reps for all sets
-}
+export type ProgressMode = 'strength' | 'cardio';
 
 export interface UseProgressDataReturn {
     isLoading: boolean;
     error: Error | null;
 
     // For exercise picker
-    allExerciseNames: string[];           // Unique exercise names from history
-    mostTrainedExercises: string[];       // Top 5 by frequency
+    hasStrengthHistory: boolean;
+    mostTrainedStrength: string[];        // Top 5 by strength-set count
     activeExercises: string[];            // Strength exercises from active program
+    /** Chartable names for the mode matching `query` (incl. catalog aliases). */
+    searchExercises: (query: string, mode: ProgressMode) => string[];
 
     // For chart/list (strength)
     getExerciseHistory: (name: string) => ExerciseSession[];
 
     // Cardio counterparts
-    allCardioExerciseNames: string[];     // Names with at least one cardio set
+    hasCardioHistory: boolean;
+    mostTrainedCardio: string[];          // Top 5 by cardio-set count
     activeCardioExercises: string[];      // Cardio exercises from active program
     getCardioExerciseHistory: (name: string) => CardioExerciseSession[];
 
     // For volume trends
-    weeklyVolumes: WeeklyVolume[];        // Last 12 weeks, oldest first
-    thisWeekVolume: number;
-    lastWeekVolume: number;
-    thisMonthVolume: number;
-    lastMonthVolume: number;
+    weeklyVolumes: WeeklyVolume[];        // Last 12 whole Sunday weeks, oldest first
+    volumeToDate: VolumeComparison;       // Period-to-date vs the previous period at the same point
 
     // For personal records
-    personalRecords: PersonalRecord[];    // Best set per exercise, sorted by 1RM desc
+    personalRecords: PersonalRecord[];    // Best 1RM per exercise, sorted by 1RM desc
 }
 
 const NO_SESSIONS: Session[] = [];
@@ -73,6 +76,16 @@ export function useProgressData(): UseProgressDataReturn {
         [sessions, programs, catalog]
     );
 
+    // Search only what Progress can chart for the mode (logic/exerciseSearch.ts)
+    const searchExercises = useMemo(() => {
+        const candidates: Record<ProgressMode, string[]> = {
+            strength: [...index.allStrengthExerciseNames, ...index.activeExercises],
+            cardio: [...index.allCardioExerciseNames, ...index.activeCardioExercises],
+        };
+        return (query: string, mode: ProgressMode) =>
+            searchExerciseNames(query, candidates[mode], catalogEntries);
+    }, [index, catalogEntries]);
+
     // Get exercise history for chart/list
     const getExerciseHistory = useMemo(() => {
         return (name: string): ExerciseSession[] =>
@@ -84,110 +97,17 @@ export function useProgressData(): UseProgressDataReturn {
             sessions ? cardioHistory(sessions, name, catalog) : [];
     }, [sessions, catalog]);
 
-    // Helper: Get Monday (week start) for a given date
-    const getMonday = (date: Date): Date => {
-        const d = new Date(date);
-        const day = d.getDay();
-        const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Sunday
-        d.setDate(diff);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    };
+    // Week/month math (logic/volumePeriods.ts)
+    const weeklyVolumes = useMemo(
+        () => computeWeeklyVolumes(sessions ?? NO_SESSIONS, volumeOf, new Date()),
+        [sessions, volumeOf]
+    );
+    const volumeToDate = useMemo(
+        () => volumeComparison(sessions ?? NO_SESSIONS, volumeOf, new Date()),
+        [sessions, volumeOf]
+    );
 
-    // Helper: Format week label (e.g., "Jan 6")
-    const formatWeekLabel = (date: Date): string => {
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    };
-
-    // Calculate weekly volumes (last 12 weeks)
-    const weeklyVolumes = useMemo((): WeeklyVolume[] => {
-        if (!sessions) return [];
-
-        // Group sessions by week and calculate volume
-        const volumeByWeek = new Map<string, number>();
-
-        sessions.forEach((session: Session) => {
-            if (!session.completedAt) return;
-
-            const sessionDate = new Date(session.completedAt);
-            const monday = getMonday(sessionDate);
-            const weekKey = monday.toISOString().split('T')[0];
-
-            let sessionVolume = 0;
-            session.sets?.forEach((set: Set) => {
-                sessionVolume += volumeOf(set);
-            });
-
-            volumeByWeek.set(weekKey, (volumeByWeek.get(weekKey) || 0) + sessionVolume);
-        });
-
-        // Generate last 12 weeks
-        const today = new Date();
-        const currentMonday = getMonday(today);
-        const weeks: WeeklyVolume[] = [];
-
-        for (let i = 11; i >= 0; i--) {
-            const weekStart = new Date(currentMonday);
-            weekStart.setDate(weekStart.getDate() - (i * 7));
-            const weekKey = weekStart.toISOString().split('T')[0];
-
-            weeks.push({
-                weekStart: weekKey,
-                weekLabel: formatWeekLabel(weekStart),
-                totalVolume: volumeByWeek.get(weekKey) || 0,
-            });
-        }
-
-        return weeks;
-    }, [sessions, volumeOf]);
-
-    // Calculate current and previous week volumes
-    const { thisWeekVolume, lastWeekVolume } = useMemo(() => {
-        if (weeklyVolumes.length < 2) {
-            return { thisWeekVolume: 0, lastWeekVolume: 0 };
-        }
-        return {
-            thisWeekVolume: weeklyVolumes[weeklyVolumes.length - 1]?.totalVolume || 0,
-            lastWeekVolume: weeklyVolumes[weeklyVolumes.length - 2]?.totalVolume || 0,
-        };
-    }, [weeklyVolumes]);
-
-    // Calculate current and previous month volumes
-    const { thisMonthVolume, lastMonthVolume } = useMemo(() => {
-        if (!sessions) return { thisMonthVolume: 0, lastMonthVolume: 0 };
-
-        const now = new Date();
-        const thisMonth = now.getMonth();
-        const thisYear = now.getFullYear();
-        const lastMonth = thisMonth === 0 ? 11 : thisMonth - 1;
-        const lastMonthYear = thisMonth === 0 ? thisYear - 1 : thisYear;
-
-        let thisMonthTotal = 0;
-        let lastMonthTotal = 0;
-
-        sessions.forEach((session: Session) => {
-            if (!session.completedAt) return;
-
-            const sessionDate = new Date(session.completedAt);
-            const sessionMonth = sessionDate.getMonth();
-            const sessionYear = sessionDate.getFullYear();
-
-            let sessionVolume = 0;
-            session.sets?.forEach((set: Set) => {
-                sessionVolume += volumeOf(set);
-            });
-
-            if (sessionMonth === thisMonth && sessionYear === thisYear) {
-                thisMonthTotal += sessionVolume;
-            } else if (sessionMonth === lastMonth && sessionYear === lastMonthYear) {
-                lastMonthTotal += sessionVolume;
-            }
-        });
-
-        return { thisMonthVolume: thisMonthTotal, lastMonthVolume: lastMonthTotal };
-    }, [sessions, volumeOf]);
-
-    // Calculate personal records (best volume set per exercise)
+    // Best 1RM per exercise (same rule as the in-session PR toast)
     const personalRecords = useMemo(
         (): PersonalRecord[] =>
             sessions ? computePersonalRecords(sessions, bodyweight, new Date(), catalog) : [],
@@ -197,18 +117,17 @@ export function useProgressData(): UseProgressDataReturn {
     return {
         isLoading: historyLoading || programsLoading,
         error: historyError,
-        allExerciseNames: index.allExerciseNames,
-        mostTrainedExercises: index.mostTrainedExercises,
+        hasStrengthHistory: index.allStrengthExerciseNames.length > 0,
+        mostTrainedStrength: index.mostTrainedStrength,
         activeExercises: index.activeExercises,
+        searchExercises,
         getExerciseHistory,
-        allCardioExerciseNames: index.allCardioExerciseNames,
+        hasCardioHistory: index.allCardioExerciseNames.length > 0,
+        mostTrainedCardio: index.mostTrainedCardio,
         activeCardioExercises: index.activeCardioExercises,
         getCardioExerciseHistory,
         weeklyVolumes,
-        thisWeekVolume,
-        lastWeekVolume,
-        thisMonthVolume,
-        lastMonthVolume,
+        volumeToDate,
         personalRecords,
     };
 }

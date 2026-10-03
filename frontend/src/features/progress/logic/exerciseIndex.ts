@@ -25,14 +25,18 @@ export interface ExerciseSession {
     bestEstimated1RM: number; // Epley: weight × (1 + reps/30) from best volume set
 }
 
+/**
+ * Best estimated 1RM per lift — the same rule as the in-session PR toast
+ * (active-session/logic/personalRecord.ts): working sets only, effective weight > 0,
+ * reps > 0. weight/reps/date describe the set the 1RM came from.
+ */
 export interface PersonalRecord {
     exerciseName: string;
-    bestVolume: number;           // weight × reps
-    bestVolumeWeight: number;     // weight of that set
-    bestVolumeReps: number;       // reps of that set
-    bestVolumeDate: string;       // when achieved (ISO date string)
-    estimated1RM: number;         // Epley formula: weight × (1 + reps / 30)
-    isRecentPR: boolean;          // achieved in last 30 days
+    estimated1RM: number;         // Epley (a single is its own 1RM)
+    weight: number;               // effective weight of that set
+    reps: number;                 // reps of that set
+    date: string;                 // completedAt of the session it was set in (first time reached)
+    isRecentPR: boolean;          // set in the last 30 days
 }
 
 export interface CardioExerciseSession {
@@ -56,10 +60,22 @@ const setName = (set: Set, catalog: CatalogNames) => groupName(set.catalogId, se
 
 export interface ExerciseIndex {
     allExerciseNames: string[];       // Unique exercise names from history, sorted
-    mostTrainedExercises: string[];   // Top 5 by set count
+    allStrengthExerciseNames: string[]; // Names with at least one strength set, sorted
     allCardioExerciseNames: string[]; // Names with at least one cardio set, sorted
+    mostTrainedStrength: string[];    // Top 5 by strength-set count
+    mostTrainedCardio: string[];      // Top 5 by cardio-set count (cardio logs ~1 set/session)
     activeExercises: string[];        // Strength exercises from the active program
     activeCardioExercises: string[];  // Cardio exercises from the active program
+}
+
+const MOST_TRAINED = 5;
+
+/** Top names by count; ties keep first-seen order (history arrives newest first). */
+function topByCount(counts: Map<string, number>): string[] {
+    return Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, MOST_TRAINED)
+        .map(([name]) => name);
 }
 
 function activeProgramNames(programs: Program[], cardio: boolean, catalog: CatalogNames): string[] {
@@ -82,26 +98,25 @@ export function buildExerciseIndex(
     catalog: CatalogNames = NO_CATALOG,
 ): ExerciseIndex {
     const names = new Set<string>();
-    const cardioNames = new Set<string>();
-    const counts = new Map<string, number>();
+    const strengthCounts = new Map<string, number>();
+    const cardioCounts = new Map<string, number>();
 
     sessions.forEach(session => {
         session.sets?.forEach((set: Set) => {
             if (!set.exerciseName) return;
             const name = setName(set, catalog);
             names.add(name);
+            const counts = isCardioSet(set) ? cardioCounts : strengthCounts;
             counts.set(name, (counts.get(name) || 0) + 1);
-            if (isCardioSet(set)) cardioNames.add(name);
         });
     });
 
     return {
         allExerciseNames: Array.from(names).sort(),
-        mostTrainedExercises: Array.from(counts.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 5)
-            .map(([name]) => name),
-        allCardioExerciseNames: Array.from(cardioNames).sort(),
+        allStrengthExerciseNames: Array.from(strengthCounts.keys()).sort(),
+        allCardioExerciseNames: Array.from(cardioCounts.keys()).sort(),
+        mostTrainedStrength: topByCount(strengthCounts),
+        mostTrainedCardio: topByCount(cardioCounts),
         activeExercises: activeProgramNames(programs, false, catalog),
         activeCardioExercises: activeProgramNames(programs, true, catalog),
     };
@@ -252,27 +267,18 @@ export function cardioHistory(
     );
 }
 
-/** Best volume set + best 1RM per strength exercise, strongest (1RM) first. */
+/** Best estimated 1RM per strength lift (see PersonalRecord), strongest first. */
 export function personalRecords(
     sessions: Session[],
     bodyweight: number | null,
     now: Date = new Date(),
     catalog: CatalogNames = NO_CATALOG,
 ): PersonalRecord[] {
-    // Track best volume set and best 1RM per exercise independently
-    const bestVolumeByExercise = new Map<string, {
-        volume: number;
-        weight: number;
-        reps: number;
-        date: string;
-    }>();
-    const best1RMByExercise = new Map<string, {
-        estimated1RM: number;
-        date: string;
-    }>();
+    const best = new Map<string, Omit<PersonalRecord, 'isRecentPR'>>();
 
     sessions.forEach(session => {
         if (!session.completedAt) return;
+        const date = session.completedAt;
 
         session.sets?.forEach((set: Set) => {
             if (!set.exerciseName) return;
@@ -282,55 +288,26 @@ export function personalRecords(
             if ((set.dropIndex || 0) > 0) return;
             // Assisted sets use effective load; skipped without a bodyweight
             const weight = effectiveWeight(set.weight, bodyweight);
-            if (weight == null) return;
+            if (weight == null || weight <= 0 || set.reps <= 0) return;
+
             const exerciseName = setName(set, catalog);
-
-            // Track best volume set
-            const volume = weight * set.reps;
-            const existingVolume = bestVolumeByExercise.get(exerciseName);
-            if (!existingVolume || volume > existingVolume.volume) {
-                bestVolumeByExercise.set(exerciseName, {
-                    volume,
-                    weight,
-                    reps: set.reps,
-                    date: session.completedAt!,
-                });
-            }
-
-            // Track best estimated 1RM independently
             const estimated1RM = epleyOneRepMax(weight, set.reps);
-            const existing1RM = best1RMByExercise.get(exerciseName);
-            if (!existing1RM || estimated1RM > existing1RM.estimated1RM) {
-                best1RMByExercise.set(exerciseName, {
-                    estimated1RM,
-                    date: session.completedAt!,
-                });
+            const existing = best.get(exerciseName);
+            // A tie keeps the earlier session: the PR dates from when it was first reached.
+            const better = !existing
+                || estimated1RM > existing.estimated1RM
+                || (estimated1RM === existing.estimated1RM
+                    && new Date(date).getTime() < new Date(existing.date).getTime());
+            if (better) {
+                best.set(exerciseName, { exerciseName, estimated1RM, weight, reps: set.reps, date });
             }
         });
     });
 
-    // Convert to PersonalRecord array
     const thirtyDaysAgo = new Date(now);
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const records: PersonalRecord[] = [];
-    bestVolumeByExercise.forEach((best, exerciseName) => {
-        const best1RM = best1RMByExercise.get(exerciseName);
-        const estimated1RM = best1RM?.estimated1RM ?? epleyOneRepMax(best.weight, best.reps);
-        const prDate = new Date(best.date);
-        const isRecentPR = prDate >= thirtyDaysAgo;
-
-        records.push({
-            exerciseName,
-            bestVolume: best.volume,
-            bestVolumeWeight: best.weight,
-            bestVolumeReps: best.reps,
-            bestVolumeDate: best.date,
-            estimated1RM,
-            isRecentPR,
-        });
-    });
-
-    // Sort by estimated 1RM descending (strongest lifts first)
-    return records.sort((a, b) => b.estimated1RM - a.estimated1RM);
+    return Array.from(best.values())
+        .map(record => ({ ...record, isRecentPR: new Date(record.date) >= thirtyDaysAgo }))
+        .sort((a, b) => b.estimated1RM - a.estimated1RM);
 }

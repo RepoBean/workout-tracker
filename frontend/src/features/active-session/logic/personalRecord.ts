@@ -1,9 +1,10 @@
 /**
  * Personal Record (1-rep max) helpers for active session PR celebrations.
  *
- * Mirrors the filter rules used in `features/progress/hooks/useProgressData.ts`
- * so the celebration toast and the Personal Records tab agree on what counts
- * as a PR.
+ * Mirrors the filter rules of `personalRecords()` in
+ * `features/progress/logic/exerciseIndex.ts` (working sets only, effective
+ * weight > 0, reps > 0, best Epley 1RM) so the celebration toast and the
+ * Records tab agree on what counts as a PR.
  */
 
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';

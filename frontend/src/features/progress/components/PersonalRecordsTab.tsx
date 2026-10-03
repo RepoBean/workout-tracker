@@ -28,13 +28,13 @@ function PRCard({ record }: PRCardProps) {
                         </h3>
                     </div>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                        Best: {record.bestVolumeWeight} lbs × {record.bestVolumeReps} = {record.bestVolume.toLocaleString()} vol
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">
                         Est. 1RM: <span className="font-semibold text-primary-600 dark:text-primary-400">{record.estimated1RM} lbs</span>
                     </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                        From {record.weight} lbs × {record.reps}
+                    </p>
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                        {formatDate(record.bestVolumeDate)}
+                        {formatDate(record.date)}
                     </p>
                 </div>
                 {record.isRecentPR && (
@@ -65,7 +65,7 @@ export function PersonalRecordsTab() {
                 return records.sort((a, b) => a.exerciseName.localeCompare(b.exerciseName));
             case 'recent':
                 return records.sort((a, b) =>
-                    new Date(b.bestVolumeDate).getTime() - new Date(a.bestVolumeDate).getTime()
+                    new Date(b.date).getTime() - new Date(a.date).getTime()
                 );
             default:
                 return records;

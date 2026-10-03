@@ -144,7 +144,7 @@ src/
 │   │   ├── logic/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   ├── plates.ts          # Plate calculator math
-│   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress filters)
+│   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress `personalRecords()`)
 │   │   │   ├── progression.ts     # Deterministic double-progression hint (+ tests)
 │   │   │   ├── suggestReps.ts     # Per-set rep prefill rules + parseRepTarget (+ tests)
 │   │   │   └── averageRpe.ts      # Working-set RPE average (+ tests)
@@ -174,9 +174,11 @@ src/
 │   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
 │   │   │   └── ProgressChart.tsx         # Reusable chart component
 │   │   ├── hooks/
-│   │   │   └── useProgressData.ts        # Thin useMemo wrapper over logic/exerciseIndex
+│   │   │   └── useProgressData.ts        # Thin useMemo wrapper over the logic/ modules
 │   │   ├── logic/
-│   │   │   └── exerciseIndex.ts          # Picker names, strength/cardio history, PRs — grouped by catalog identity (+ tests)
+│   │   │   ├── exerciseIndex.ts          # Picker names, per-mode most-trained, strength/cardio history, 1RM PRs — grouped by catalog identity (+ tests)
+│   │   │   ├── exerciseSearch.ts         # Local picker search over chartable names + catalog aliases (+ tests)
+│   │   │   └── volumePeriods.ts          # Sunday weeks, 12-week bars, week/month-to-date comparisons; takes `now` (+ tests)
 │   │   └── index.tsx              # Tabbed progress page entry
 │   │
 │   ├── dashboard/                 # Home/landing page
@@ -428,9 +430,16 @@ backend/
 
 ### 13. Progress Page
 - Tabbed interface: Exercise Progress, Volume Trends, Personal Records
-- Exercise Progress: per-exercise weight/volume chart over time with metric toggle (Volume, 1RM, Weight)
-- Volume Trends: total volume trends across all workouts
-- Personal Records: all-time PRs by exercise with detailed set history
+- Exercise Progress: per-exercise weight/volume chart over time with metric toggle (Volume, 1RM, Weight).
+  Strength/Cardio mode; "Most Trained" is ranked per mode (cardio by cardio sets). Search is local
+  (`logic/exerciseSearch.ts`): only names Progress can chart for the mode, catalog aliases match and
+  resolve to the catalog name. Quick select shows 8 active-program lifts with "Show all (N)"
+- Volume Trends: weeks start Sunday (like the dashboard and the server streak). Cards compare
+  period-to-date with the previous period at the same point (week through the same weekday, month
+  through the same day, clamped); the 12-week bars are whole weeks
+- Personal Records: one definition — best estimated 1RM (Epley, a single is its own 1RM), same
+  filters as the in-session PR toast (working sets, effective weight > 0, reps > 0). The card, its
+  date, RECENT and the "Recent" sort all come from the set behind that 1RM
 - Dark mode support with accessible tooltips
 
 ### 14. Completion Celebration
