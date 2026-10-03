@@ -169,15 +169,22 @@ src/
 │   │
 │   ├── progress/                  # Analytics & trends
 │   │   ├── components/
-│   │   │   ├── ExerciseProgressTab.tsx   # Per-exercise weight/volume over time
+│   │   │   ├── ExerciseProgressTab.tsx   # Mode toggle, search, landing (overview / cardio chips), detail routing
+│   │   │   ├── LiftOverview.tsx          # "Your lifts": status chip, last set, sparkline per lift
+│   │   │   ├── Sparkline.tsx             # Inline-SVG trend line (no recharts)
+│   │   │   ├── StrengthDetail.tsx        # Strength chart + range + session list
+│   │   │   ├── CardioDetail.tsx          # Cardio chart + range + session list
+│   │   │   ├── detailParts.tsx           # DetailHeader, SegmentedControl, RangeSelector, useChartRange
 │   │   │   ├── VolumeTrendsTab.tsx       # Total volume trends with metric toggle
 │   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
-│   │   │   └── ProgressChart.tsx         # Reusable chart component
+│   │   │   └── ProgressChart.tsx         # Recharts line on a numeric time axis (shared by both detail views)
 │   │   ├── hooks/
 │   │   │   └── useProgressData.ts        # Thin useMemo wrapper over the logic/ modules
 │   │   ├── logic/
 │   │   │   ├── exerciseIndex.ts          # Picker names, per-mode most-trained, strength/cardio history, 1RM PRs — grouped by catalog identity (+ tests)
 │   │   │   ├── exerciseSearch.ts         # Local picker search over chartable names + catalog aliases (+ tests)
+│   │   │   ├── liftOverview.ts           # Overview rows: status, last top set, sparkline, order, summary (+ tests)
+│   │   │   ├── chartRange.ts             # 3M/6M/1Y/All filter + default, time-axis ticks/labels (+ tests)
 │   │   │   └── volumePeriods.ts          # Sunday weeks, 12-week bars, week/month-to-date comparisons; takes `now` (+ tests)
 │   │   └── index.tsx              # Tabbed progress page entry
 │   │
@@ -242,6 +249,7 @@ src/
 │   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
+│   │   ├── liftTrend.ts           # Stall run + lift status (coach + Progress share it), localToday (+ tests)
 │   │   ├── oneRepMax.ts           # Epley 1RM estimate
 │   │   ├── platform.ts            # isNativeApp() — the one runtime gate for Android-only code
 │   │   ├── shell.ts               # window.WorkoutShell (Android shell): server the UI loads from, hand-off, openExternal (+ tests)
@@ -431,10 +439,22 @@ backend/
 
 ### 13. Progress Page
 - Tabbed interface: Exercise Progress, Volume Trends, Personal Records
-- Exercise Progress: per-exercise weight/volume chart over time with metric toggle (Volume, 1RM, Weight).
-  Strength/Cardio mode; "Most Trained" is ranked per mode (cardio by cardio sets). Search is local
-  (`logic/exerciseSearch.ts`): only names Progress can chart for the mode, catalog aliases match and
-  resolve to the catalog name. Quick select shows 8 active-program lifts with "Show all (N)"
+- Exercise Progress, Strength mode opens to **Your lifts** (`LiftOverview.tsx`, data from
+  `logic/liftOverview.ts`): one row per active-program strength lift (else the 8 most trained),
+  catalog-grouped — status chip, last top set (raw signed weight), inline-SVG best-1RM sparkline over
+  the last 8 dates with % change, and a summary line. Status is `liftStatus()` in
+  `shared/lib/liftTrend.ts`, the same rule as the coach's stall/dropped flags (first match: none /
+  inactive 42+ days / new < 3 dates / stalled 3+ / lighter / progressing / holding); fed the PR
+  filters. Order: stalled, lighter, holding, progressing, new, inactive, none; program order within.
+  Progressing = `primary-*`, stalled = `accent-*`, never red. Tap a row (or search) for the detail
+  view. Cardio mode keeps chips: active-program cardio + "Most Trained" (ranked by cardio sets).
+  Search is local (`logic/exerciseSearch.ts`): only names Progress can chart for the mode, catalog
+  aliases match and resolve to the catalog name
+- Detail views (`StrengthDetail.tsx`, `CardioDetail.tsx`): metric toggle (Volume / 1RM / Weight, or
+  Pace / Distance / Duration / HR) and a 3M / 6M / 1Y / All range (`logic/chartRange.ts`; default
+  6M, All when 6M has < 2 sessions) that the Session History list follows. `ProgressChart` uses a
+  numeric time axis — gaps look like gaps; M/D ticks, /YY when the span crosses a year. Strength
+  bests use the PR filters (working sets, effective weight > 0, reps > 0)
 - Volume Trends: weeks start Sunday (like the dashboard and the server streak). Cards compare
   period-to-date with the previous period at the same point (week through the same weekday, month
   through the same day, clamped); the 12-week bars are whole weeks
@@ -488,7 +508,8 @@ backend/
 - **Stall flag** = sessions since the lift last progressed at its current top weight: over the
   trailing run at that weight, a session progresses if its best single-set reps or total reps
   at the weight beat every earlier one in the run. Flagged at 3+. Holding weight while reps
-  climb (double progression) is not a stall.
+  climb (double progression) is not a stall. A dropped lift (42+ days) is never also flagged
+  stalled. The rule lives in `shared/lib/liftTrend.ts`, shared with the Progress overview.
 - Thread (`lib/thread.ts`): failed sends are stored with `error: true` (legacy `⚠️` replies
   count too) and, with the user turn behind them, are never sent to the model; the 12-message
   window always starts on a user turn. A reply that hits the output cap (Anthropic 4,096) is

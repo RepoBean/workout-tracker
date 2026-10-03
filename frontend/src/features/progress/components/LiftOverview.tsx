@@ -37,8 +37,8 @@ export function LiftOverview({ overview, today, onSelect }: LiftOverviewProps) {
             <div className="px-4 pt-4 pb-2">
                 <h3 className="font-semibold text-gray-700 dark:text-gray-300">Your lifts</h3>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 flex flex-wrap gap-x-1">
-                    {summaryLine(overview.counts).split(' · ').map((part, i) => (
-                        <span key={part} className="whitespace-nowrap">{i > 0 && '· '}{part}</span>
+                    {summaryLine(overview.counts).split(' · ').map((part, i, all) => (
+                        <span key={part} className="whitespace-nowrap">{part}{i < all.length - 1 && ' ·'}</span>
                     ))}
                 </p>
             </div>
