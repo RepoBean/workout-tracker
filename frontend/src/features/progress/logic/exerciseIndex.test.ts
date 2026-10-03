@@ -171,6 +171,20 @@ describe('buildExerciseIndex', () => {
         expect(busyIndex.mostTrainedCardio).toEqual(['Ride']);
     });
 
+    it('overview rows are the active strength lifts, else the 8 most trained', () => {
+        expect(index.overviewLifts).toEqual(index.activeExercises);
+        const many = [session(12, SEP, 'Upper', ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].flatMap((n, i) =>
+            Array.from({ length: 10 - i }, (_, k) => set({ exerciseName: n, setNumber: k + 1 }))))];
+        expect(buildExerciseIndex(many, []).overviewLifts).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']);
+    });
+
+    it('takes active-program names by workout and exercise orderIndex', () => {
+        const p = program(1, true, [exercise('Second', { orderIndex: 1 }), exercise('First', { orderIndex: 0 })]);
+        const later = { ...p.workouts![0], id: 2, orderIndex: 1, exercises: [exercise('Third')] };
+        p.workouts = [later, p.workouts![0]];
+        expect(buildExerciseIndex([], [p]).activeExercises).toEqual(['First', 'Second', 'Third']);
+    });
+
     it('splits strength and cardio names out by their sets', () => {
         expect(index.allCardioExerciseNames).toEqual(['Treadmill']);
         expect(index.allStrengthExerciseNames).toEqual([
@@ -191,6 +205,7 @@ describe('buildExerciseIndex', () => {
             mostTrainedStrength: [],
             mostTrainedCardio: [],
             activeExercises: [],
+            overviewLifts: [],
             activeCardioExercises: [],
         });
     });

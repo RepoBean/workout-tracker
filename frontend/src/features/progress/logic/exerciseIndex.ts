@@ -65,26 +65,31 @@ export interface ExerciseIndex {
     mostTrainedStrength: string[];    // Top 5 by strength-set count
     mostTrainedCardio: string[];      // Top 5 by cardio-set count (cardio logs ~1 set/session)
     activeExercises: string[];        // Strength exercises from the active program
+    overviewLifts: string[];          // Progress overview rows: activeExercises, else top 8 strength by set count
     activeCardioExercises: string[];  // Cardio exercises from the active program
 }
 
 const MOST_TRAINED = 5;
+/** Overview rows when there is no active program. */
+const OVERVIEW_FALLBACK = 8;
 
 /** Top names by count; ties keep first-seen order (history arrives newest first). */
-function topByCount(counts: Map<string, number>): string[] {
+function topByCount(counts: Map<string, number>, limit = MOST_TRAINED): string[] {
     return Array.from(counts.entries())
         .sort((a, b) => b[1] - a[1])
-        .slice(0, MOST_TRAINED)
+        .slice(0, limit)
         .map(([name]) => name);
 }
+
+const byOrderIndex = <T extends { orderIndex: number }>(a: T, b: T) => a.orderIndex - b.orderIndex;
 
 function activeProgramNames(programs: Program[], cardio: boolean, catalog: CatalogNames): string[] {
     const activeProgram = programs.find(p => p.isActive);
     if (!activeProgram?.workouts) return [];
 
     const names = new Set<string>();
-    activeProgram.workouts.forEach(workout => {
-        workout.exercises?.forEach(exercise => {
+    [...activeProgram.workouts].sort(byOrderIndex).forEach(workout => {
+        [...(workout.exercises ?? [])].sort(byOrderIndex).forEach(exercise => {
             if (isCardioExercise(exercise) !== cardio) return;
             names.add(groupName(exercise.catalogId, exercise.name, catalog));
         });
@@ -111,13 +116,17 @@ export function buildExerciseIndex(
         });
     });
 
+    const activeExercises = activeProgramNames(programs, false, catalog);
     return {
         allExerciseNames: Array.from(names).sort(),
         allStrengthExerciseNames: Array.from(strengthCounts.keys()).sort(),
         allCardioExerciseNames: Array.from(cardioCounts.keys()).sort(),
         mostTrainedStrength: topByCount(strengthCounts),
         mostTrainedCardio: topByCount(cardioCounts),
-        activeExercises: activeProgramNames(programs, false, catalog),
+        activeExercises,
+        overviewLifts: activeExercises.length > 0
+            ? activeExercises
+            : topByCount(strengthCounts, OVERVIEW_FALLBACK),
         activeCardioExercises: activeProgramNames(programs, true, catalog),
     };
 }

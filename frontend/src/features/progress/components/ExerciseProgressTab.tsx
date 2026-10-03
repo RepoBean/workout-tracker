@@ -1,28 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useProgressData, type ProgressMode } from '../hooks/useProgressData';
-import { ProgressChart } from './ProgressChart';
-import { formatMMSS, formatWeight } from '../../../shared/utils/format';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
-import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
-
-function formatSessionDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
+import { LiftOverview } from './LiftOverview';
+import { StrengthDetail, type ChartMetric } from './StrengthDetail';
+import { CardioDetail, type CardioMetric } from './CardioDetail';
 
 type Mode = ProgressMode;
-type ChartMetric = 'volume' | '1rm' | 'weight';
-type CardioMetric = 'pace' | 'distance' | 'duration' | 'hr';
 
 const QUICK_SELECT_COLLAPSED = 8;
-
-const CARDIO_METRIC_LABELS: Record<CardioMetric, string> = {
-    pace: 'Pace',
-    distance: 'Distance',
-    duration: 'Duration',
-    hr: 'Avg HR',
-};
 
 export function ExerciseProgressTab() {
     const [mode, setMode] = useState<Mode>('strength');
@@ -39,8 +24,8 @@ export function ExerciseProgressTab() {
         isLoading,
         error,
         hasStrengthHistory,
-        mostTrainedStrength,
-        activeExercises,
+        liftOverview,
+        today,
         searchExercises,
         getExerciseHistory,
         hasCardioHistory,
@@ -93,49 +78,6 @@ export function ExerciseProgressTab() {
         setShowSuggestions(false);
     };
 
-    const exerciseHistory = (mode === 'strength' && selectedExercise)
-        ? getExerciseHistory(selectedExercise)
-        : [];
-    const chartData = exerciseHistory.map(session => ({
-        date: session.date,
-        value: chartMetric === 'volume' ? session.bestVolume
-            : chartMetric === '1rm' ? session.bestEstimated1RM
-                : session.bestWeight,
-    }));
-
-    const cardioHistory = (mode === 'cardio' && selectedExercise)
-        ? getCardioExerciseHistory(selectedExercise)
-        : [];
-    // Disable pace metric when any session lacks distance — pace is undefined.
-    const paceDisabled = cardioHistory.some(s => s.totalDistance === 0);
-    const effectiveCardioMetric: CardioMetric = paceDisabled && cardioMetric === 'pace'
-        ? 'distance'
-        : cardioMetric;
-    const cardioChartData = cardioHistory
-        .map(session => {
-            let value: number | null;
-            switch (effectiveCardioMetric) {
-                case 'pace': value = session.avgPaceMph; break;
-                case 'distance': value = session.totalDistance > 0 ? session.totalDistance : null; break;
-                case 'duration': value = session.totalDurationSec > 0 ? session.totalDurationSec : null; break;
-                case 'hr': value = session.avgHr; break;
-            }
-            return { date: session.date, value };
-        })
-        .filter((p): p is { date: string; value: number } => p.value != null);
-
-    const cardioFormatTooltip = (v: number) => {
-        switch (effectiveCardioMetric) {
-            case 'pace': return `${v.toFixed(1)} mph`;
-            case 'distance': return `${v.toFixed(2)} mi`;
-            case 'duration': return formatMMSS(Math.round(v));
-            case 'hr': return `${Math.round(v)} bpm`;
-        }
-    };
-    const cardioFormatAxis = effectiveCardioMetric === 'duration'
-        ? (v: number) => formatMMSS(Math.round(v))
-        : undefined;
-
     if (isLoading) {
         return (
             <div className="card text-center py-8 text-gray-500">
@@ -152,11 +94,12 @@ export function ExerciseProgressTab() {
         );
     }
 
-    const quickSelectNames = mode === 'cardio' ? activeCardioExercises : activeExercises;
+    // Cardio keeps the chip landing; strength lands on the per-lift overview.
+    const quickSelectNames = mode === 'cardio' ? activeCardioExercises : [];
     const visibleQuickSelect = showAllQuick
         ? quickSelectNames
         : quickSelectNames.slice(0, QUICK_SELECT_COLLAPSED);
-    const modeMostTrained = mode === 'cardio' ? mostTrainedCardio : mostTrainedStrength;
+    const modeMostTrained = mode === 'cardio' ? mostTrainedCardio : [];
     const modeHasHistory = mode === 'cardio' ? hasCardioHistory : hasStrengthHistory;
 
     return (
@@ -266,213 +209,30 @@ export function ExerciseProgressTab() {
                 </div>
             )}
 
-            {/* Strength: chart + session list */}
-            {selectedExercise && mode === 'strength' && (
-                <>
-                    <div className="card">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold text-gray-700 dark:text-gray-300">
-                                {selectedExercise}
-                            </h3>
-                            <button
-                                onClick={() => setSelectedExercise(null)}
-                                className="text-sm text-primary-600 hover:text-primary-700"
-                            >
-                                Clear
-                            </button>
-                        </div>
-
-                        {/* Metric Toggle */}
-                        <div className="flex justify-center mb-6">
-                            <div className="inline-flex bg-gray-100 dark:bg-surface-900 rounded-lg p-1">
-                                {(['volume', '1rm', 'weight'] as const).map(metric => (
-                                    <button
-                                        key={metric}
-                                        onClick={() => setChartMetric(metric)}
-                                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors
-                                            ${chartMetric === metric
-                                                ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-white shadow-sm'
-                                                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                                            }`}
-                                    >
-                                        {metric === 'volume' ? 'Volume'
-                                            : metric === '1rm' ? 'Est. 1RM'
-                                                : 'Weight'}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-
-                        <ProgressChart
-                            data={chartData}
-                            exerciseName={selectedExercise}
-                            metric={chartMetric}
-                        />
-                    </div>
-
-                    {/* Session history list */}
-                    {exerciseHistory.length > 0 && (
-                        <div className="card">
-                            <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-300">
-                                Session History
-                            </h3>
-                            <div className="space-y-3">
-                                {exerciseHistory.slice().reverse().map((session) => (
-                                    <div
-                                        key={session.sessionId}
-                                        className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"
-                                    >
-                                        <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                            {formatSessionDate(session.date)}
-                                        </div>
-                                        <div className="space-y-0.5">
-                                            {session.sets.map((set, idx) => (
-                                                <div
-                                                    key={idx}
-                                                    className={`text-xs flex items-center gap-2 ${
-                                                        set.dropIndex > 0
-                                                            ? 'ml-4 text-orange-600 dark:text-orange-400'
-                                                            : 'text-gray-600 dark:text-gray-400'
-                                                    }`}
-                                                >
-                                                    <span className="w-12">
-                                                        {set.dropIndex > 0 ? `Drop ${set.dropIndex}` : `Set ${set.setNumber}`}
-                                                    </span>
-                                                    <span>
-                                                        {formatWeight(set.weight)} lbs x {set.reps}
-                                                        {set.weight < 0 && bodyweight != null && (
-                                                            <span className="text-gray-400"> · {effectiveWeight(set.weight, bodyweight)} eff</span>
-                                                        )}
-                                                    </span>
-                                                    {set.perceivedEffort && (
-                                                        <span className="text-gray-400">RPE {set.perceivedEffort}</span>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
+            {/* Strength landing: every lift's trend at a glance */}
+            {!selectedExercise && mode === 'strength' && hasStrengthHistory && (
+                <LiftOverview overview={liftOverview} today={today} onSelect={handleSelectExercise} />
             )}
 
-            {/* Cardio: chart + session list */}
+            {selectedExercise && mode === 'strength' && (
+                <StrengthDetail
+                    name={selectedExercise}
+                    history={getExerciseHistory(selectedExercise)}
+                    metric={chartMetric}
+                    onMetricChange={setChartMetric}
+                    onClear={() => setSelectedExercise(null)}
+                    bodyweight={bodyweight}
+                />
+            )}
+
             {selectedExercise && mode === 'cardio' && (
-                <>
-                    <div className="card">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="font-semibold text-gray-700 dark:text-gray-300">
-                                {selectedExercise}
-                            </h3>
-                            <button
-                                onClick={() => setSelectedExercise(null)}
-                                className="text-sm text-primary-600 hover:text-primary-700"
-                            >
-                                Clear
-                            </button>
-                        </div>
-
-                        <div className="flex justify-center mb-2">
-                            <div className="inline-flex bg-gray-100 dark:bg-surface-900 rounded-lg p-1">
-                                {(['pace', 'distance', 'duration', 'hr'] as const).map(metric => {
-                                    const disabled = metric === 'pace' && paceDisabled;
-                                    const active = effectiveCardioMetric === metric;
-                                    return (
-                                        <button
-                                            key={metric}
-                                            onClick={() => !disabled && setCardioMetric(metric)}
-                                            disabled={disabled}
-                                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors
-                                                ${active
-                                                    ? 'bg-white dark:bg-surface-700 text-primary-600 dark:text-white shadow-sm'
-                                                    : disabled
-                                                        ? 'text-gray-300 dark:text-gray-500 cursor-not-allowed'
-                                                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                                                }`}
-                                        >
-                                            {CARDIO_METRIC_LABELS[metric]}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                        {paceDisabled && (
-                            <p className="text-xs text-center text-gray-400 dark:text-gray-500 mb-4">
-                                Pace unavailable — at least one session has no distance logged
-                            </p>
-                        )}
-                        {!paceDisabled && <div className="mb-4" />}
-
-                        <ProgressChart
-                            data={cardioChartData}
-                            exerciseName={selectedExercise}
-                            metric="weight"
-                            formatTooltip={cardioFormatTooltip}
-                            formatAxisTick={cardioFormatAxis}
-                        />
-                    </div>
-
-                    {/* Session history list */}
-                    {cardioHistory.length > 0 && (
-                        <div className="card">
-                            <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-300">
-                                Session History
-                            </h3>
-                            <div className="space-y-3">
-                                {cardioHistory.slice().reverse().map((session) => (
-                                    <div
-                                        key={session.sessionId}
-                                        className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"
-                                    >
-                                        <div className="flex items-baseline justify-between mb-1">
-                                            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                                {formatSessionDate(session.date)}
-                                            </span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-                                                {formatMMSS(session.totalDurationSec)}
-                                                {session.totalDistance > 0 && (
-                                                    <> · {session.totalDistance.toFixed(2)} mi</>
-                                                )}
-                                                {session.avgPaceMph != null && (
-                                                    <> · {session.avgPaceMph.toFixed(1)} mph</>
-                                                )}
-                                                {session.avgHr != null && (
-                                                    <> · <span className="text-red-500 dark:text-red-400">♥ {session.avgHr}</span></>
-                                                )}
-                                            </span>
-                                        </div>
-                                        {session.sets.length > 1 && (
-                                            <div className="space-y-0.5">
-                                                {session.sets.map((set, idx) => (
-                                                    <div
-                                                        key={idx}
-                                                        className="text-xs flex items-center gap-2 text-gray-600 dark:text-gray-400"
-                                                    >
-                                                        <span className="w-12">Set {set.setNumber}</span>
-                                                        <span className="tabular-nums">
-                                                            {formatMMSS(set.durationSec)}
-                                                            {set.distance != null && set.distance > 0 && (
-                                                                <> · {set.distance.toFixed(2)} mi</>
-                                                            )}
-                                                        </span>
-                                                        {set.heartRateAvg != null && (
-                                                            <span className="text-red-500 dark:text-red-400">♥ {set.heartRateAvg}</span>
-                                                        )}
-                                                        {set.perceivedEffort && (
-                                                            <span className="text-gray-400">RPE {set.perceivedEffort}</span>
-                                                        )}
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
+                <CardioDetail
+                    name={selectedExercise}
+                    history={getCardioExerciseHistory(selectedExercise)}
+                    metric={cardioMetric}
+                    onMetricChange={setCardioMetric}
+                    onClear={() => setSelectedExercise(null)}
+                />
             )}
 
             {/* Empty state when this mode has no logged history at all */}

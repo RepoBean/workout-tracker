@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useCatalog, useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Program, Session, Set } from '../../../shared/api/types';
 import { setVolume } from '../../../shared/lib/effectiveWeight';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { catalogNames } from '../../../shared/lib/catalog';
+import { localToday } from '../../../shared/lib/liftTrend';
 import {
     buildExerciseIndex,
     cardioHistory,
@@ -14,6 +15,7 @@ import {
     type PersonalRecord,
 } from '../logic/exerciseIndex';
 import { searchExerciseNames } from '../logic/exerciseSearch';
+import { buildLiftOverview, type LiftOverview } from '../logic/liftOverview';
 import {
     volumeComparison,
     weeklyVolumes as computeWeeklyVolumes,
@@ -21,7 +23,7 @@ import {
     type WeeklyVolume,
 } from '../logic/volumePeriods';
 
-export type { CardioExerciseSession, ExerciseSession, PersonalRecord, VolumeComparison, WeeklyVolume };
+export type { CardioExerciseSession, ExerciseSession, LiftOverview, PersonalRecord, VolumeComparison, WeeklyVolume };
 
 export type ProgressMode = 'strength' | 'cardio';
 
@@ -33,6 +35,10 @@ export interface UseProgressDataReturn {
     hasStrengthHistory: boolean;
     mostTrainedStrength: string[];        // Top 5 by strength-set count
     activeExercises: string[];            // Strength exercises from active program
+    /** Strength landing list: active-program lifts (else top 8) with trend status. */
+    liftOverview: LiftOverview;
+    /** Local YYYY-MM-DD the overview statuses are relative to (fixed per mount). */
+    today: string;
     /** Chartable names for the mode matching `query` (incl. catalog aliases). */
     searchExercises: (query: string, mode: ProgressMode) => string[];
 
@@ -74,6 +80,13 @@ export function useProgressData(): UseProgressDataReturn {
     const index = useMemo(
         () => buildExerciseIndex(sessions ?? NO_SESSIONS, programs ?? NO_PROGRAMS, catalog),
         [sessions, programs, catalog]
+    );
+
+    // Per-lift status / last set / sparkline (logic/liftOverview.ts, rule in shared/lib/liftTrend.ts)
+    const [today] = useState(localToday);
+    const liftOverview = useMemo(
+        () => buildLiftOverview(sessions ?? NO_SESSIONS, index.overviewLifts, bodyweight, today, catalog),
+        [sessions, index, bodyweight, today, catalog]
     );
 
     // Search only what Progress can chart for the mode (logic/exerciseSearch.ts)
@@ -120,6 +133,8 @@ export function useProgressData(): UseProgressDataReturn {
         hasStrengthHistory: index.allStrengthExerciseNames.length > 0,
         mostTrainedStrength: index.mostTrainedStrength,
         activeExercises: index.activeExercises,
+        liftOverview,
+        today,
         searchExercises,
         getExerciseHistory,
         hasCardioHistory: index.allCardioExerciseNames.length > 0,
