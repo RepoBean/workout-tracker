@@ -1,8 +1,15 @@
 // Small pieces shared by the strength and cardio detail views.
 
+import { useState } from 'react';
+import { CHART_RANGES, defaultRange, inRange, type ChartRange } from '../logic/chartRange';
+
+/** "Oct 2", or "Dec 20, 2025" outside the current year (All spans years). */
 export function formatSessionDate(dateString: string): string {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const sameYear = date.getFullYear() === new Date().getFullYear();
+    return date.toLocaleDateString('en-US', sameYear
+        ? { month: 'short', day: 'numeric' }
+        : { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export function DetailHeader({ name, onClear }: { name: string; onClear: () => void }) {
@@ -48,6 +55,24 @@ export function SegmentedControl<T extends string>({ options, value, onChange, s
                     {label}
                 </button>
             ))}
+        </div>
+    );
+}
+
+/**
+ * Range state for a detail view: 6M by default, All when 6M holds fewer than 2 sessions.
+ * The parent keys the detail view by lift, so the default is re-taken per lift.
+ */
+export function useChartRange<T extends { date: string }>(history: T[]) {
+    const [now] = useState(() => new Date());
+    const [range, setRange] = useState<ChartRange>(() => defaultRange(history, now));
+    return { range, setRange, visible: inRange(history, range, now) };
+}
+
+export function RangeSelector({ value, onChange }: { value: ChartRange; onChange: (r: ChartRange) => void }) {
+    return (
+        <div className="flex justify-center mt-3">
+            <SegmentedControl options={CHART_RANGES} value={value} onChange={onChange} size="sm" />
         </div>
     );
 }

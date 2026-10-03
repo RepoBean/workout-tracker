@@ -252,6 +252,17 @@ describe('strengthHistory', () => {
         });
     });
 
+    it('takes bests from PR-eligible sets only (weight > 0, reps > 0), listing every set', () => {
+        const sessions = [session(20, SEP, 'Upper', [
+            set({ exerciseName: 'Row', weight: 300, reps: 0, setNumber: 1 }),
+            set({ exerciseName: 'Row', weight: 0, reps: 20, setNumber: 2 }),
+            set({ exerciseName: 'Row', weight: 100, reps: 8, setNumber: 3 }),
+        ])];
+        const [row] = strengthHistory(sessions, 'Row', null);
+        expect(row).toMatchObject({ bestWeight: 100, bestVolume: 800, bestEstimated1RM: 127 });
+        expect(row.sets).toHaveLength(3);
+    });
+
     it('ignores cardio sets and unknown names', () => {
         expect(strengthHistory(SESSIONS, 'Treadmill', null)).toEqual([]);
         expect(strengthHistory(SESSIONS, 'Nope', null)).toEqual([]);

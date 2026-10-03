@@ -150,16 +150,16 @@ export function strengthHistory(
 
         if (exerciseSets.length === 0) return;
 
-        // Bests exclude drop sets (dropIndex > 0) to match the PR
-        // celebration in active-session/logic/personalRecord.ts;
-        // the display list below keeps them.
-        // Bests use effective load so an assisted lift's chart stays on one
-        // scale (−40 at 185 bw plots as 145, like hand-entered effective sets).
+        // Bests use the PR filters (personalRecords below, the in-session toast in
+        // active-session/logic/personalRecord.ts): working sets only, effective
+        // weight > 0, reps > 0. The display list below keeps every set.
+        // Effective load keeps an assisted lift's chart on one scale
+        // (−40 at 185 bw plots as 145, like hand-entered effective sets).
         const workingSets = exerciseSets
-            .filter(s => (s.dropIndex || 0) === 0)
+            .filter(s => (s.dropIndex || 0) === 0 && s.reps > 0)
             .flatMap(s => {
                 const weight = effectiveWeight(s.weight, bodyweight);
-                return weight == null ? [] : [{ weight, reps: s.reps }];
+                return weight == null || weight <= 0 ? [] : [{ weight, reps: s.reps }];
             });
 
         const bestWeight = workingSets.length > 0

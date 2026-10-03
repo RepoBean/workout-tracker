@@ -216,6 +216,7 @@ export function ExerciseProgressTab() {
 
             {selectedExercise && mode === 'strength' && (
                 <StrengthDetail
+                    key={selectedExercise}
                     name={selectedExercise}
                     history={getExerciseHistory(selectedExercise)}
                     metric={chartMetric}
@@ -227,6 +228,7 @@ export function ExerciseProgressTab() {
 
             {selectedExercise && mode === 'cardio' && (
                 <CardioDetail
+                    key={selectedExercise}
                     name={selectedExercise}
                     history={getCardioExerciseHistory(selectedExercise)}
                     metric={cardioMetric}

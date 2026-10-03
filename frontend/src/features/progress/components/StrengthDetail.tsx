@@ -1,6 +1,6 @@
 import type { ExerciseSession } from '../hooks/useProgressData';
 import { ProgressChart } from './ProgressChart';
-import { DetailHeader, SegmentedControl, formatSessionDate } from './detailParts';
+import { DetailHeader, RangeSelector, SegmentedControl, formatSessionDate, useChartRange } from './detailParts';
 import { formatWeight } from '../../../shared/utils/format';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 
@@ -22,12 +22,16 @@ interface StrengthDetailProps {
 }
 
 export function StrengthDetail({ name, history, metric, onMetricChange, onClear, bodyweight }: StrengthDetailProps) {
-    const chartData = history.map(session => ({
-        date: session.date,
-        value: metric === 'volume' ? session.bestVolume
-            : metric === '1rm' ? session.bestEstimated1RM
-                : session.bestWeight,
-    }));
+    const { range, setRange, visible } = useChartRange(history);
+    // A session with no PR-eligible set (all 0 weight / 0 reps / drops) has no point to plot.
+    const chartData = visible
+        .map(session => ({
+            date: session.date,
+            value: metric === 'volume' ? session.bestVolume
+                : metric === '1rm' ? session.bestEstimated1RM
+                    : session.bestWeight,
+        }))
+        .filter(p => p.value > 0);
 
     return (
         <>
@@ -42,16 +46,22 @@ export function StrengthDetail({ name, history, metric, onMetricChange, onClear,
                     />
                 </div>
 
-                <ProgressChart data={chartData} exerciseName={name} metric={metric} />
+                <ProgressChart
+                    data={chartData}
+                    exerciseName={name}
+                    metric={metric}
+                    emptyMessage={history.length > 0 ? 'No sessions in this range' : undefined}
+                />
+                <RangeSelector value={range} onChange={setRange} />
             </div>
 
-            {history.length > 0 && (
+            {visible.length > 0 && (
                 <div className="card">
                     <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-300">
                         Session History
                     </h3>
                     <div className="space-y-3">
-                        {history.slice().reverse().map((session) => (
+                        {visible.slice().reverse().map((session) => (
                             <div
                                 key={session.sessionId}
                                 className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"

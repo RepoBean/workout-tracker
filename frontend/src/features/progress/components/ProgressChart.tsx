@@ -7,11 +7,13 @@ import {
     Tooltip,
 } from 'recharts';
 import { useTheme } from '../../../shared/context/ThemeContext';
+import { timeAxis } from '../logic/chartRange';
 
 interface ChartDataPoint {
     date: string;
     value: number;
-    displayDate: string;
+    /** ms since epoch — the x value, so spacing reflects real time. */
+    t: number;
 }
 
 interface ProgressChartProps {
@@ -24,26 +26,23 @@ interface ProgressChartProps {
     // Override the default Y-axis tick label. Mostly only needed for duration
     // where raw seconds should render as m:ss.
     formatAxisTick?: (value: number) => string;
+    /** Shown instead of the chart when `data` is empty. */
+    emptyMessage?: string;
 }
 
 function formatDate(dateString: string): string {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatShortDate(dateString: string): string {
-    const date = new Date(dateString);
-    return `${date.getMonth() + 1}/${date.getDate()}`;
-}
-
-export function ProgressChart({ data, exerciseName, metric, formatTooltip, formatAxisTick }: ProgressChartProps) {
+export function ProgressChart({ data, exerciseName, metric, formatTooltip, formatAxisTick, emptyMessage }: ProgressChartProps) {
     const { theme } = useTheme();
     const isDark = theme === 'dark';
 
     if (data.length === 0) {
         return (
             <div className="h-[250px] flex items-center justify-center text-gray-500 dark:text-gray-400">
-                No data for this exercise yet
+                {emptyMessage ?? 'No data for this exercise yet'}
             </div>
         );
     }
@@ -51,8 +50,9 @@ export function ProgressChart({ data, exerciseName, metric, formatTooltip, forma
     const chartData: ChartDataPoint[] = data.map(d => ({
         date: d.date,
         value: d.value,
-        displayDate: formatShortDate(d.date),
+        t: Date.parse(d.date),
     }));
+    const axis = timeAxis(chartData.map(d => d.t));
 
     const unit = metric === 'volume' ? 'vol' : 'lbs';
 
@@ -61,7 +61,12 @@ export function ProgressChart({ data, exerciseName, metric, formatTooltip, forma
             <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <XAxis
-                        dataKey="displayDate"
+                        dataKey="t"
+                        type="number"
+                        scale="time"
+                        domain={axis.domain}
+                        ticks={axis.ticks}
+                        tickFormatter={axis.format}
                         tick={{ fontSize: 12 }}
                         stroke="#9ca3af"
                     />

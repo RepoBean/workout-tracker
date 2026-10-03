@@ -1,6 +1,6 @@
 import type { CardioExerciseSession } from '../hooks/useProgressData';
 import { ProgressChart } from './ProgressChart';
-import { DetailHeader, SegmentedControl, formatSessionDate } from './detailParts';
+import { DetailHeader, RangeSelector, SegmentedControl, formatSessionDate, useChartRange } from './detailParts';
 import { formatMMSS } from '../../../shared/utils/format';
 
 export type CardioMetric = 'pace' | 'distance' | 'duration' | 'hr';
@@ -25,7 +25,8 @@ export function CardioDetail({ name, history, metric, onMetricChange, onClear }:
     const paceDisabled = history.some(s => s.totalDistance === 0);
     const effectiveMetric: CardioMetric = paceDisabled && metric === 'pace' ? 'distance' : metric;
 
-    const chartData = history
+    const { range, setRange, visible } = useChartRange(history);
+    const chartData = visible
         .map(session => {
             let value: number | null;
             switch (effectiveMetric) {
@@ -79,16 +80,18 @@ export function CardioDetail({ name, history, metric, onMetricChange, onClear }:
                     metric="weight"
                     formatTooltip={formatTooltip}
                     formatAxisTick={formatAxis}
+                    emptyMessage={history.length > 0 ? 'No sessions in this range' : undefined}
                 />
+                <RangeSelector value={range} onChange={setRange} />
             </div>
 
-            {history.length > 0 && (
+            {visible.length > 0 && (
                 <div className="card">
                     <h3 className="font-semibold mb-3 text-gray-700 dark:text-gray-300">
                         Session History
                     </h3>
                     <div className="space-y-3">
-                        {history.slice().reverse().map((session) => (
+                        {visible.slice().reverse().map((session) => (
                             <div
                                 key={session.sessionId}
                                 className="py-2 border-b border-gray-100 dark:border-surface-700 last:border-0"
