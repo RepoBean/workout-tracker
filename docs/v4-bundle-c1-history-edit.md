@@ -228,7 +228,7 @@ after a mid-list delete; picker `onChoose` mapping; past-log local date → ISO.
 
 **Jason, 2026-10-15:** a weight that drops by half means both dumbbells were counted. Dumbbell RDL
 was combined from the start (Feb), and 55 → 27.5 is accepted. **Seated DB Overhead Press 06-08
-(75 × 3 sets) was a machine press, so it is excluded and left at 75 under its old name.** 127 sets
+(75 × 3 sets) was a machine press: weight kept at 75, sets re-pointed to Shoulder Press Machine (set ids 2213–2215, staging + main).** 127 sets
 corrected through the API (each checked against its old weight first): staging, then main after
 `main-20261015-201653.sqlite`. Wife: not checked yet.
 
