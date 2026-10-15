@@ -71,8 +71,10 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
 - **Create completed:** `/start` gains an optional `completedAt` (ISO; reject future) and optional
   `durationMin` (default 60). When present it inserts `createdAt = completedAt − duration` and
   `completedAt` in one row, so the session never shows in `/sessions/active` (Resume card, `ship.sh`
-  deploy refusal, Android foreground service), and never advances the rotation. Without `workoutId`
-  `/start` names it 'Ad-hoc' / 'Quick Workout'; fine for a blank log.
+  deploy refusal, Android foreground service), and never advances the rotation (only `/complete`
+  advances it, and this session never goes through `/complete`). The server forces `isAdHoc: true`
+  whenever `completedAt` is sent, so it never depends on the client. Without `workoutId`, `/start`
+  names it 'Ad-hoc' / 'Quick Workout'; fine for a blank log.
 - **Date edit:** new `PUT /api/sessions/:id` (`completedAt`, optional). It shifts `createdAt` **and
   every set's `createdAt`** by the same delta. The duration (dossier, SessionCard,
   CompletedSessionSummary) is `completedAt − createdAt`, and the HR-chart set markers are at
@@ -109,8 +111,11 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   - `liftOverview.ts` `isoDate` (compared against local `today` via `daysBetween`)
   - `dossier.ts` `isoDate` (headers, sort, notes, dropped-days count)
   - CSV export date (`sessions.ts` ~224, `toISOString().split('T')[0]`)
-- Switch the two frontend `isoDate`s to a local date key (reuse `localDateKey` from
-  `volumePeriods.ts` or `localToday`'s helper). CSV is server-side and the container clock is UTC.
+- Switch the two frontend `isoDate`s (`dossier.ts` ~39, `liftOverview.ts` ~51) to a local date key.
+  Reuse `localDateKey` (`volumePeriods.ts` ~24) or `localToday` (`liftTrend.ts` ~41); move the one
+  you pick to `shared/lib` rather than importing across features.
+- CSV: format the date with local getters, like the `/stats` code at ~281. With the container on
+  UTC that is still the UTC day until `TZ` is set (decision below), and then both are correct.
 - `/stats` week streak uses local getters, but the container runs in UTC (no `TZ` in compose), so it
   counts UTC Sunday weeks while ThisWeek/volumePeriods count local ones.
 - Already local: Calendar, ThisWeek, volumePeriods, chartRange, SessionCard dates,
@@ -123,8 +128,9 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
 **Decide in the bundle doc**
 - Deleting every set of a session: keep it empty, or delete the session? Recommend keeping it with a
   "Delete session" button beside it (deletion is already its own action).
-- The CSV date and `/stats` streak: set `TZ` in compose per instance (recommend; one line, the users
-  are in one zone), or accept UTC.
+- The CSV date and `/stats` streak: set `TZ` in compose for the backends (recommend; one line, the
+  users are in one zone), or accept UTC. Verify it takes effect with
+  `docker exec workout-tracker-staging-backend node -e 'console.log(new Date().toString())'`.
 - Date-edit bounds: allow any past date? Recommend no future dates, and no lower bound.
 
 ### [ ] C2: Server-side settings
@@ -139,9 +145,15 @@ disagreeing on HR zones and coach history. C3 builds on it.
   per-device localStorage, so the phone and the computer can compute different HR zones and can't
   see each other's chat.
 - New `Settings` table: one row per key (`profile`, `progression`, `aiCoach`, `coachThread`), JSON
-  value, `updatedAt`. `GET /api/settings` (merged with defaults) and `PUT /api/settings/:key`. The
-  key is a Zod enum validated with `validateParams`, and each value has its own Zod schema that strips
+  value, `updatedAt`. `GET /api/settings` returns `{ [key]: { value, updatedAt } | null }`, with
+  **null for a key never stored, not defaults**. Otherwise the migration below can't tell "empty" from
+  "default". The client applies its own defaults. `PUT /api/settings/:key` takes the value. The key
+  is a Zod enum validated with `validateParams`, and each value has its own Zod schema that strips
   unknown fields. Last write wins, except the thread (below).
+- **`profile` on the server excludes `bodyweight`.** It stays local until C3 retires it into
+  BodyWeights. Syncing it now and dropping it a bundle later would only churn the schema. C3 adds
+  the weigh-in prompt's dismissal flag to the `profile` schema. A C3 → C2 rollback strips the flag,
+  so the prompt reappears once (accepted).
 - Stays per device: `workout-tracker-theme`, `workout-tracker-timer`, `wt:api-base-url`,
   `wt:hr-native-device`, `wt:coach-dossier-alltime`, and all per-session keys (`wt:cardio:<sid>…`,
   `wt:livehr:…`, `wt:hrsamples:…`, `wt:setinput:…`, `wt:adhoc-blank:…`, `adhoc-exercises-<sid>`,
@@ -201,9 +213,9 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
   (convert `completedAt` first; a raw string compare against the UTC timestamp misassigns evening
   sessions). Else the **earliest** weigh-in, which back-applies a later weight to older history but
   keeps it consistent across devices (accepted). Else the profile value (no weigh-ins at all).
-- **Profile `bodyweight` is retired into BodyWeights**, not synced: it is dropped from the
-  server-side `profile` schema. The local value stays only as the last-resort fallback and the seed
-  for the first-run prompt. Otherwise there would be two sources of truth.
+- **Profile `bodyweight` is retired into BodyWeights** (C2 never synced it). The local value stays
+  only as the last-resort fallback and the seed for the first-run prompt. Otherwise there would be
+  two sources of truth.
 - `effectiveWeight()` call sites (13 at validation time; build a pre-sorted "weight on date" lookup
   once and pass it down, no per-set query):
   - Direct, date in scope: `liftOverview.ts` ~72, `exerciseIndex.ts` ~161 and ~299,
@@ -327,6 +339,7 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
     `new URL(shellServerUrl() ?? getApiBaseUrl()).host`, so a staging session on the same phone
     can't overwrite a main one. Changing the server URL (IP ↔ domain) changes the ids and duplicates
     history; note it.
+  - The HR record gets its own id (`…-hr`), so the two record types never share one.
   - `clientRecordVersion = Date.parse(updatedAt)`. The docs say an existing record is overwritten
     only when the version is higher, and an equal version's behaviour isn't specified. **Verify on
     the Pixel** and never re-insert unchanged sessions.
