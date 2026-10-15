@@ -1,6 +1,6 @@
 # v4 Bundle C2: Server-side settings
 
-Status: **on staging 2026-10-15 (`9d163b3`); main + wife pending.** Decisions: all recommendations (§6, Jason 2026-10-15). Written 2026-10-15 at `fc2326c`, from
+Status: **shipped to staging + main 2026-10-15 (`133aef8`, code = `9d163b3`); wife pending.** Decisions: all recommendations (§6, Jason 2026-10-15). Written 2026-10-15 at `fc2326c`, from
 `docs/v4-plan.md` §2 C2 re-checked against the code that day. Line numbers are from that read.
 
 **Gate:** both vitest suites and `tsc` pass; the new backend tests (§3.4) and frontend sync tests
