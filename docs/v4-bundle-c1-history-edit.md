@@ -1,6 +1,6 @@
 # v4 Bundle C1: History editing + logging past workouts
 
-Status: **shipped to staging + main 2026-10-15 (`7cc9b04`); wife after a few workouts. Bulk correction (Appendix A) awaiting Jason's approval.** Decisions: all recommendations (§6). Written 2026-10-15 at `455b026`, from
+Status: **shipped to staging + main 2026-10-15 (`7cc9b04`); wife after a few workouts. Bulk correction (Appendix A) applied to staging + main 2026-10-15.** Decisions: all recommendations (§6). Written 2026-10-15 at `455b026`, from
 `docs/v4-plan.md` §2 C1 re-checked against the code that day. Line numbers are from that read.
 
 **Gate:** both vitest suites and `tsc` pass (the one flipped test below is the only existing test
@@ -224,7 +224,15 @@ after a mid-list delete; picker `onChoose` mapping; past-log local date → ISO.
 
 ---
 
-## Appendix A: bulk correction list (PENDING Jason's approval)
+## Appendix A: bulk correction list (APPLIED 2026-10-15)
+
+**Jason, 2026-10-15:** a weight that drops by half means both dumbbells were counted. Dumbbell RDL
+was combined from the start (Feb), and 55 → 27.5 is accepted. **Seated DB Overhead Press 06-08
+(75 × 3 sets) was a machine press, so it is excluded and left at 75 under its old name.** 127 sets
+corrected through the API (each checked against its old weight first): staging, then main after
+`main-20261015-201653.sqlite`. Wife: not checked yet.
+
+Original list as reviewed:
 
 Built 2026-10-15 from `main-20261015-195556.sqlite` (pre-deploy backup); dates are local (Eastern).
 130 sets. Ranges come from the 2× jumps in the data, so check each:
