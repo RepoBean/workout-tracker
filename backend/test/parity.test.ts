@@ -404,7 +404,10 @@ describe('stats and CSV', () => {
     await startSession(push.id);
 
     const res = await request(app).get('/api/sessions/stats');
-    expect(res.body).toEqual({ totalSessions: 1, sessionsLast30Days: 1, weekStreak: 1 });
+    // lastUpdatedAt was added in v4 C1 (the API only gains fields).
+    const { lastUpdatedAt, ...rest } = res.body;
+    expect(rest).toEqual({ totalSessions: 1, sessionsLast30Days: 1, weekStreak: 1 });
+    expect(Number.isNaN(Date.parse(lastUpdatedAt))).toBe(false);
   });
 
   it('export-csv emits one row per set with the fixed header', async () => {

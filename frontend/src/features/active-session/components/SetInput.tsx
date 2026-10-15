@@ -18,7 +18,13 @@ interface SetInputProps {
     setNumber: number;
   }) => void;
   isLogging?: boolean;
+  /** Keep drafts in per-session localStorage (live session). The history editor passes
+   *  false: a completed session is never swept, so its keys would leak. */
+  persist?: boolean;
 }
+
+type DraftStore = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+const NO_STORE: DraftStore = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 
 export function SetInput({
   exerciseId,
@@ -28,7 +34,9 @@ export function SetInput({
   previousReps = 10,
   onLogSet,
   isLogging = false,
+  persist = true,
 }: SetInputProps) {
+  const store: DraftStore = persist ? localStorage : NO_STORE;
   const { id } = useParams<{ id: string }>();
   const sessionId = Number(id);
   const { weight: weightOverrideKey, reps: repsOverrideKey } =
@@ -38,23 +46,23 @@ export function SetInput({
   // shows only its magnitude; `assisted` carries the sign (the decimal keypad has no
   // minus key) and survives passing through 0 so "assist" + typing 40 gives −40.
   const [weight, setWeight] = useState(() => {
-    const saved = localStorage.getItem(weightOverrideKey);
+    const saved = store.getItem(weightOverrideKey);
     return saved ? parseFloat(saved) : previousWeight;
   });
   const [assisted, setAssisted] = useState(() => weight < 0);
   // Use string state for display to prevent leading zeros issue
   const [weightStr, setWeightStr] = useState(() => String(Math.abs(weight)));
   const [reps, setReps] = useState(() => {
-    const saved = localStorage.getItem(repsOverrideKey);
+    const saved = store.getItem(repsOverrideKey);
     return saved ? parseInt(saved, 10) : previousReps;
   });
   const [repsStr, setRepsStr] = useState(() => {
-    const saved = localStorage.getItem(repsOverrideKey);
+    const saved = store.getItem(repsOverrideKey);
     return saved ?? String(previousReps);
   });
 
   // Track if user has made manual changes to prevent prop sync from overwriting
-  const isDirty = useRef(localStorage.getItem(weightOverrideKey) !== null || localStorage.getItem(repsOverrideKey) !== null);
+  const isDirty = useRef(store.getItem(weightOverrideKey) !== null || store.getItem(repsOverrideKey) !== null);
 
   // Sync state when previousWeight/previousReps change (e.g., after async data loads)
   useEffect(() => {
@@ -63,7 +71,7 @@ export function SetInput({
       setWeight(previousWeight);
       setAssisted(previousWeight < 0);
       setWeightStr(String(Math.abs(previousWeight)));
-      localStorage.removeItem(weightOverrideKey);
+      store.removeItem(weightOverrideKey);
     }
   }, [previousWeight]);
 
@@ -72,7 +80,7 @@ export function SetInput({
     if (!isDirty.current) {
       setReps(previousReps);
       setRepsStr(String(previousReps));
-      localStorage.removeItem(repsOverrideKey);
+      store.removeItem(repsOverrideKey);
     }
   }, [previousReps]);
 
@@ -84,7 +92,7 @@ export function SetInput({
     setAssisted(prev => next < 0 || (next === 0 && prev));
     setWeightStr(String(Math.abs(next)));
     isDirty.current = true;
-    localStorage.setItem(weightOverrideKey, String(next));
+    store.setItem(weightOverrideKey, String(next));
   }, [weightOverrideKey]);
 
   const toggleAssisted = useCallback(() => {
@@ -93,7 +101,7 @@ export function SetInput({
     setAssisted(nextAssisted);
     setWeight(next);
     isDirty.current = true;
-    localStorage.setItem(weightOverrideKey, String(next));
+    store.setItem(weightOverrideKey, String(next));
   }, [assisted, weight, weightOverrideKey]);
 
   const updateReps = useCallback((value: number) => {
@@ -101,7 +109,7 @@ export function SetInput({
     setReps(clamped);
     setRepsStr(String(clamped));
     isDirty.current = true;
-    localStorage.setItem(repsOverrideKey, String(clamped));
+    store.setItem(repsOverrideKey, String(clamped));
   }, [repsOverrideKey]);
 
   const handleWeightChange = useCallback((raw: string) => {
@@ -110,7 +118,7 @@ export function SetInput({
       setWeightStr(raw);
       setWeight(0);
       isDirty.current = true;
-      localStorage.setItem(weightOverrideKey, '0');
+      store.setItem(weightOverrideKey, '0');
       return;
     }
     // Strip leading zeros and parse; the box holds a magnitude, the toggle the sign
@@ -120,7 +128,7 @@ export function SetInput({
       setWeight(next);
       setWeightStr(raw);
       isDirty.current = true;
-      localStorage.setItem(weightOverrideKey, String(next));
+      store.setItem(weightOverrideKey, String(next));
     }
   }, [assisted, weightOverrideKey]);
 
@@ -135,7 +143,7 @@ export function SetInput({
       setRepsStr(raw);
       setReps(1);
       isDirty.current = true;
-      localStorage.setItem(repsOverrideKey, '1');
+      store.setItem(repsOverrideKey, '1');
       return;
     }
     const parsed = parseInt(raw, 10);
@@ -144,7 +152,7 @@ export function SetInput({
       setReps(clamped);
       setRepsStr(raw);
       isDirty.current = true;
-      localStorage.setItem(repsOverrideKey, String(clamped));
+      store.setItem(repsOverrideKey, String(clamped));
     }
   }, [repsOverrideKey]);
 
@@ -163,8 +171,8 @@ export function SetInput({
     });
     // Reset dirty flag and clear overrides so next set can receive fresh hints
     isDirty.current = false;
-    localStorage.removeItem(weightOverrideKey);
-    localStorage.removeItem(repsOverrideKey);
+    store.removeItem(weightOverrideKey);
+    store.removeItem(repsOverrideKey);
   };
 
   return (

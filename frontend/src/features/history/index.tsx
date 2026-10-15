@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../shared/ui/Button';
 import { openServerDownload } from '../../shared/api/download';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
 import { useSessionHistory, useDeleteSession } from './hooks/useHistory';
 import { SessionCard } from './components/SessionCard';
+import { LogPastWorkout } from './components/LogPastWorkout';
 
 export default function History() {
   const [searchParams] = useSearchParams();
@@ -12,6 +14,7 @@ export default function History() {
     highlightSessionId ? Number(highlightSessionId) : undefined
   );
   const deleteSession = useDeleteSession();
+  const [showLogPast, setShowLogPast] = useState(false);
 
   const handleExport = () => {
     openServerDownload('/sessions/export-csv');
@@ -46,12 +49,18 @@ export default function History() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-display font-bold">Workout History</h1>
-        {sessions.length > 0 && (
-          <Button variant="secondary" size="sm" onClick={handleExport}>
-            Export CSV
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" onClick={() => setShowLogPast(true)}>
+            Log past
           </Button>
-        )}
+          {sessions.length > 0 && (
+            <Button variant="secondary" size="sm" onClick={handleExport}>
+              Export CSV
+            </Button>
+          )}
+        </div>
       </div>
+      <LogPastWorkout isOpen={showLogPast} onClose={() => setShowLogPast(false)} />
 
       {sessions.length === 0 && (
         <div className="card text-center py-8">

@@ -6,12 +6,16 @@ import { Calendar } from './components/Calendar';
 import { ResumeWorkout } from './components/ResumeWorkout';
 import { ThisWeek } from './components/ThisWeek';
 import { AdHocWorkoutPicker } from './components/AdHocWorkoutPicker';
+import { useQuickWorkout } from './hooks/useQuickWorkout';
+import { LogPastWorkout } from '../history/components/LogPastWorkout';
 import { Button } from '../../shared/ui/Button';
 import { HeartRatePill } from '../../shared/ui/HeartRatePill';
 
 export default function Dashboard() {
   const { theme, setTheme } = useTheme();
   const [showWorkoutPicker, setShowWorkoutPicker] = useState(false);
+  const [showLogPast, setShowLogPast] = useState(false);
+  const quickWorkout = useQuickWorkout();
 
   const cycleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -84,6 +88,13 @@ export default function Dashboard() {
           Quick Workout
         </span>
       </Button>
+      <button
+        type="button"
+        onClick={() => setShowLogPast(true)}
+        className="w-full -mt-2 min-h-[44px] text-sm text-primary-600 dark:text-primary-400 hover:underline"
+      >
+        Log a past workout
+      </button>
 
       {/* This Week */}
       <ThisWeek />
@@ -95,7 +106,10 @@ export default function Dashboard() {
       <AdHocWorkoutPicker
         isOpen={showWorkoutPicker}
         onClose={() => setShowWorkoutPicker(false)}
+        onChoose={quickWorkout.start}
+        disabled={quickWorkout.isPending}
       />
+      <LogPastWorkout isOpen={showLogPast} onClose={() => setShowLogPast(false)} />
     </div>
   );
 }

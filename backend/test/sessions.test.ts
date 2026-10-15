@@ -73,7 +73,7 @@ describe('POST /api/sessions/:id/sets', () => {
     expect(res.body.durationSec).toBe(900);
   });
 
-  it('rejects sets on a completed session', async () => {
+  it('accepts set add, edit and delete on a completed session (history editing)', async () => {
     const { push } = await seedProgram();
     const session = await startSession(push.id);
     await request(app).post(`/api/sessions/${session.id}/complete`).send({});
@@ -84,8 +84,16 @@ describe('POST /api/sessions/:id/sets', () => {
       reps: 8,
       setNumber: 1,
     });
+    expect(res.status).toBe(201);
+    // Stamped at the session's end, not now, so it stays inside the session window.
+    expect(res.body.createdAt).toBe(find.session(session.id)?.completedAt?.toISOString());
 
-    expect(res.status).toBe(400);
+    const put = await request(app).put(`/api/sessions/${session.id}/sets/${res.body.id}`).send({ reps: 9 });
+    expect(put.status).toBe(200);
+    expect(put.body.reps).toBe(9);
+
+    const del = await request(app).delete(`/api/sessions/${session.id}/sets/${res.body.id}`);
+    expect(del.status).toBe(204);
   });
 });
 
@@ -372,5 +380,146 @@ describe('param validation', () => {
   it('returns 400 (not 500) for non-numeric session ids', async () => {
     const res = await request(app).get('/api/sessions/abc');
     expect(res.status).toBe(400);
+  });
+});
+
+describe('history editing (v4 C1)', () => {
+  const setBody = { exerciseName: 'Bench Press', weight: 185, reps: 8, setNumber: 1 };
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+  async function sessionUpdatedAt(id: number) {
+    const res = await request(app).get(`/api/sessions/${id}`);
+    return Date.parse(res.body.updatedAt);
+  }
+
+  it('bumps the session updatedAt on set POST, PUT and DELETE', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    let last = await sessionUpdatedAt(session.id);
+    const tick = () => new Promise(r => setTimeout(r, 5));
+
+    await tick();
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send(setBody);
+    const afterPost = await sessionUpdatedAt(session.id);
+    expect(afterPost).toBeGreaterThan(last);
+    last = afterPost;
+
+    await tick();
+    await request(app).put(`/api/sessions/${session.id}/sets/${logged.body.id}`).send({ weight: 190 });
+    const afterPut = await sessionUpdatedAt(session.id);
+    expect(afterPut).toBeGreaterThan(last);
+    last = afterPut;
+
+    await tick();
+    await request(app).delete(`/api/sessions/${session.id}/sets/${logged.body.id}`);
+    expect(await sessionUpdatedAt(session.id)).toBeGreaterThan(last);
+  });
+
+  it('/start with completedAt creates a completed ad-hoc session that never shows as active', async () => {
+    const { program, push } = await seedProgram();
+    const completedAt = hoursAgo(48);
+
+    const res = await request(app).post('/api/sessions/start')
+      .send({ workoutId: push.id, isAdHoc: false, completedAt, durationMin: 45 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.isAdHoc).toBe(true);
+    expect(res.body.completedAt).toBe(completedAt);
+    expect(Date.parse(res.body.completedAt) - Date.parse(res.body.createdAt)).toBe(45 * 60_000);
+    expect(res.body.exercises).toHaveLength(1);
+
+    const active = await request(app).get('/api/sessions/active');
+    expect(active.body).toBeNull();
+    await program.reload();
+    expect(program.currentWorkoutIndex).toBe(0);
+  });
+
+  it('/start with completedAt defaults to 60 minutes, also for a blank session', async () => {
+    const completedAt = hoursAgo(5);
+    const res = await request(app).post('/api/sessions/start').send({ completedAt });
+
+    expect(res.status).toBe(201);
+    expect(res.body.workoutName).toBe('Quick Workout');
+    expect(Date.parse(res.body.completedAt) - Date.parse(res.body.createdAt)).toBe(60 * 60_000);
+  });
+
+  it('/start rejects a future completedAt', async () => {
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+    const res = await request(app).post('/api/sessions/start').send({ completedAt: future });
+    expect(res.status).toBe(400);
+  });
+
+  it('PUT /:id moves the session and its sets by the same delta', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send(setBody);
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+    const before = (await request(app).get(`/api/sessions/${session.id}`)).body;
+
+    const target = hoursAgo(24 * 30);
+    const res = await request(app).put(`/api/sessions/${session.id}`).send({ completedAt: target });
+
+    expect(res.status).toBe(200);
+    expect(res.body.completedAt).toBe(target);
+    const delta = Date.parse(target) - Date.parse(before.completedAt);
+    expect(Date.parse(res.body.createdAt)).toBe(Date.parse(before.createdAt) + delta);
+    const set = res.body.sets.find((s: { id: number }) => s.id === logged.body.id);
+    expect(Date.parse(set.createdAt)).toBe(Date.parse(logged.body.createdAt) + delta);
+    expect(set.updatedAt).toBe(before.sets[0].updatedAt);
+  });
+
+  it('PUT /:id: history follows the new date', async () => {
+    const { push } = await seedProgram();
+    const a = await startSession(push.id);
+    await request(app).post(`/api/sessions/${a.id}/complete`).send({});
+    const b = await startSession(push.id);
+    await request(app).post(`/api/sessions/${b.id}/complete`).send({});
+
+    await request(app).put(`/api/sessions/${b.id}`).send({ completedAt: hoursAgo(72) });
+
+    const history = await request(app).get('/api/sessions/history');
+    expect(history.body.map((s: { id: number }) => s.id)).toEqual([a.id, b.id]);
+  });
+
+  it('PUT /:id rejects a future date, an incomplete session and a missing one', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    const future = new Date(Date.now() + 3_600_000).toISOString();
+
+    expect((await request(app).put(`/api/sessions/${session.id}`).send({ completedAt: hoursAgo(1) })).status).toBe(400);
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+    expect((await request(app).put(`/api/sessions/${session.id}`).send({ completedAt: future })).status).toBe(400);
+    expect((await request(app).put('/api/sessions/99999').send({ completedAt: hoursAgo(1) })).status).toBe(404);
+  });
+
+  it('/stats.lastUpdatedAt moves when a set in an old session is edited', async () => {
+    const { push } = await seedProgram();
+    const old = await startSession(push.id);
+    const logged = await request(app).post(`/api/sessions/${old.id}/sets`).send(setBody);
+    await request(app).post(`/api/sessions/${old.id}/complete`).send({});
+    const recent = await startSession(push.id);
+    await request(app).post(`/api/sessions/${recent.id}/complete`).send({});
+    const before = (await request(app).get('/api/sessions/stats')).body.lastUpdatedAt;
+
+    await new Promise(r => setTimeout(r, 5));
+    await request(app).put(`/api/sessions/${old.id}/sets/${logged.body.id}`).send({ weight: 95 });
+
+    const after = (await request(app).get('/api/sessions/stats')).body.lastUpdatedAt;
+    expect(Date.parse(after)).toBeGreaterThan(Date.parse(before));
+  });
+
+  it('CSV dates use the local calendar day', async () => {
+    const tz = process.env.TZ;
+    process.env.TZ = 'America/New_York';
+    try {
+      // 2026-10-10 23:30 Eastern = 2026-10-11 03:30 UTC
+      const res = await request(app).post('/api/sessions/start').send({ completedAt: '2026-10-11T03:30:00.000Z' });
+      await request(app).post(`/api/sessions/${res.body.id}/sets`).send(setBody);
+
+      const csv = await request(app).get('/api/sessions/export-csv');
+      expect(csv.text.split('\n')[1].startsWith('2026-10-10,')).toBe(true);
+    } finally {
+      process.env.TZ = tz;
+    }
   });
 });

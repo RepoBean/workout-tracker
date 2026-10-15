@@ -1,13 +1,14 @@
 // The Exercises tab's landing list: one row per lift with its trend status, last top set
 // and a best-1RM sparkline. Status comes from shared/lib/liftTrend.ts — the same rule the
 // coach's all-time block uses, fed the same way (completed sessions, working sets, effective
-// weight > 0, reps > 0, grouped by catalog identity, one entry per UTC date like the coach).
+// weight > 0, reps > 0, grouped by catalog identity, one entry per local date like the coach).
 
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
+import { localDateKey } from '../../../shared/lib/localDate';
 import {
     addToDayTop,
     liftStatus,
@@ -49,7 +50,7 @@ interface DayData {
 }
 
 function isoDate(completedAt: string): string {
-    return completedAt.slice(0, 10);
+    return localDateKey(completedAt);
 }
 
 export function buildLiftOverview(

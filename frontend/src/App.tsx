@@ -16,6 +16,7 @@ const ProgramBuilder = lazy(() => import('./features/program-builder'));
 const Progress = lazy(() => import('./features/progress'));
 const ActiveSession = lazy(() => import('./features/active-session'));
 const History = lazy(() => import('./features/history'));
+const SessionEditor = lazy(() => import('./features/history/SessionEditor'));
 const Settings = lazy(() => import('./features/settings'));
 const Coach = lazy(() => import('./features/coach'));
 
@@ -197,6 +198,7 @@ function AppContent() {
                 }
               />
               <Route path="/history" element={<History />} />
+              <Route path="/history/:id/edit" element={<SessionEditor />} />
               <Route
                 path="/coach"
                 element={

@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { queryKeys, useHistory as useHistoryQuery } from '../../../shared/api/queries';
+import { queryKeys, useHistory as useHistoryQuery, useInvalidateHistoryReaders } from '../../../shared/api/queries';
 import { api } from '../../../shared/api/client';
 import { useToast } from '../../../shared/ui/Toast';
 import { clearSessionLocalState } from '../../active-session/lib/sessionStorage';
@@ -39,6 +39,7 @@ export function useSessionHistory(highlightSessionId?: number) {
 
 export function useDeleteSession() {
   const queryClient = useQueryClient();
+  const invalidate = useInvalidateHistoryReaders();
   const toast = useToast();
 
   return useMutation({
@@ -50,9 +51,9 @@ export function useDeleteSession() {
       // Drop any per-session localStorage so deleted sessions don't leak
       // state into storage forever.
       clearSessionLocalState(sessionId);
-      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
-      queryClient.invalidateQueries({ queryKey: queryKeys.stats });
-      queryClient.invalidateQueries({ queryKey: queryKeys.calendarSessionsAll });
+      // Hints and PR baselines included: a deleted session's sets must stop counting.
+      queryClient.removeQueries({ queryKey: queryKeys.session(sessionId) });
+      invalidate();
       toast.success('Session deleted');
     },
     onError: () => {

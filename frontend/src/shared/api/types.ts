@@ -139,6 +139,10 @@ export interface PreviousSessionResponse {
 export interface StartSessionRequest {
   workoutId?: number;
   isAdHoc?: boolean;
+  /** Log a past workout: the session is created already completed (server forces isAdHoc). */
+  completedAt?: string;
+  /** With completedAt: createdAt = completedAt − durationMin (server default 60). */
+  durationMin?: number;
 }
 
 export interface LogSetRequest {
@@ -225,6 +229,8 @@ export interface StatsResponse {
   totalSessions: number;
   sessionsLast30Days: number;
   weekStreak: number;
+  /** Newest Sessions.updatedAt over completed sessions (any set edit bumps it). Absent on pre-C1 backends. */
+  lastUpdatedAt?: string | null;
 }
 
 // ============================================

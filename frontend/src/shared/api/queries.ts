@@ -314,19 +314,38 @@ export function useCatalog() {
   });
 }
 
+const CATALOG_READER_KEYS = [
+  queryKeys.catalog,
+  queryKeys.history(),
+  queryKeys.previousSessionAll,
+  queryKeys.exerciseHistoryByNameAll,
+  queryKeys.exerciseAllSetsAll,
+  queryKeys.programs,
+] as const;
+
 /** A merge or split changes which sets count as one lift everywhere history is read. */
 function useInvalidateCatalogReaders() {
   const queryClient = useQueryClient();
   return () => {
-    for (const queryKey of [
-      queryKeys.catalog,
-      queryKeys.history(),
-      queryKeys.previousSessionAll,
-      queryKeys.exerciseHistoryByNameAll,
-      queryKeys.exerciseAllSetsAll,
-      queryKeys.programs,
-    ]) {
+    for (const queryKey of CATALOG_READER_KEYS) {
       queryClient.invalidateQueries({ queryKey });
+    }
+  };
+}
+
+/**
+ * A change to a completed session (edit, backdated log, delete) reaches every
+ * history reader: hints, PR baselines, Progress, stats, the calendar. Pass the
+ * session id to refetch that session too (skip it after a delete).
+ */
+export function useInvalidateHistoryReaders() {
+  const queryClient = useQueryClient();
+  return (sessionId?: number) => {
+    for (const queryKey of [...CATALOG_READER_KEYS, queryKeys.stats, queryKeys.calendarSessionsAll]) {
+      queryClient.invalidateQueries({ queryKey });
+    }
+    if (sessionId !== undefined) {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
     }
   };
 }

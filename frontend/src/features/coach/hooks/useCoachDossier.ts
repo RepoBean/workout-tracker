@@ -26,7 +26,7 @@ const ALLTIME_STORAGE_KEY = 'wt:coach-dossier-alltime';
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 3;
+const ALLTIME_FORMAT_VERSION = 4;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -93,11 +93,13 @@ export function useCoachDossier() {
   // Identity of the current history: newest session + how many there are.
   const newestId = recentSessions?.[0]?.id ?? 0;
   const totalSessions = stats?.totalSessions ?? 0;
+  // Any edit anywhere in history (set edits bump their session's updatedAt), not just the last 20.
+  const lastUpdatedAt = stats?.lastUpdatedAt ?? '';
   // Bodyweight is in the key because assisted sets' effective loads depend on it.
   const bodyweight = profile.bodyweight;
   // Waits for stats + catalog so the big fetch runs once, under its final key, already grouped.
   const cacheKey = newestId && stats && catalogEntries
-    ? `v${ALLTIME_FORMAT_VERSION}:${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}`
+    ? `v${ALLTIME_FORMAT_VERSION}:${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}:${lastUpdatedAt}`
     : '';
   // History answered and is empty: no completed sessions yet, nothing to fetch.
   const noHistory = Boolean(recentSessions) && newestId === 0;

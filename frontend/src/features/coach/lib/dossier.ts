@@ -30,14 +30,15 @@ import {
   type DayTop,
 } from '../../../shared/lib/liftTrend';
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
+import { localDateKey } from '../../../shared/lib/localDate';
 
 // ---------------------------------------------------------------------------
 // Small formatters
 // ---------------------------------------------------------------------------
 
-/** ISO timestamp -> YYYY-MM-DD. Dates only; never emit a time-of-day. */
+/** ISO timestamp -> local YYYY-MM-DD (an evening session stays on its own day). Dates only. */
 export function isoDate(value: string | null): string {
-  return value ? value.slice(0, 10) : 'unknown';
+  return value ? localDateKey(value) : 'unknown';
 }
 
 function months(days: number): string {

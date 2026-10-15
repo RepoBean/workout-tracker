@@ -17,9 +17,21 @@ const isCardioSet = (s: { durationSec?: number | null; distance?: number | null 
 // Zod Schemas
 // ============================================
 
+// A session's completedAt may be set from the client (logging a past workout,
+// moving a session's date). Never in the future; a minute of clock skew is fine.
+const pastDateSchema = z.string().datetime({ offset: true })
+  .refine(v => Date.parse(v) <= Date.now() + 60_000, 'Date cannot be in the future');
+
 const startSessionSchema = z.object({
   workoutId: z.number().int().positive().optional(),
   isAdHoc: z.boolean().optional().default(false),
+  // Present = log a past workout: the session is created already completed.
+  completedAt: pastDateSchema.optional(),
+  durationMin: z.number().int().min(1).max(600).optional(),
+});
+
+const updateSessionSchema = z.object({
+  completedAt: pastDateSchema.optional(),
 });
 
 // Floor for set weight. Negative weights log assisted lifts (assisted pull-up
@@ -90,6 +102,14 @@ const withSets = { sets: { orderBy: asc(sets.id) } } as const;
 
 function findSessionWithSets(id: number) {
   return db.query.sessions.findFirst({ where: eq(sessions.id, id), with: withSets });
+}
+
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+// Every set write bumps its session's updatedAt, so readers keyed on it
+// (coach all-time memo via /stats.lastUpdatedAt) see edits to old sessions.
+function touchSession(tx: Tx, sessionId: number, ts: Date) {
+  tx.update(sessions).set({ updatedAt: ts }).where(eq(sessions.id, sessionId)).run();
 }
 
 function findSession(id: number) {
@@ -221,7 +241,8 @@ router.get('/export-csv', async (req: Request, res: Response) => {
     const lines: string[] = [];
 
     for (const session of rows) {
-      const date = session.completedAt ? session.completedAt.toISOString().split('T')[0] : '';
+      // Local calendar day (container TZ), so an evening session isn't dated tomorrow.
+      const date = session.completedAt ? localDateKey(session.completedAt) : '';
 
       for (const set of session.sets) {
         const isCardio = isCardioSet(set);
@@ -254,16 +275,24 @@ router.get('/export-csv', async (req: Request, res: Response) => {
   }
 });
 
+function localDateKey(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 // GET /api/sessions/stats - Summary statistics
 router.get('/stats', (req: Request, res: Response) => {
   try {
     // Fetch all completed session dates and compute everything in JS
     // This avoids the SQLite strftime week-boundary bug
-    const completed = db.select({ completedAt: sessions.completedAt })
+    const rows = db.select({ completedAt: sessions.completedAt, updatedAt: sessions.updatedAt })
       .from(sessions)
       .where(isNotNull(sessions.completedAt))
-      .all()
-      .map(s => s.completedAt as Date);
+      .all();
+    const completed = rows.map(s => s.completedAt as Date);
+    // Newest edit anywhere in history (set edits bump their session's updatedAt).
+    const lastUpdatedAt = rows.reduce<Date | null>(
+      (max, r) => (!max || r.updatedAt > max ? r.updatedAt : max), null);
 
     const totalSessions = completed.length;
 
@@ -327,6 +356,7 @@ router.get('/stats', (req: Request, res: Response) => {
       totalSessions,
       sessionsLast30Days,
       weekStreak,
+      lastUpdatedAt,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -384,8 +414,13 @@ router.get('/:id/previous', validateParams(idParamSchema), (req: Request, res: R
 // POST /api/sessions/start - Start a new session
 router.post('/start', validate(startSessionSchema), async (req: Request, res: Response) => {
   try {
-    const { workoutId, isAdHoc } = req.body;
+    const { workoutId, isAdHoc, completedAt, durationMin } = req.body;
     const ts = now();
+    // Logging a past workout: created already completed, always ad-hoc (never
+    // in /active, never through /complete, never advances the rotation).
+    const past = completedAt
+      ? { completedAt: new Date(completedAt), createdAt: new Date(Date.parse(completedAt) - (durationMin ?? 60) * 60_000) }
+      : null;
 
     // Ad-hoc session without a workout
     if (!workoutId) {
@@ -395,7 +430,8 @@ router.post('/start', validate(startSessionSchema), async (req: Request, res: Re
         workoutId: null,
         workoutName: 'Quick Workout',
         isAdHoc: true,
-        createdAt: ts,
+        createdAt: past?.createdAt ?? ts,
+        completedAt: past?.completedAt ?? null,
         updatedAt: ts,
       }).returning().get();
 
@@ -429,8 +465,9 @@ router.post('/start', validate(startSessionSchema), async (req: Request, res: Re
       programName: program?.name || 'Ad-hoc',
       workoutId: workout.id,
       workoutName: workout.name,
-      isAdHoc: isAdHoc || false,
-      createdAt: ts,
+      isAdHoc: past ? true : (isAdHoc || false),
+      createdAt: past?.createdAt ?? ts,
+      completedAt: past?.completedAt ?? null,
       updatedAt: ts,
     }).returning().get();
 
@@ -457,11 +494,6 @@ router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), 
       return;
     }
 
-    if (session.completedAt) {
-      res.status(400).json({ error: 'Cannot add sets to completed session' });
-      return;
-    }
-
     // Ad-hoc exercises arrive with negative IDs (frontend convention) — store as null
     const incomingExerciseId = req.body.exerciseId;
     const exerciseId = typeof incomingExerciseId === 'number' && incomingExerciseId > 0
@@ -471,23 +503,28 @@ router.post('/:id/sets', validateParams(idParamSchema), validate(logSetSchema), 
     // catalogId is derived from the name, never taken from the client (the old
     // APK sends exactly what it always sent and still gets a resolved set back).
     const ts = now();
-    const set = db.transaction((tx) => tx.insert(sets).values({
-      sessionId,
-      exerciseId,
-      exerciseName: req.body.exerciseName,
-      catalogId: resolveCatalogId(tx, req.body.exerciseName),
-      weight: req.body.weight,
-      reps: req.body.reps,
-      setNumber: req.body.setNumber,
-      perceivedEffort: req.body.perceivedEffort || null,
-      dropIndex: req.body.dropIndex || 0,
-      heartRateAvg: req.body.heartRateAvg ?? null,
-      heartRateMax: req.body.heartRateMax ?? null,
-      durationSec: req.body.durationSec ?? null,
-      distance: req.body.distance ?? null,
-      createdAt: ts,
-      updatedAt: ts,
-    }).returning().get());
+    const set = db.transaction((tx) => {
+      touchSession(tx, sessionId, ts);
+      return tx.insert(sets).values({
+        sessionId,
+        exerciseId,
+        exerciseName: req.body.exerciseName,
+        catalogId: resolveCatalogId(tx, req.body.exerciseName),
+        weight: req.body.weight,
+        reps: req.body.reps,
+        setNumber: req.body.setNumber,
+        perceivedEffort: req.body.perceivedEffort || null,
+        dropIndex: req.body.dropIndex || 0,
+        heartRateAvg: req.body.heartRateAvg ?? null,
+        heartRateMax: req.body.heartRateMax ?? null,
+        durationSec: req.body.durationSec ?? null,
+        distance: req.body.distance ?? null,
+        // A set added to a completed session (history edit) sits at its end, inside
+        // the session's window, so HR markers and a later date move stay consistent.
+        createdAt: session.completedAt ?? ts,
+        updatedAt: ts,
+      }).returning().get();
+    });
 
     res.status(201).json(set);
   } catch (error) {
@@ -509,11 +546,6 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
       return;
     }
 
-    if (session.completedAt) {
-      res.status(400).json({ error: 'Cannot edit sets in completed session' });
-      return;
-    }
-
     const set = findSet(setId);
     if (!set) {
       res.status(404).json({ error: 'Set not found' });
@@ -526,18 +558,22 @@ router.put('/:id/sets/:setId', validateParams(sessionSetParamsSchema), validate(
     }
 
     // Update only provided fields. A re-pointed name (swap carry-over) re-resolves its catalogId.
-    const updated = db.transaction((tx) => tx.update(sets).set({
-      ...(weight !== undefined && { weight }),
-      ...(reps !== undefined && { reps }),
-      ...(perceivedEffort !== undefined && { perceivedEffort }),
-      ...(heartRateAvg !== undefined && { heartRateAvg }),
-      ...(heartRateMax !== undefined && { heartRateMax }),
-      ...(durationSec !== undefined && { durationSec }),
-      ...(distance !== undefined && { distance }),
-      ...(exerciseName !== undefined && { exerciseName, catalogId: resolveCatalogId(tx, exerciseName) }),
-      ...(exerciseId !== undefined && { exerciseId }),
-      updatedAt: now(),
-    }).where(eq(sets.id, setId)).returning().get());
+    const ts = now();
+    const updated = db.transaction((tx) => {
+      touchSession(tx, sessionId, ts);
+      return tx.update(sets).set({
+        ...(weight !== undefined && { weight }),
+        ...(reps !== undefined && { reps }),
+        ...(perceivedEffort !== undefined && { perceivedEffort }),
+        ...(heartRateAvg !== undefined && { heartRateAvg }),
+        ...(heartRateMax !== undefined && { heartRateMax }),
+        ...(durationSec !== undefined && { durationSec }),
+        ...(distance !== undefined && { distance }),
+        ...(exerciseName !== undefined && { exerciseName, catalogId: resolveCatalogId(tx, exerciseName) }),
+        ...(exerciseId !== undefined && { exerciseId }),
+        updatedAt: ts,
+      }).where(eq(sets.id, setId)).returning().get();
+    });
 
     res.json(updated);
   } catch (error) {
@@ -647,11 +683,6 @@ router.delete('/:id/sets/:setId', validateParams(sessionSetParamsSchema), (req: 
       return;
     }
 
-    if (session.completedAt) {
-      res.status(400).json({ error: 'Cannot delete sets from completed session' });
-      return;
-    }
-
     const set = findSet(setId);
     if (!set) {
       res.status(404).json({ error: 'Set not found' });
@@ -663,11 +694,56 @@ router.delete('/:id/sets/:setId', validateParams(sessionSetParamsSchema), (req: 
       return;
     }
 
-    db.delete(sets).where(eq(sets.id, setId)).run();
+    db.transaction((tx) => {
+      touchSession(tx, sessionId, now());
+      tx.delete(sets).where(eq(sets.id, setId)).run();
+    });
     res.status(204).send();
   } catch (error) {
     console.error('Error deleting set:', error);
     res.status(500).json({ error: 'Failed to delete set' });
+  }
+});
+
+// PUT /api/sessions/:id - Move a completed session's date. Shifts createdAt,
+// completedAt and every set's createdAt by the same delta, so the duration,
+// HR series (offsets from createdAt) and set markers stay aligned.
+router.put('/:id', validateParams(idParamSchema), validate(updateSessionSchema), async (req: Request, res: Response) => {
+  try {
+    const sessionId = Number(req.params.id);
+    const session = findSession(sessionId);
+    if (!session) {
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+    if (!session.completedAt) {
+      res.status(400).json({ error: 'Only a completed session can be edited' });
+      return;
+    }
+
+    if (req.body.completedAt !== undefined) {
+      const delta = Date.parse(req.body.completedAt) - session.completedAt.getTime();
+      const shift = (d: Date) => new Date(d.getTime() + delta);
+      db.transaction((tx) => {
+        tx.update(sessions).set({
+          createdAt: shift(session.createdAt),
+          completedAt: shift(session.completedAt as Date),
+          updatedAt: now(),
+        }).where(eq(sessions.id, sessionId)).run();
+        // Shift in JS: the stored text format isn't one SQLite's date functions round-trip.
+        const rows = tx.select({ id: sets.id, createdAt: sets.createdAt })
+          .from(sets).where(eq(sets.sessionId, sessionId)).all();
+        for (const row of rows) {
+          tx.update(sets).set({ createdAt: shift(row.createdAt) }).where(eq(sets.id, row.id)).run();
+        }
+      });
+    }
+
+    const updated = await findSessionWithSets(sessionId);
+    res.json({ ...updated, exercises: workoutExercises(session.workoutId) });
+  } catch (error) {
+    console.error('Error updating session:', error);
+    res.status(500).json({ error: 'Failed to update session' });
   }
 });
 

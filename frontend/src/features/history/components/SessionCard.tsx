@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { parseSeries } from '../../../shared/utils/heartRate';
@@ -239,6 +240,14 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
             </div>
             );
           })}
+          <Link
+            to={`/history/${session.id}/edit`}
+            onClick={(e) => e.stopPropagation()}
+            className="block w-full mt-2 py-2 text-sm text-center rounded-lg text-primary-600 dark:text-primary-400
+                       hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-colors"
+          >
+            Edit Session
+          </Link>
           {onDelete && (
             <button
               onClick={(e) => {

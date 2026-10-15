@@ -44,6 +44,8 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
 
 ### [ ] C1: History editing + logging past workouts
 
+> Bundle doc: `docs/v4-bundle-c1-history-edit.md` (built 2026-10-15, on staging).
+
 **UI**
 - History → open a session → edit mode: change weight/reps/RPE, add or delete sets, change the date.
   `SessionCard.tsx` renders its own rows (it does not use ExerciseCard/SetInput); the completed

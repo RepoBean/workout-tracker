@@ -162,9 +162,15 @@ src/
 │   ├── history/                   # Past sessions
 │   │   ├── components/
 │   │   │   ├── SessionCard.tsx
-│   │   │   └── SessionHRChart.tsx # Heart-rate line chart (recharts; also used live)
+│   │   │   ├── SessionHRChart.tsx # Heart-rate line chart (recharts; also used live)
+│   │   │   ├── LogPastWorkout.tsx # When (local date/time + minutes) → picker → completed session → editor
+│   │   │   └── edit/              # EditExerciseCard, EditSetRow (+ AddCardioSet) for the editor
 │   │   ├── hooks/
-│   │   │   └── useHistory.ts
+│   │   │   ├── useHistory.ts
+│   │   │   └── useSessionEdits.ts # Set add/edit/delete + date move; optimistic, no live-session machinery
+│   │   ├── logic/
+│   │   │   └── editSession.ts     # Grouping, setNumber = max + 1, unlogged slots, local date inputs (+ tests)
+│   │   ├── SessionEditor.tsx      # /history/:id/edit — edit a completed session (v4 C1)
 │   │   └── index.tsx              # History page entry
 │   │
 │   ├── progress/                  # Analytics & trends
@@ -193,10 +199,11 @@ src/
 │   │   │   ├── NextWorkout.tsx    # "Up next" hero (rotation meta, expandable exercise list)
 │   │   │   ├── Calendar.tsx       # Month view — workout days as filled tappable discs
 │   │   │   ├── ResumeWorkout.tsx  # In-progress session card (amber tint)
-│   │   │   ├── AdHocWorkoutPicker.tsx  # Quick workout modal
+│   │   │   ├── AdHocWorkoutPicker.tsx  # Pure chooser (blank / cardio / workout) → onChoose; Quick Workout + Log past
 │   │   │   └── ThisWeek.tsx       # Sun–Sat training strip + streak chip + summary counts
 │   │   ├── hooks/
-│   │   │   └── useNextWorkoutLocal.ts  # Client-side next workout calc
+│   │   │   ├── useNextWorkoutLocal.ts  # Client-side next workout calc
+│   │   │   └── useQuickWorkout.ts      # Starts the picked Quick Workout now
 │   │   └── index.tsx              # Home page entry
 │   │
 │   ├── settings/                  # Settings page
@@ -250,6 +257,7 @@ src/
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
 │   │   ├── liftTrend.ts           # Stall run + lift status (coach + Progress share it), localToday (+ tests)
+│   │   ├── localDate.ts           # localDateKey — local YYYY-MM-DD from a Date or ISO string (never slice UTC) (+ tests)
 │   │   ├── oneRepMax.ts           # Epley 1RM estimate
 │   │   ├── platform.ts            # isNativeApp() — the one runtime gate for Android-only code
 │   │   ├── shell.ts               # window.WorkoutShell (Android shell): server the UI loads from, hand-off, openExternal (+ tests)
@@ -352,16 +360,17 @@ backend/
 | GET | /api/exercises/all-sets-by-name | All-time sets by exercise name (PR check) |
 | GET | /api/sessions/active | Find incomplete session (resume) |
 | GET | /api/sessions/history | List completed sessions |
-| GET | /api/sessions/stats | Summary statistics |
+| GET | /api/sessions/stats | Summary statistics (+ `lastUpdatedAt`: newest session `updatedAt`, any edit) |
 | GET | /api/sessions/export-csv | Export history as CSV |
 | GET | /api/sessions/:id | Get one session with sets |
 | GET | /api/sessions/:id/previous | Previous session hints |
-| POST | /api/sessions/start | Start new session |
+| POST | /api/sessions/start | Start new session. Optional `completedAt` (+ `durationMin`, default 60) creates it already completed and ad-hoc (log a past workout) |
 | POST | /api/sessions/:id/sets | Log a set (server derives `catalogId` from `exerciseName`; responses for sets/exercises carry `catalogId`) |
 | PUT | /api/sessions/:id/sets/:setId | Update a set (weight, reps, RPE, duration, distance; re-point via exerciseName + exerciseId:null for swap carry-over) |
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
 | PUT | /api/sessions/:id/exercise-note | Set/clear a per-exercise note |
 | POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
+| PUT | /api/sessions/:id | Move a completed session's date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
 | GET | /api/catalog | Exercise catalog: `{id, name, aliases, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
 | POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
@@ -413,7 +422,7 @@ backend/
 - Also accessible via Delete button in expanded card view
 - `confirm()` dialog before deletion
 - Cascades to delete associated sets
-- Invalidates history, stats, and calendar queries
+- Invalidates every history reader (`useInvalidateHistoryReaders`: history, stats, calendar, hints, PR baselines, catalog)
 
 ### 9. Focused Exercise View
 - Active session shows one exercise at a time ("focused" view)
@@ -534,6 +543,16 @@ backend/
 - Capacitor WebView around the same React build; native BLE for the strap, exact local notification for the timer, foreground service while a session is active
 - Built in Docker (`scripts/build-apk.sh`), published as a GitHub Release (`scripts/release-apk.sh`)
 - **B3: the UI loads from the phone's server** (`docs/v3-bundle-b3-server-ui.md`). The shell (`MainActivity.java`) starts Capacitor with the saved server as `server.url` — the only way the plugin bridge reaches a remote page — and exposes `window.WorkoutShell` (`ShellInterface.java`, feature-checked via `shared/lib/shell.ts`). `ship.sh <inst>` updates that phone's UI; APK releases are for native changes only. **A server must run a B3-aware build before its phone installs a B3 APK.** Bundled `public/offline.html` covers an unreachable server
+
+### 21. History Editing (v4 C1)
+- `/history/:id/edit` (Edit on an expanded History card or the completed-session screen): edit weight/reps/RPE
+  (cardio: duration/distance), add/delete sets, add an exercise, notes, the date. No HR, timer, PR toast, RPE
+  flow or previous-session hints. Set writes are allowed on completed sessions and bump `Sessions.updatedAt`;
+  a set added to a completed session is stamped at its `completedAt`
+- **Log a past workout** (Dashboard, History): local date + time (default 18:00) + minutes, then the picker.
+  The server creates it completed and ad-hoc — never active, never advances the rotation
+- Dates shown per day are **local** (`shared/lib/localDate.ts`); backends run `TZ=America/New_York` for the
+  CSV date and `/stats` streak. Bundle doc: `docs/v4-bundle-c1-history-edit.md`
 
 ---
 

@@ -1,62 +1,45 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { Modal } from '../../../shared/ui/Modal';
 import { Button } from '../../../shared/ui/Button';
 import { usePrograms } from '../../../shared/api/queries';
-import { useStartSession } from '../../active-session/hooks/useStartSession';
-import { api } from '../../../shared/api/client';
-import { useToast } from '../../../shared/ui/Toast';
 import { CARDIO_MODALITY_OPTIONS } from '../../../shared/api/cardio';
-import type { ActiveSession, CardioModality, Program, Workout } from '../../../shared/api/types';
+import type { CardioModality, Program, Workout } from '../../../shared/api/types';
+
+export type WorkoutChoice =
+    | { kind: 'blank' }
+    | { kind: 'workout'; workoutId: number }
+    | { kind: 'cardio'; modality: CardioModality };
 
 interface AdHocWorkoutPickerProps {
     isOpen: boolean;
     onClose: () => void;
+    /** What to do with the pick: start it now (Quick Workout) or log it in the past. */
+    onChoose: (choice: WorkoutChoice) => void;
+    title?: string;
+    disabled?: boolean;
 }
 
-export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps) {
+/** Pure chooser: blank, cardio (by modality) or a program workout. Never calls the API. */
+export function AdHocWorkoutPicker({ isOpen, onClose, onChoose, title = 'Quick Workout', disabled = false }: AdHocWorkoutPickerProps) {
     const { data: programs, isLoading } = usePrograms();
-    const startSession = useStartSession();
-    const navigate = useNavigate();
-    const toast = useToast();
     const [expandedProgramId, setExpandedProgramId] = useState<number | null>(null);
     const [showCardioPicker, setShowCardioPicker] = useState(false);
 
-    const startCardioSession = useMutation({
-        mutationFn: async (modality: CardioModality) => {
-            const { data } = await api.post<ActiveSession>('/sessions/start', { isAdHoc: true });
-            return { session: data, modality };
-        },
-        onSuccess: ({ session, modality }) => {
-            navigate(`/workout/${session.id}?cardio=${modality}`);
-        },
-        onError: () => {
-            toast.error('Failed to start cardio. Please try again.');
-        },
-    });
-
-    const handleBlankWorkout = () => {
-        startSession.mutate({ isAdHoc: true });
+    const choose = (choice: WorkoutChoice) => {
+        onChoose(choice);
         onClose();
     };
 
-    const handleStartCardio = (modality: CardioModality) => {
-        startCardioSession.mutate(modality);
-        onClose();
-    };
-
-    const handleSelectWorkout = (workoutId: number) => {
-        startSession.mutate({ workoutId, isAdHoc: true });
-        onClose();
-    };
+    const handleBlankWorkout = () => choose({ kind: 'blank' });
+    const handleStartCardio = (modality: CardioModality) => choose({ kind: 'cardio', modality });
+    const handleSelectWorkout = (workoutId: number) => choose({ kind: 'workout', workoutId });
 
     const toggleProgram = (programId: number) => {
         setExpandedProgramId(expandedProgramId === programId ? null : programId);
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Quick Workout">
+        <Modal isOpen={isOpen} onClose={onClose} title={title}>
             <div className="space-y-4">
                 {/* Blank workout option */}
                 <Button
@@ -64,7 +47,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                     size="lg"
                     className="w-full"
                     onClick={handleBlankWorkout}
-                    disabled={startSession.isPending}
+                    disabled={disabled}
                 >
                     <div className="flex items-center gap-3">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,7 +65,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                         size="lg"
                         className="w-full"
                         onClick={() => setShowCardioPicker(true)}
-                        disabled={startCardioSession.isPending}
+                        disabled={disabled}
                     >
                         <div className="flex items-center gap-3">
                             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -100,7 +83,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                                     key={value}
                                     type="button"
                                     onClick={() => handleStartCardio(value)}
-                                    disabled={startCardioSession.isPending}
+                                    disabled={disabled}
                                     className="px-3 py-2 rounded-lg text-sm font-medium bg-primary-600 text-white
                                                hover:bg-primary-700 active:scale-[0.97] transition-all
                                                disabled:opacity-50"
@@ -170,7 +153,7 @@ export function AdHocWorkoutPicker({ isOpen, onClose }: AdHocWorkoutPickerProps)
                                                 <button
                                                     key={workout.id}
                                                     onClick={() => handleSelectWorkout(workout.id)}
-                                                    disabled={startSession.isPending}
+                                                    disabled={disabled}
                                                     className="w-full flex items-center gap-3 p-3 hover:bg-gray-100 dark:hover:bg-surface-700 
                                      border-b border-gray-200 dark:border-surface-700 last:border-b-0"
                                                 >

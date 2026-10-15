@@ -58,6 +58,9 @@ export function CompletedSessionSummary({ session }: CompletedSessionSummaryProp
       </div>
 
       <div className="space-x-4">
+        <Link to={`/history/${session.id}/edit`} className="text-primary-600 hover:underline">
+          Edit
+        </Link>
         <Link to="/history" className="text-primary-600 hover:underline">
           View History
         </Link>

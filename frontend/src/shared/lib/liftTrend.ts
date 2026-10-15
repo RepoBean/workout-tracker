@@ -1,3 +1,4 @@
+import { localDateKey } from './localDate';
 /**
  * "Is this lift progressing?" — one definition for the coach's all-time block and the
  * Progress overview, so the page and the coach never disagree.
@@ -39,8 +40,7 @@ export function daysBetween(fromIso: string, toIso: string): number {
 
 /** Local calendar date as YYYY-MM-DD. Never UTC — "today" means the user's today. */
 export function localToday(d: Date = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return localDateKey(d);
 }
 
 function orderedDays(topByDate: ReadonlyMap<string, DayTop>): { dates: string[]; days: DayTop[] } {

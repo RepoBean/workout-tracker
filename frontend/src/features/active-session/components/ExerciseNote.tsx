@@ -3,10 +3,13 @@ import { useState } from 'react';
 interface ExerciseNoteProps {
   note: string;
   onSetNote?: (note: string | null) => void;
+  /** Open straight into the editor (adding a note where there was none). */
+  startEditing?: boolean;
+  onCancel?: () => void;
 }
 
-export function ExerciseNote({ note, onSetNote }: ExerciseNoteProps) {
-  const [draft, setDraft] = useState<string | null>(null);
+export function ExerciseNote({ note, onSetNote, startEditing = false, onCancel }: ExerciseNoteProps) {
+  const [draft, setDraft] = useState<string | null>(startEditing ? note : null);
   const isEditing = draft !== null;
 
   const handleSave = () => {
@@ -44,7 +47,7 @@ export function ExerciseNote({ note, onSetNote }: ExerciseNoteProps) {
           <div className="flex justify-end gap-2 mt-1">
             <button
               type="button"
-              onClick={() => setDraft(null)}
+              onClick={() => { setDraft(null); onCancel?.(); }}
               className="text-xs px-3 py-2 min-h-[44px] rounded-lg
                          text-amber-700 dark:text-amber-300
                          hover:bg-amber-100 dark:hover:bg-amber-900/30
