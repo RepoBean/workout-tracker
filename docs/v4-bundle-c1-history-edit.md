@@ -1,6 +1,6 @@
 # v4 Bundle C1: History editing + logging past workouts
 
-Status: **built 2026-10-15, tested on staging; main + wife pending.** Decisions: all recommendations (§6). Written 2026-10-15 at `455b026`, from
+Status: **shipped to staging + main 2026-10-15 (`7cc9b04`); wife after a few workouts. Bulk correction (Appendix A) awaiting Jason's approval.** Decisions: all recommendations (§6). Written 2026-10-15 at `455b026`, from
 `docs/v4-plan.md` §2 C1 re-checked against the code that day. Line numbers are from that read.
 
 **Gate:** both vitest suites and `tsc` pass (the one flipped test below is the only existing test
@@ -221,3 +221,158 @@ after a mid-list delete; picker `onChoose` mapping; past-log local date → ISO.
 5. Picker refactor + Log past workout.
 6. Compose `TZ` (if D3). Ship staging; headless check on 8037; main; wife.
 7. Bulk correction (§5).
+
+---
+
+## Appendix A: bulk correction list (PENDING Jason's approval)
+
+Built 2026-10-15 from `main-20261015-195556.sqlite` (pre-deploy backup); dates are local (Eastern).
+130 sets. Ranges come from the 2× jumps in the data, so check each:
+
+| Exercise | Range | Sets | Change | Question |
+|---|---|---|---|---|
+| Low Incline Dumbbell Press | 04-15 → 06-10 | 42 | 60/70/80/90 → 30/35/40/45 | — (25 before, 40 after fits) |
+| Seated DB Overhead Press | 05-01 → 06-08 | 15 | 70/75 → 35/37.5 | 37.5 isn't a common dumbbell; ok? |
+| Dumbbell RDL | 02-16 → 06-10 | 64 | 50/55/60/70/80 → 25/27.5/30/35/40 | Was it combined **from the start** (Feb), or only from some later date? 27.5 for 04-15/04-17? |
+| Bicep Curl | 09-26 | 3 | 40 → 20 | — |
+| Pull-Up | 09-18, 09-26 | 6 | +40 → −40 | — |
+
+Left alone: Neutral Grip Pull-Up / Assisted pullups (effective-weight convention, scores correctly
+with bodyweight), Dumbbell Bicep Curl 04-29 (25, one session), Dumbbell Shoulder Press 04-29.
+
+Apply: script over `PUT /api/sessions/:id/sets/:setId` with `{ weight }`, keyed by set id
+(per-set list below), on staging after `seed-staging.sh`, check Progress/Records, then
+`scripts/backup.sh main` and main. Wife: check her data with the same query first.
+
+| Date | Exercise | Set | Reps | Old | New | setId |
+|---|---|---|---|---|---|---|
+| 2026-04-15 | Low Incline Dumbbell Press | 1 | 10 | 60 | 30 | 1822 |
+| 2026-04-15 | Low Incline Dumbbell Press | 2 | 10 | 60 | 30 | 1823 |
+| 2026-04-15 | Low Incline Dumbbell Press | 3 | 8 | 60 | 30 | 1824 |
+| 2026-04-17 | Low Incline Dumbbell Press | 1 | 12 | 60 | 30 | 1839 |
+| 2026-04-17 | Low Incline Dumbbell Press | 2 | 10 | 60 | 30 | 1840 |
+| 2026-04-17 | Low Incline Dumbbell Press | 3 | 8 | 60 | 30 | 1841 |
+| 2026-04-20 | Low Incline Dumbbell Press | 1 | 10 | 60 | 30 | 1862 |
+| 2026-04-20 | Low Incline Dumbbell Press | 2 | 10 | 60 | 30 | 1863 |
+| 2026-04-20 | Low Incline Dumbbell Press | 3 | 10 | 60 | 30 | 1864 |
+| 2026-04-22 | Low Incline Dumbbell Press | 1 | 10 | 60 | 30 | 1884 |
+| 2026-04-22 | Low Incline Dumbbell Press | 2 | 10 | 60 | 30 | 1885 |
+| 2026-04-22 | Low Incline Dumbbell Press | 3 | 12 | 60 | 30 | 1886 |
+| 2026-04-27 | Low Incline Dumbbell Press | 1 | 10 | 60 | 30 | 1911 |
+| 2026-04-27 | Low Incline Dumbbell Press | 2 | 10 | 60 | 30 | 1912 |
+| 2026-04-27 | Low Incline Dumbbell Press | 3 | 10 | 60 | 30 | 1913 |
+| 2026-04-29 | Low Incline Dumbbell Press | 1 | 8 | 70 | 35 | 1951 |
+| 2026-04-29 | Low Incline Dumbbell Press | 2 | 10 | 70 | 35 | 1952 |
+| 2026-04-29 | Low Incline Dumbbell Press | 3 | 9 | 70 | 35 | 1953 |
+| 2026-05-06 | Low Incline Dumbbell Press | 1 | 12 | 70 | 35 | 2007 |
+| 2026-05-06 | Low Incline Dumbbell Press | 2 | 10 | 70 | 35 | 2008 |
+| 2026-05-06 | Low Incline Dumbbell Press | 3 | 12 | 70 | 35 | 2009 |
+| 2026-05-10 | Low Incline Dumbbell Press | 1 | 10 | 80 | 40 | 2072 |
+| 2026-05-10 | Low Incline Dumbbell Press | 2 | 10 | 80 | 40 | 2073 |
+| 2026-05-10 | Low Incline Dumbbell Press | 3 | 10 | 80 | 40 | 2074 |
+| 2026-05-13 | Low Incline Dumbbell Press | 1 | 10 | 80 | 40 | 2091 |
+| 2026-05-13 | Low Incline Dumbbell Press | 2 | 10 | 80 | 40 | 2092 |
+| 2026-05-13 | Low Incline Dumbbell Press | 3 | 10 | 80 | 40 | 2093 |
+| 2026-05-18 | Low Incline Dumbbell Press | 1 | 12 | 80 | 40 | 2127 |
+| 2026-05-18 | Low Incline Dumbbell Press | 2 | 10 | 80 | 40 | 2128 |
+| 2026-05-18 | Low Incline Dumbbell Press | 3 | 8 | 80 | 40 | 2129 |
+| 2026-05-20 | Low Incline Dumbbell Press | 1 | 13 | 80 | 40 | 2139 |
+| 2026-05-20 | Low Incline Dumbbell Press | 2 | 11 | 80 | 40 | 2140 |
+| 2026-05-20 | Low Incline Dumbbell Press | 3 | 10 | 80 | 40 | 2141 |
+| 2026-05-26 | Low Incline Dumbbell Press | 1 | 7 | 90 | 45 | 2175 |
+| 2026-05-26 | Low Incline Dumbbell Press | 2 | 6 | 90 | 45 | 2176 |
+| 2026-05-26 | Low Incline Dumbbell Press | 3 | 7 | 90 | 45 | 2177 |
+| 2026-05-28 | Low Incline Dumbbell Press | 1 | 10 | 80 | 40 | 2189 |
+| 2026-05-28 | Low Incline Dumbbell Press | 2 | 10 | 80 | 40 | 2190 |
+| 2026-05-28 | Low Incline Dumbbell Press | 3 | 10 | 80 | 40 | 2191 |
+| 2026-06-10 | Low Incline Dumbbell Press | 1 | 12 | 80 | 40 | 2230 |
+| 2026-06-10 | Low Incline Dumbbell Press | 2 | 8 | 80 | 40 | 2231 |
+| 2026-06-10 | Low Incline Dumbbell Press | 3 | 8 | 80 | 40 | 2232 |
+| 2026-05-01 | Seated DB Overhead Press | 1 | 8 | 70 | 35 | 1970 |
+| 2026-05-01 | Seated DB Overhead Press | 2 | 8 | 70 | 35 | 1971 |
+| 2026-05-01 | Seated DB Overhead Press | 3 | 8 | 70 | 35 | 1972 |
+| 2026-05-08 | Seated DB Overhead Press | 1 | 10 | 70 | 35 | 2057 |
+| 2026-05-08 | Seated DB Overhead Press | 2 | 8 | 70 | 35 | 2058 |
+| 2026-05-08 | Seated DB Overhead Press | 3 | 8 | 70 | 35 | 2059 |
+| 2026-05-15 | Seated DB Overhead Press | 1 | 8 | 70 | 35 | 2115 |
+| 2026-05-15 | Seated DB Overhead Press | 2 | 8 | 70 | 35 | 2116 |
+| 2026-05-15 | Seated DB Overhead Press | 3 | 6 | 70 | 35 | 2117 |
+| 2026-05-22 | Seated DB Overhead Press | 1 | 10 | 70 | 35 | 2160 |
+| 2026-05-22 | Seated DB Overhead Press | 2 | 8 | 70 | 35 | 2161 |
+| 2026-05-22 | Seated DB Overhead Press | 3 | 8 | 70 | 35 | 2162 |
+| 2026-06-08 | Seated DB Overhead Press | 1 | 10 | 75 | 37.5 | 2213 |
+| 2026-06-08 | Seated DB Overhead Press | 2 | 8 | 75 | 37.5 | 2214 |
+| 2026-06-08 | Seated DB Overhead Press | 3 | 6 | 75 | 37.5 | 2215 |
+| 2026-02-16 | Dumbbell RDL | 1 | 8 | 50 | 25 | 1350 |
+| 2026-02-16 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1352 |
+| 2026-02-16 | Dumbbell RDL | 3 | 7 | 50 | 25 | 1354 |
+| 2026-02-18 | Dumbbell RDL | 1 | 6 | 50 | 25 | 1380 |
+| 2026-02-18 | Dumbbell RDL | 2 | 6 | 50 | 25 | 1382 |
+| 2026-02-18 | Dumbbell RDL | 3 | 7 | 50 | 25 | 1384 |
+| 2026-02-23 | Dumbbell RDL | 1 | 9 | 50 | 25 | 1426 |
+| 2026-02-23 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1428 |
+| 2026-02-23 | Dumbbell RDL | 3 | 7 | 50 | 25 | 1430 |
+| 2026-02-27 | Dumbbell RDL | 1 | 8 | 50 | 25 | 1476 |
+| 2026-02-27 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1478 |
+| 2026-02-27 | Dumbbell RDL | 3 | 8 | 50 | 25 | 1480 |
+| 2026-03-06 | Dumbbell RDL | 1 | 8 | 50 | 25 | 1596 |
+| 2026-03-06 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1598 |
+| 2026-03-06 | Dumbbell RDL | 3 | 8 | 50 | 25 | 1601 |
+| 2026-03-16 | Dumbbell RDL | 1 | 8 | 50 | 25 | 1641 |
+| 2026-03-16 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1643 |
+| 2026-03-16 | Dumbbell RDL | 3 | 8 | 50 | 25 | 1645 |
+| 2026-03-18 | Dumbbell RDL | 1 | 8 | 50 | 25 | 1668 |
+| 2026-03-18 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1670 |
+| 2026-03-18 | Dumbbell RDL | 3 | 6 | 50 | 25 | 1672 |
+| 2026-04-03 | Dumbbell RDL | 1 | 10 | 50 | 25 | 1739 |
+| 2026-04-03 | Dumbbell RDL | 2 | 9 | 50 | 25 | 1740 |
+| 2026-04-03 | Dumbbell RDL | 3 | 7 | 50 | 25 | 1741 |
+| 2026-04-08 | Dumbbell RDL | 1 | 10 | 50 | 25 | 1784 |
+| 2026-04-08 | Dumbbell RDL | 2 | 8 | 50 | 25 | 1785 |
+| 2026-04-08 | Dumbbell RDL | 3 | 8 | 50 | 25 | 1786 |
+| 2026-04-15 | Dumbbell RDL | 1 | 8 | 55 | 27.5 | 1814 |
+| 2026-04-17 | Dumbbell RDL | 1 | 8 | 55 | 27.5 | 1842 |
+| 2026-04-17 | Dumbbell RDL | 2 | 8 | 55 | 27.5 | 1843 |
+| 2026-04-17 | Dumbbell RDL | 3 | 8 | 55 | 27.5 | 1844 |
+| 2026-04-27 | Dumbbell RDL | 1 | 8 | 60 | 30 | 1923 |
+| 2026-04-27 | Dumbbell RDL | 2 | 8 | 60 | 30 | 1924 |
+| 2026-04-27 | Dumbbell RDL | 3 | 8 | 60 | 30 | 1925 |
+| 2026-04-29 | Dumbbell RDL | 1 | 8 | 70 | 35 | 1948 |
+| 2026-04-29 | Dumbbell RDL | 2 | 8 | 70 | 35 | 1949 |
+| 2026-04-29 | Dumbbell RDL | 3 | 8 | 70 | 35 | 1950 |
+| 2026-05-04 | Dumbbell RDL | 1 | 8 | 70 | 35 | 1997 |
+| 2026-05-04 | Dumbbell RDL | 2 | 10 | 70 | 35 | 1998 |
+| 2026-05-04 | Dumbbell RDL | 3 | 8 | 70 | 35 | 1999 |
+| 2026-05-06 | Dumbbell RDL | 1 | 8 | 70 | 35 | 2010 |
+| 2026-05-06 | Dumbbell RDL | 2 | 10 | 70 | 35 | 2011 |
+| 2026-05-06 | Dumbbell RDL | 3 | 8 | 70 | 35 | 2012 |
+| 2026-05-10 | Dumbbell RDL | 1 | 10 | 80 | 40 | 2075 |
+| 2026-05-10 | Dumbbell RDL | 2 | 8 | 80 | 40 | 2076 |
+| 2026-05-10 | Dumbbell RDL | 3 | 8 | 80 | 40 | 2077 |
+| 2026-05-13 | Dumbbell RDL | 1 | 10 | 80 | 40 | 2094 |
+| 2026-05-13 | Dumbbell RDL | 2 | 8 | 80 | 40 | 2095 |
+| 2026-05-13 | Dumbbell RDL | 3 | 8 | 80 | 40 | 2096 |
+| 2026-05-18 | Dumbbell RDL | 1 | 10 | 80 | 40 | 2130 |
+| 2026-05-18 | Dumbbell RDL | 2 | 10 | 80 | 40 | 2131 |
+| 2026-05-18 | Dumbbell RDL | 3 | 10 | 80 | 40 | 2132 |
+| 2026-05-20 | Dumbbell RDL | 1 | 8 | 80 | 40 | 2142 |
+| 2026-05-20 | Dumbbell RDL | 2 | 8 | 80 | 40 | 2143 |
+| 2026-05-20 | Dumbbell RDL | 3 | 8 | 80 | 40 | 2144 |
+| 2026-05-26 | Dumbbell RDL | 1 | 8 | 80 | 40 | 2178 |
+| 2026-05-26 | Dumbbell RDL | 2 | 7 | 80 | 40 | 2179 |
+| 2026-05-26 | Dumbbell RDL | 3 | 8 | 80 | 40 | 2180 |
+| 2026-05-28 | Dumbbell RDL | 1 | 8 | 80 | 40 | 2192 |
+| 2026-05-28 | Dumbbell RDL | 2 | 8 | 80 | 40 | 2193 |
+| 2026-05-28 | Dumbbell RDL | 3 | 8 | 80 | 40 | 2194 |
+| 2026-06-10 | Dumbbell RDL | 1 | 10 | 80 | 40 | 2233 |
+| 2026-06-10 | Dumbbell RDL | 2 | 10 | 80 | 40 | 2234 |
+| 2026-06-10 | Dumbbell RDL | 3 | 10 | 80 | 40 | 2235 |
+| 2026-09-26 | Bicep Curl | 1 | 8 | 40 | 20 | 2866 |
+| 2026-09-26 | Bicep Curl | 2 | 6 | 40 | 20 | 2867 |
+| 2026-09-26 | Bicep Curl | 3 | 5 | 40 | 20 | 2868 |
+| 2026-09-18 | Pull-Up | 1 | 8 | 40 | -40 | 2813 |
+| 2026-09-18 | Pull-Up | 2 | 8 | 40 | -40 | 2814 |
+| 2026-09-18 | Pull-Up | 3 | 8 | 40 | -40 | 2815 |
+| 2026-09-26 | Pull-Up | 1 | 10 | 40 | -40 | 2854 |
+| 2026-09-26 | Pull-Up | 2 | 8 | 40 | -40 | 2855 |
+| 2026-09-26 | Pull-Up | 3 | 8 | 40 | -40 | 2856 |
