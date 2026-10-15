@@ -33,9 +33,10 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
 | Bodyweight entry | From the bodyweight chart in Progress. Settings shows the latest weigh-in. |
 | Settings sync | Profile, progression, coach config **including the API key**, and the coach thread move to the server (C2). Key stored as plain text; acceptable because the app is VPN-only. Theme, timer, server URL and HR strap stay per device. This reverses `v3-plan.md` ("coach API key stays browser-only"). It is **not** cloud sync or cross-device resume: the data stays on the instance's own server, and no in-progress session moves between devices. |
 | Muscle tags | **Optional, never required.** Adding an exercise stays name + sets/reps. Tags come from a **one-off, reviewed seed** from free-exercise-db (public domain) for name matches, and are edited in Settings → Exercise catalog. The server never guesses tags on insert. |
-| Progression presets (5×5, Greyskull) | Low priority, at the end of C5 or cut. |
+| Progression presets (5×5, Greyskull) | Low priority, at the end of C4 or cut. |
 | Wife instance | Gets everything, a few days after main as usual. |
-| Health Connect | Last. It is the only bundle that needs an APK release. |
+| Order (2026-10-15) | C1 history edit → C2 settings → C3 bodyweight → C4 progression → C5 muscles → C6 heatmap → C7 Health Connect. Bodyweight was split from settings; progression moved ahead of muscles and the heatmap. |
+| Health Connect | Last (C7), kept. It is the only bundle that needs an APK release. |
 
 ---
 
@@ -65,7 +66,7 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   not shape: no client branches on the 400. Side effect: a stale tab or old APK logging to a session
   already completed elsewhere now succeeds instead of failing. Accepted.
 - **Every set POST/PUT/DELETE also bumps the parent `Sessions.updatedAt`** in the same transaction.
-  Today only `exercise-note` and `/complete` do. C1's cache key (below) and C6's sync both depend on
+  Today only `exercise-note` and `/complete` do. C1's cache key (below) and C7's sync both depend on
   it. Add a test.
 - **Create completed:** `/start` gains an optional `completedAt` (ISO; reject future) and optional
   `durationMin` (default 60). When present it inserts `createdAt = completedAt − duration` and
@@ -126,46 +127,13 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   are in one zone), or accept UTC.
 - Date-edit bounds: allow any past date? Recommend no future dates, and no lower bound.
 
-### [ ] C2: Bodyweight log + server-side settings
+### [ ] C2: Server-side settings
 
-**Two new tables (7 and 8)**, so the written case goes in the bundle doc first, and CLAUDE.md's
-"Six tables" rule, schema diagram, API table and tree get updated when it ships (see §3).
+**New table 7 (`Settings`)**, so the written case goes in the bundle doc first, and the CLAUDE.md
+updates in §3 apply. Split from the bodyweight log (C3) because it is the riskier half (sync cache,
+one-time migration, rollback, the coach thread) and fixes the daily annoyance: phone and computer
+disagreeing on HR zones and coach history. C3 builds on it.
 
-**Bodyweight**
-- `BodyWeights` (id, `date` **plain local `YYYY-MM-DD` text**, weight lbs, createdAt, updatedAt in
-  the Sequelize format). A weigh-in is a calendar day, not an instant. **Unique on `date`**; logging
-  the same day again overwrites.
-- Endpoints `GET/POST /api/bodyweights`, `PUT/DELETE /api/bodyweights/:id`. Zod range 50–700 (same
-  as `hrZones.ts`).
-- The case: one profile value, kept in localStorage, is per device (app ≠ web) and rewrites every
-  past assisted-lift 1RM whenever it changes.
-- Bodyweight for a set's date: the latest weigh-in on or before the session's **local** day
-  (convert `completedAt` first; a raw string compare against the UTC timestamp misassigns evening
-  sessions). Else the **earliest** weigh-in, which back-applies a later weight to older history but
-  keeps it consistent across devices (accepted). Else the profile value (no weigh-ins at all).
-- **Profile `bodyweight` is retired into BodyWeights**, not synced: it is dropped from the
-  server-side `profile` schema. The local value stays only as the last-resort fallback and the seed
-  for the first-run prompt. Otherwise there would be two sources of truth.
-- `effectiveWeight()` call sites (13 at validation time; build a pre-sorted "weight on date" lookup
-  once and pass it down, no per-set query):
-  - Direct, date in scope: `liftOverview.ts` ~72, `exerciseIndex.ts` ~161 and ~299,
-    `dossier.ts` ~220, `StrengthDetail.tsx` ~88, `SessionCard.tsx` ~225.
-  - Direct, needs work: `usePrCelebration.ts` ~41 (today); `personalRecord.ts` ~30
-    `computeBestOneRepMax`. Its input type drops the `completedAt` that `all-sets-by-name` already
-    returns; widen it.
-  - Via `setVolume()`: `active-session/index.tsx` ~266, `CompletedSessionSummary.tsx` ~19,
-    `SessionCard.tsx` ~76, `useProgressData.ts` ~77. The `volumeOf(set)` used by `volumePeriods.ts`
-    has only the set; add a date argument (the callers have the session).
-- First run: no weigh-ins + a profile bodyweight → offer to save it as today's weigh-in. The
-  dismissal flag lives on the server (in `profile`), so it isn't asked again on the other device.
-  From then on the profile field in Settings is read-only and shows the latest weigh-in.
-- Progress: bodyweight chart + "log weigh-in". Coach dossier: the athlete line (dossier.ts ~390,
-  today `bodyweight N lb`) becomes "bodyweight 182 lb (2026-10-10), −4 lb over 90 d".
-  The all-time memo key's `bodyweight` part becomes a weigh-ins fingerprint (count + latest
-  date/updatedAt); a format-version bump alone won't refresh it on a new weigh-in. Bump
-  `ALLTIME_FORMAT_VERSION` too.
-
-**Server-side settings**
 - Today `workout-tracker-profile`, `workout-tracker-progression`, `workout-tracker-ai-coach`
   (`{enabled, provider, apiKey, model, baseUrl}`) and `workout-tracker-coach-thread` live in
   per-device localStorage, so the phone and the computer can compute different HR zones and can't
@@ -210,62 +178,52 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   - `scripts/seed-staging.sh` copies main's DB, so staging would hold Jason's key and thread, and
     headless agents test on staging. Blank `aiCoach.apiKey` and `coachThread` after seeding.
 - Scripts: `backup.sh` ~39 and `restore.sh` ~31 hard-code 5 tables (they already miss
-  ExerciseCatalog). Add ExerciseCatalog, BodyWeights and Settings to the count/sanity lists. Add a
-  `bodyweights` snapshot to `api-snapshot.sh` (not settings).
+  ExerciseCatalog). Add ExerciseCatalog and Settings to the count/sanity lists (BodyWeights comes
+  in C3). Never add settings to `api-snapshot.sh`.
 
 **Decide in the bundle doc**
 - Is `aiCoach.model` per instance (the plan) or per device? Recommend per instance.
 
-### [ ] C3: Activity heatmap
-- Lives **inside Volume Trends** (not a new tab): days in Sun-start weeks, shaded by that day's
-  volume through the **same shared `volumeOf`** Progress uses (C2 changes its signature). Reuse
-  `localDateKey` / `startOfWeek` from `volumePeriods.ts`. A session that runs past midnight lands on
-  its completion day.
-- Data is already on the phone: Progress loads `useHistory(1000, 0)` with sets. No new query, no
-  schema change.
-- "Trained" = the day has a completed session, not volume > 0. Cardio days and assisted-only days
-  without a bodyweight both have 0 volume. Any trained day gets at least the lightest shade.
-- Tap a day → `/history?sessionId=<id>` (the dashboard Calendar already does this). **Fix the deep
-  link first:** when highlighting, `useSessionHistory` loads only ~50 sessions (`useHistory.ts`
-  ~11-18), so a session from months ago is never found. Fetch it with `GET /sessions/:id`, or page
-  until found. Two sessions on one day: open the most recent; the cell's label says "2 sessions"
-  (the Calendar keeps only the first; leave the Calendar as is).
-- The existing 12-week bars already show the trend explicitly; no second trend chart.
-- No dependency on C1/C2 (volume is computed client-side on every read); it can move earlier.
+### [ ] C3: Bodyweight log
 
-**Decide in the bundle doc**
-- Width: 53 week columns at ~343 px is ~6 px per cell, too small to tap. Recommend the last 26 weeks
-  at a tappable size, with horizontal scroll back to a year.
+**New table 8 (`BodyWeights`)**, with its own written case in the bundle doc. Needs C2 (the
+first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyWeights to the
+`backup.sh`/`restore.sh` lists and a `bodyweights` snapshot to `api-snapshot.sh`.
 
-### [ ] C4: Muscle analytics
-- `muscles` JSON column (`{primary: Muscle[], secondary: Muscle[]}`), **nullable, NULL = untagged**,
-  on **ExerciseCatalog**. Additive column: a CHANGELOG row plus a migration. Older images select
-  columns explicitly and their inserts work with a nullable column. Merges inherit tags through the
-  catalog. A program-exercise **rename to a new name resolves to a new, untagged entry**
-  (`resolveCatalogId` insert); only merges inherit.
-- Fixed muscle vocabulary as a Zod enum. New endpoint `PUT /api/catalog/:id` (`muscles` only). It
-  **bumps the row's `updatedAt`**, because `catalogFingerprint` (`shared/lib/catalog.ts`) is
-  `count:max(updatedAt)` and drives the coach memo. Add `muscles` to `listEntries`' explicit select
-  so `GET /api/catalog` returns it.
-- Merge deletes B (`routes/catalog.ts`) and split rebuilds from names with no stored state, so both
-  need new code:
-  - **Merge: keep A's tags; if A is untagged, take B's.**
-  - Split: the split-off entry gets a copy of A's tags (same lift).
-- `backfillCatalog()` GC (deletes alias-less rows with no Sets/Exercises reference) must skip tagged
-  rows. **Rollback caveat:** an older image still runs the old GC and deletes tagged orphans, losing
-  their tags. Accepted: an orphan has no history to analyse. Note it in the bundle doc.
-- One-off seed from free-exercise-db (confirm the Unlicense before using it) for name matches, shown
-  to Jason for review before applying through the PUT. Run it after C1's bulk correction, so names
-  and merges have settled. No server-side auto-tagging (§1).
-- UI: a third per-row action in `ExerciseCatalogCard.tsx` ("Muscles…") opening a Modal.
-- Progress + coach: weekly sets per muscle, plus a flag for muscles untrained 14+ days. Untagged
-  lifts still count in volume/heatmap, just not per muscle. Bump `ALLTIME_FORMAT_VERSION`. A
-  body-map SVG is later and optional.
+- `BodyWeights` (id, `date` **plain local `YYYY-MM-DD` text**, weight lbs, createdAt, updatedAt in
+  the Sequelize format). A weigh-in is a calendar day, not an instant. **Unique on `date`**; logging
+  the same day again overwrites.
+- Endpoints `GET/POST /api/bodyweights`, `PUT/DELETE /api/bodyweights/:id`. Zod range 50–700 (same
+  as `hrZones.ts`).
+- The case: one profile value, kept in localStorage, is per device (app ≠ web) and rewrites every
+  past assisted-lift 1RM whenever it changes.
+- Bodyweight for a set's date: the latest weigh-in on or before the session's **local** day
+  (convert `completedAt` first; a raw string compare against the UTC timestamp misassigns evening
+  sessions). Else the **earliest** weigh-in, which back-applies a later weight to older history but
+  keeps it consistent across devices (accepted). Else the profile value (no weigh-ins at all).
+- **Profile `bodyweight` is retired into BodyWeights**, not synced: it is dropped from the
+  server-side `profile` schema. The local value stays only as the last-resort fallback and the seed
+  for the first-run prompt. Otherwise there would be two sources of truth.
+- `effectiveWeight()` call sites (13 at validation time; build a pre-sorted "weight on date" lookup
+  once and pass it down, no per-set query):
+  - Direct, date in scope: `liftOverview.ts` ~72, `exerciseIndex.ts` ~161 and ~299,
+    `dossier.ts` ~220, `StrengthDetail.tsx` ~88, `SessionCard.tsx` ~225.
+  - Direct, needs work: `usePrCelebration.ts` ~41 (today); `personalRecord.ts` ~30
+    `computeBestOneRepMax`. Its input type drops the `completedAt` that `all-sets-by-name` already
+    returns; widen it.
+  - Via `setVolume()`: `active-session/index.tsx` ~266, `CompletedSessionSummary.tsx` ~19,
+    `SessionCard.tsx` ~76, `useProgressData.ts` ~77. The `volumeOf(set)` used by `volumePeriods.ts`
+    has only the set; add a date argument (the callers have the session).
+- First run: no weigh-ins + a profile bodyweight → offer to save it as today's weigh-in. The
+  dismissal flag lives on the server (in `profile`), so it isn't asked again on the other device.
+  From then on the profile field in Settings is read-only and shows the latest weigh-in.
+- Progress: bodyweight chart + "log weigh-in". Coach dossier: the athlete line (dossier.ts ~390,
+  today `bodyweight N lb`) becomes "bodyweight 182 lb (2026-10-10), −4 lb over 90 d".
+  The all-time memo key's `bodyweight` part becomes a weigh-ins fingerprint (count + latest
+  date/updatedAt); a format-version bump alone won't refresh it on a new weigh-in. Bump
+  `ALLTIME_FORMAT_VERSION` too.
 
-**Decide in the bundle doc**
-- Does a secondary muscle count ½ a set? Recommend yes (the common convention).
-
-### [ ] C5: Progression schemes
+### [ ] C4: Progression schemes
 - Per-exercise `progressionScheme` column on Exercises, **`NOT NULL DEFAULT 'double'`** (= today's
   behaviour) so an older image's inserts still succeed.
 - `computeProgression` is called only from `ExerciseCard.tsx` ~104, with the previous session's sets
@@ -293,14 +251,66 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   ExerciseForm always send the full exercise, so the request never consists of the new field alone.
 - The picker lives in a new collapsible "Advanced" section of ExerciseForm (351 lines of flat
   state today). Adding an exercise stays name + sets/reps.
-- Has no dependency on C2–C4; can move earlier if it matters more than muscle charts.
+- Independent of C2/C3. Placed ahead of muscles and the heatmap because it changes what happens
+  at the gym every session.
 - Optional at the end: 5×5 / Greyskull presets.
 
 **Decide in the bundle doc**
 - Deload size and trigger (recommend 10% after the 3-session stall flag), and whether `linear`
   adds weight every session or only when all target reps were hit (recommend the latter).
 
-### [ ] C6: Health Connect write (Android)
+### [ ] C5: Muscle analytics
+- `muscles` JSON column (`{primary: Muscle[], secondary: Muscle[]}`), **nullable, NULL = untagged**,
+  on **ExerciseCatalog**. Additive column: a CHANGELOG row plus a migration. Older images select
+  columns explicitly and their inserts work with a nullable column. Merges inherit tags through the
+  catalog. A program-exercise **rename to a new name resolves to a new, untagged entry**
+  (`resolveCatalogId` insert); only merges inherit.
+- Fixed muscle vocabulary as a Zod enum. New endpoint `PUT /api/catalog/:id` (`muscles` only). It
+  **bumps the row's `updatedAt`**, because `catalogFingerprint` (`shared/lib/catalog.ts`) is
+  `count:max(updatedAt)` and drives the coach memo. Add `muscles` to `listEntries`' explicit select
+  so `GET /api/catalog` returns it.
+- Merge deletes B (`routes/catalog.ts`) and split rebuilds from names with no stored state, so both
+  need new code:
+  - **Merge: keep A's tags; if A is untagged, take B's.**
+  - Split: the split-off entry gets a copy of A's tags (same lift).
+- `backfillCatalog()` GC (deletes alias-less rows with no Sets/Exercises reference) must skip tagged
+  rows. **Rollback caveat:** an older image still runs the old GC and deletes tagged orphans, losing
+  their tags. Accepted: an orphan has no history to analyse. Note it in the bundle doc.
+- One-off seed from free-exercise-db (confirm the Unlicense before using it) for name matches, shown
+  to Jason for review before applying through the PUT. Run it after C1's bulk correction, so names
+  and merges have settled. No server-side auto-tagging (§1).
+- UI: a third per-row action in `ExerciseCatalogCard.tsx` ("Muscles…") opening a Modal.
+- Progress + coach: weekly sets per muscle, plus a flag for muscles untrained 14+ days. Untagged
+  lifts still count in volume/heatmap, just not per muscle. Bump `ALLTIME_FORMAT_VERSION`. A
+  body-map SVG is later and optional.
+
+**Decide in the bundle doc**
+- Does a secondary muscle count ½ a set? Recommend yes (the common convention).
+
+### [ ] C6: Activity heatmap
+- Lives **inside Volume Trends** (not a new tab): days in Sun-start weeks, shaded by that day's
+  volume through the **same shared `volumeOf`** Progress uses (C3 changes its signature). Reuse
+  `localDateKey` / `startOfWeek` from `volumePeriods.ts`. A session that runs past midnight lands on
+  its completion day.
+- Data is already on the phone: Progress loads `useHistory(1000, 0)` with sets. No new query, no
+  schema change.
+- "Trained" = the day has a completed session, not volume > 0. Cardio days and assisted-only days
+  without a bodyweight both have 0 volume. Any trained day gets at least the lightest shade.
+- Tap a day → `/history?sessionId=<id>` (the dashboard Calendar already does this). **Fix the deep
+  link first:** when highlighting, `useSessionHistory` loads only ~50 sessions (`useHistory.ts`
+  ~11-18), so a session from months ago is never found. Fetch it with `GET /sessions/:id`, or page
+  until found. Two sessions on one day: open the most recent; the cell's label says "2 sessions"
+  (the Calendar keeps only the first; leave the Calendar as is).
+- The existing 12-week bars already show the trend explicitly; no second trend chart.
+- No dependency on earlier bundles (volume is computed client-side on every read). It sits last
+  before Health Connect because it is the weakest win: the dashboard Calendar, This Week and the
+  12-week bars already show most of it. Cut it if it still looks redundant when its turn comes.
+
+**Decide in the bundle doc**
+- Width: 53 week columns at ~343 px is ~6 px per cell, too small to tap. Recommend the last 26 weeks
+  at a tappable size, with horizontal scroll back to a year.
+
+### [ ] C7: Health Connect write (Android)
 - **Depends on C1's `Sessions.updatedAt` bump** (set edits); otherwise no backend change.
 - Records: one `ExerciseSessionRecord` per completed session (start `createdAt`, end
   `completedAt`), plus one `HeartRateRecord` from `heartRateSeries` (offsets from `createdAt`; the
@@ -362,13 +372,13 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   - New columns are nullable or have a default.
   - An older image booting on the newer DB is fine: the drizzle migrator applies only migrations
     newer than its latest, and unknown tables/columns are ignored.
-  - Rollback is still "old tag, no restore". Note any loss (C4 GC caveat).
+  - Rollback is still "old tag, no restore". Note any loss (C5 GC caveat).
 - **Old clients:** the API only gains fields and endpoints. Removing the C1 guards is a behaviour
   change no client relies on.
 - **Coach memo:** any change to what feeds the all-time block bumps `ALLTIME_FORMAT_VERSION`
-  (C1 local day, C2 weigh-ins, C4 muscles).
+  (C1 local day, C3 weigh-ins, C5 muscles).
 - **Docs on ship:**
-  - CLAUDE.md: the tables rule ("Six" → eight, with the C2 case), schema diagram, API table, the
+  - CLAUDE.md: the tables rule ("Six" → eight, with the C2 and C3 cases), schema diagram, API table, the
     tree (new routes; profile/progression/coach contexts become server-backed), and the Scope line
     (same-instance settings sharing is not cloud sync).
   - `v3-plan.md`: a pointer that v4 reversed the browser-only API key decision.
