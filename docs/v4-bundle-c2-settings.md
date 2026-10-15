@@ -1,6 +1,6 @@
 # v4 Bundle C2: Server-side settings
 
-Status: **building.** Decisions: all recommendations (§6, Jason 2026-10-15). Written 2026-10-15 at `fc2326c`, from
+Status: **on staging 2026-10-15 (`9d163b3`); main + wife pending.** Decisions: all recommendations (§6, Jason 2026-10-15). Written 2026-10-15 at `fc2326c`, from
 `docs/v4-plan.md` §2 C2 re-checked against the code that day. Line numbers are from that read.
 
 **Gate:** both vitest suites and `tsc` pass; the new backend tests (§3.4) and frontend sync tests
@@ -196,6 +196,12 @@ one GET per page load; PUT 409 / other failures.
 - No Settings-page "clear thread" button exists (the plan's CLAUDE.md line was stale); New Chat is the
   only clear, and it syncs.
 - Backend 117 tests, frontend 272.
+- Staging checks (2026-10-15): api-snapshot diff empty; malformed JSON → 400, body not logged;
+  `7cc9b04` boots on the migrated DB (`/api/settings` 404); headless two-device run: first device
+  uploads (bodyweight stripped), second device takes the server copy and keeps its own bodyweight,
+  Settings form shows hydrated values, toggle writes through, coach page shows the server thread,
+  a stale New Chat 409s and reloads the other device's thread, the retry succeeds. Scrub verified
+  on a copy (key absent from the file after VACUUM).
 
 ## 9. Build order
 
