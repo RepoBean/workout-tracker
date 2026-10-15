@@ -18,7 +18,7 @@ if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='Settings
     row = db.execute("SELECT value FROM Settings WHERE key='aiCoach'").fetchone()
     if row:
         coach = json.loads(row[0]); coach["apiKey"] = ""
-        db.execute("UPDATE Settings SET value=? WHERE key='aiCoach'", (json.dumps(coach),))
+        db.execute("UPDATE Settings SET value=? WHERE key='aiCoach'", (json.dumps(coach, separators=(",", ":")),))
     db.execute("DELETE FROM Settings WHERE key='coachThread'")
     db.commit()
     db.execute("VACUUM")
