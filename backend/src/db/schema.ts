@@ -1,7 +1,8 @@
 // The five original tables mirror the live Sequelize-created schema exactly: same
 // table names, column names, defaults, foreign-key actions, and index names.
 // Existing databases are used as-is (see migrate.ts); do not rename anything
-// here without a migration. ExerciseCatalog (v3 Bundle 2) is the sixth.
+// here without a migration. ExerciseCatalog (v3 Bundle 2) is the sixth, Settings
+// (v4 C2) the seventh.
 import { relations, sql } from 'drizzle-orm';
 import { index, integer, real, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sequelizeDate } from './columns.js';
@@ -23,6 +24,14 @@ export const exerciseCatalog = sqliteTable('ExerciseCatalog', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   name: text('name').notNull(),
   aliases: text('aliases', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  ...timestamps,
+});
+
+// Per-instance settings shared by every device (v4 C2, docs/v4-bundle-c2-settings.md):
+// one row per settings group, JSON value. Keys and value shapes live in routes/settings.ts.
+export const settings = sqliteTable('Settings', {
+  key: text('key').primaryKey(),
+  value: text('value', { mode: 'json' }).$type<unknown>().notNull(),
   ...timestamps,
 });
 
@@ -159,6 +168,7 @@ export const setsRelations = relations(sets, ({ one }) => ({
 
 // ---- Row types ----
 
+export type SettingRow = typeof settings.$inferSelect;
 export type CatalogEntry = typeof exerciseCatalog.$inferSelect;
 export type NewCatalogEntry = typeof exerciseCatalog.$inferInsert;
 export type Program = typeof programs.$inferSelect;

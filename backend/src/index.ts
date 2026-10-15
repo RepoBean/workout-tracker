@@ -9,6 +9,8 @@ import workoutsRouter from './routes/workouts.js';
 import exercisesRouter from './routes/exercises.js';
 import sessionsRouter from './routes/sessions.js';
 import catalogRouter from './routes/catalog.js';
+import settingsRouter, { settingsJsonParser } from './routes/settings.js';
+import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -25,6 +27,9 @@ app.use(cors({
   origin: corsOrigins,
   credentials: true
 }));
+// Settings carry the coach thread (up to ~300 KB), so they get their own parser,
+// mounted before the global 100 KB one would reject the body.
+app.use('/api/settings', settingsJsonParser, settingsRouter);
 app.use(express.json());
 
 // Serve frontend build
@@ -52,10 +57,7 @@ app.use((req: express.Request, res: express.Response, next: express.NextFunction
 });
 
 // Global error handler
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({ error: 'Internal server error' });
-});
+app.use(errorHandler);
 
 // Initialize database and start server
 function start() {

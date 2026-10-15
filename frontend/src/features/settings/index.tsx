@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useUserProfile } from '../../shared/context/UserProfileContext';
 import { useProgression } from '../../shared/context/ProgressionContext';
@@ -61,6 +61,19 @@ export default function Settings() {
   const [maxHrStr, setMaxHrStr] = useState(toInputString(profile.maxHrOverride));
   const [bodyweightStr, setBodyweightStr] = useState(toInputString(profile.bodyweight));
   const [errors, setErrors] = useState<FieldErrors>({});
+
+  // The form copies the profile. Re-copy when it changes: after mount that is only the
+  // server settings arriving (the page may open first) or this form's own save, so a save
+  // can never push pre-hydration values back to the server.
+  useEffect(() => {
+    setDobStr(profile.dob ?? '');
+    setSex(profile.sex);
+    setRestingHrStr(toInputString(profile.restingHr));
+    setMaxHrStr(toInputString(profile.maxHrOverride));
+  }, [profile]);
+  useEffect(() => {
+    setIncrementStr(String(progression.incrementLbs));
+  }, [progression.incrementLbs]);
 
   function parseAndValidate(): { profile: UserProfile; errors: FieldErrors } {
     const next: UserProfile = {

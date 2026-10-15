@@ -8,6 +8,7 @@
 #   WT_SNAPSHOT_STRIP=catalogId,other  drop those keys at any depth before writing,
 #                                      so a bundle that only ADDS a field can still
 #                                      diff empty against the old image.
+# Never add /api/settings here: it serves the coach API key (v4 C2).
 source "$(dirname "${BASH_SOURCE[0]}")/lib/common.sh"
 
 require_instance "${1:-}"; shift

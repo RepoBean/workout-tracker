@@ -120,7 +120,7 @@ Technical facts behind the Android decision (so nobody re-litigates them):
 - [ ] Supersedes old "Item 6 ad-hoc id hardening" from the May frontend plan.
 
 ### Bundle 4 — Settings + bodyweight
-- [ ] `Settings` key/value (or Profile) table: DOB, sex, resting/max HR, progression settings. **Coach API key stays browser-only by default** (decide explicitly). Theme stays local.
+- [ ] `Settings` key/value (or Profile) table: DOB, sex, resting/max HR, progression settings. **Coach API key stays browser-only by default** (decide explicitly). Theme stays local. *(Superseded: v4 C2 (2026-10-15) built the Settings table and moved the coach API key and thread to the server; see `docs/v4-plan.md` §1.)*
 - [ ] `BodyweightLog` (date, lbs). Makes the assisted-lift plan's effective-weight calc honest over time.
 - [x] **Assisted lifts shipped early (2026-09-28)** with the sign-as-notation approach (`weight < 0`) and a single profile bodyweight (localStorage). A `BodyweightLog` would make old assisted sets' effective loads honest over time; `effectiveWeight()` is the one place to swap in a dated lookup.
 

@@ -12,6 +12,8 @@ import workoutsRouter from '../src/routes/workouts.js';
 import exercisesRouter from '../src/routes/exercises.js';
 import sessionsRouter from '../src/routes/sessions.js';
 import catalogRouter from '../src/routes/catalog.js';
+import settingsRouter, { settingsJsonParser } from '../src/routes/settings.js';
+import { errorHandler } from '../src/middleware/errorHandler.js';
 
 if (process.env.DB_PATH !== ':memory:') {
   throw new Error('Tests must run against an in-memory database (see test/setup.ts)');
@@ -22,19 +24,21 @@ bootstrap(sqlite);
 
 export function createTestApp() {
   const app = express();
+  app.use('/api/settings', settingsJsonParser, settingsRouter);
   app.use(express.json());
   app.use('/api/programs', programsRouter);
   app.use('/api/workouts', workoutsRouter);
   app.use('/api/exercises', exercisesRouter);
   app.use('/api/sessions', sessionsRouter);
   app.use('/api/catalog', catalogRouter);
+  app.use(errorHandler);
   return app;
 }
 
 /** Empty every table and reset autoincrement — call in beforeEach for a clean slate. */
 export async function resetDb() {
   sqlite.pragma('foreign_keys = OFF');
-  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs', 'ExerciseCatalog']) {
+  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs', 'ExerciseCatalog', 'Settings']) {
     sqlite.exec(`DELETE FROM "${table}"`);
   }
   sqlite.exec('DELETE FROM sqlite_sequence');

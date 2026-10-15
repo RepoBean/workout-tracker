@@ -6,8 +6,8 @@ import * as schema from '../src/db/schema.js';
 import { LIVE_DDL, PRE_LEGACY_DDL } from './fixtures/liveDdl.js';
 
 
-const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog'];
-const MIGRATIONS = 4; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index
+const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings'];
+const MIGRATIONS = 5; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
@@ -19,6 +19,7 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   Sets: ['id', 'sessionId', 'exerciseId', 'exerciseName', 'weight', 'reps', 'setNumber', 'perceivedEffort',
     'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt', 'catalogId'],
   ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt'],
+  Settings: ['key', 'value', 'createdAt', 'updatedAt'],
 };
 
 // What 0002's ALTER TABLE ... ADD appends to a table's stored DDL.
@@ -46,7 +47,7 @@ function fresh(ddl = '') {
 }
 
 describe('bootstrap on a fresh database', () => {
-  it('creates all six tables with every column, records every migration, and is idempotent', () => {
+  it('creates all seven tables with every column, records every migration, and is idempotent', () => {
     const db = fresh();
     bootstrap(db);
 
@@ -67,7 +68,7 @@ describe('bootstrap on a fresh database', () => {
 });
 
 describe('bootstrap on the live (Sequelize-created) schema', () => {
-  it('adds only the migrations table, the indexes, the catalog table and the two catalogId columns', () => {
+  it('adds only the migrations table, the indexes, the catalog + settings tables and the two catalogId columns', () => {
     const db = fresh(LIVE_DDL);
     const before = schemaObjects(db);
 
@@ -81,6 +82,7 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
       .sort();
     expect(added).toEqual([
       'ExerciseCatalog',
+      'Settings',
       '__drizzle_migrations',
       'catalog_name_lower',
       'exercises_catalog_id',

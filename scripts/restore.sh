@@ -31,7 +31,8 @@ names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='ta
 need = {"Programs","Workouts","Exercises","Sessions","Sets"}
 if integ != "ok": print("BAD integrity: " + integ); sys.exit(1)
 if not need <= names: print("BAD missing tables: " + ",".join(sorted(need - names))); sys.exit(1)
-counts = {t: db.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in sorted(need)}
+# Required set stays the original five so a pre-v3 backup still restores; newer tables are counted when present.
+counts = {t: db.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in sorted(need) + [t for t in ["ExerciseCatalog","Settings"] if t in names]}
 print(" ".join(f"{k}={v}" for k, v in counts.items()))
 PY
 )" || die "backup file failed validation: $CHECK"

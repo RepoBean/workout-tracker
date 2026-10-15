@@ -40,7 +40,7 @@ v3 (`docs/v3-plan.md` §2) — the line now is *data and lookups on the server, 
 
 | Rule | Constraint |
 |------|------------|
-| Tables | Six: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog. A new table needs a written case in `docs/` first (v3 allowed exactly one; `SessionExercises` was parked on 2026-09-28) |
+| Tables | Seven: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog, Settings (case: `docs/v4-bundle-c2-settings.md` §2). A new table needs a written case in `docs/` first (v3 allowed exactly one; `SessionExercises` was parked on 2026-09-28) |
 | Database | SQLite only. Schema changes are drizzle-kit SQL migrations in `backend/drizzle/`, applied at boot, **additive until an explicit cutover**. Never hand-edit the live DB. Dates stay in Sequelize's text format |
 | Compatibility | The API only ever **gains** fields. An older frontend/APK must keep working against a newer backend, and an older backend image must boot on a newer DB (rollback = old tag, no restore) |
 | Instances | One checkout, three compose profiles (main / wife / staging). Every change ships staging → main → wife, same commit. Never `docker compose down -v` |
@@ -48,7 +48,7 @@ v3 (`docs/v3-plan.md` §2) — the line now is *data and lookups on the server, 
 | Design | Mobile-first — this runs on a phone at the gym |
 | Units | Pounds (lbs). A kg toggle, if ever, is display-only |
 | Auth | None — self-hosted behind VPN |
-| Scope | No multi-user, no cloud sync, no offline mode, no cross-device resume (decided 2026-09-28; do not re-propose) |
+| Scope | No multi-user, no cloud sync, no offline mode, no cross-device resume (decided 2026-09-28; do not re-propose). Sharing settings between one instance's devices through its own server (v4 C2) is not cloud sync |
 
 ---
 
@@ -77,6 +77,8 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
          createdAt, updatedAt)
 
 ExerciseCatalog (id, name, aliases, createdAt, updatedAt)   ← Exercise.catalogId, Set.catalogId
+
+Settings (key, value, createdAt, updatedAt)   ← key ∈ profile | progression | aiCoach | coachThread, value JSON
 ```
 
 ### Key Patterns
@@ -218,7 +220,8 @@ src/
 │       │   ├── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
 │       │   └── CoachMarkdown.tsx        # Markdown renderer for assistant bubbles
 │       ├── hooks/
-│       │   └── useCoachDossier.ts     # Assembles the preloaded dossier (memoized all-time block)
+│       │   ├── useCoachDossier.ts     # Assembles the preloaded dossier (memoized all-time block)
+│       │   └── useThreadSync.ts       # Coach thread ↔ server (updatedAt check, 409 → reload)
 │       ├── lib/
 │       │   ├── dossier.ts             # Pure dossier builders — the coach's whole view (+ tests)
 │       │   ├── providers/
@@ -230,7 +233,7 @@ src/
 │       │   ├── coachLoop.ts           # Neutral agentic loop (tool calls)
 │       │   ├── tools.ts               # get_workout_history + propose_program (read-only)
 │       │   ├── persona.ts             # System prompt
-│       │   └── thread.ts              # localStorage thread persistence
+│       │   └── thread.ts              # Thread persistence (localStorage cache; server via useThreadSync)
 │       └── index.tsx                  # Coach page entry
 │
 ├── shared/
@@ -256,6 +259,7 @@ src/
 │   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
+│   │   ├── settingsSync.ts        # /api/settings GET/PUT, last-synced markers, reconcile() (+ tests)
 │   │   ├── liftTrend.ts           # Stall run + lift status (coach + Progress share it), localToday (+ tests)
 │   │   ├── localDate.ts           # localDateKey — local YYYY-MM-DD from a Date or ISO string (never slice UTC) (+ tests)
 │   │   ├── oneRepMax.ts           # Epley 1RM estimate
@@ -272,9 +276,10 @@ src/
 │       ├── OfflineContext.tsx     # Online/offline status
 │       ├── ThemeContext.tsx       # Dark mode state
 │       ├── HeartRateContext.tsx   # HR strap connection (via hrTransport) + live samples
-│       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones)
-│       ├── ProgressionContext.tsx # Auto-progression settings (enabled, increment)
-│       └── AiCoachContext.tsx     # AI Coach settings + enabled state
+│       ├── SettingsSyncContext.tsx # Page-load /api/settings GET + useServerBacked (reconcile, debounced write-through)
+│       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones); server-backed except bodyweight
+│       ├── ProgressionContext.tsx # Auto-progression settings (enabled, increment); server-backed
+│       └── AiCoachContext.tsx     # AI Coach settings + enabled state; server-backed (key included)
 │
 ├── App.tsx                        # Router setup + context providers
 └── main.tsx                       # Entry point
@@ -296,7 +301,8 @@ backend/
 │   │   ├── workouts.ts      # CRUD for workouts
 │   │   ├── exercises.ts     # CRUD for exercises
 │   │   ├── sessions.ts      # CRUD for sessions + sets
-│   │   └── catalog.ts       # Exercise catalog: list (with counts), merge, split
+│   │   ├── catalog.ts       # Exercise catalog: list (with counts), merge, split
+│   │   └── settings.ts      # Per-instance settings: GET all, PUT one key (own 1 MB parser; coachThread 409 check)
 │   ├── db/
 │   │   ├── schema.ts        # Drizzle tables + relations (mirrors the live DDL exactly) + row types
 │   │   ├── columns.ts       # sequelizeDate custom column (Sequelize text date format, read + write)
@@ -306,7 +312,8 @@ backend/
 │   │   └── queries/
 │   │       └── setsByName.ts # Name → catalog → sets by catalogId (previous hints, PR check); name fallback
 │   ├── middleware/
-│   │   └── validate.ts      # Zod schema validation (body + URL params)
+│   │   ├── validate.ts      # Zod schema validation (body + URL params)
+│   │   └── errorHandler.ts  # Last-resort handler: body-parser errors → 400/413, never logs the body
 │   └── index.ts             # Express app setup
 ├── drizzle/                 # drizzle-kit SQL migrations + meta/ (committed; copied into the image)
 ├── drizzle.config.ts
@@ -375,6 +382,8 @@ backend/
 | GET | /api/catalog | Exercise catalog: `{id, name, aliases, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
 | POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
 | POST | /api/catalog/:id/split | Split `{ alias }` off `:id` into its own entry again (exact inverse of merge) |
+| GET | /api/settings | `{ profile, progression, aiCoach, coachThread }`, each `{ value, updatedAt }` or **null** if never stored (no defaults). Only place the coach API key is served |
+| PUT | /api/settings/:key | `{ value, baseUpdatedAt? }`; value validated per key (unknown fields stripped). Last write wins, except `coachThread`: `baseUpdatedAt` required, mismatch → 409 `{ current }` |
 
 ---
 
@@ -492,10 +501,10 @@ backend/
 - Neutral agentic loop (`coachLoop.ts`) handles tool call cycles across providers
 - Read-only tools (`tools.ts`) over existing `/api` endpoints — the AI never writes the database
 - "Build a program" flow emits version-1 export JSON into the existing import preview Modal (reuses the existing import path)
-- Conversation thread persisted in localStorage
+- Conversation thread on the instance's server (v4 C2), localStorage as the cache
 - Google AI Studio routed through `/ai-proxy/google/` nginx+Vite same-origin proxy (avoids CORS)
 - Settings card: provider selector, model picker with live `listModels` fetch + free-text fallback, API key input, thread clear button
-- Config in `shared/context/AiCoachContext.tsx`; backend untouched
+- Config in `shared/context/AiCoachContext.tsx`, stored on the server with the key in plain text (v4 C2; VPN-only)
 
 ### 17. Coach Dossier (preloaded context)
 - The coach's data is **pushed into the system prompt**, not pulled through tools. Measured on
@@ -553,6 +562,20 @@ backend/
   The server creates it completed and ad-hoc — never active, never advances the rotation
 - Dates shown per day are **local** (`shared/lib/localDate.ts`); backends run `TZ=America/New_York` for the
   CSV date and `/stats` streak. Bundle doc: `docs/v4-bundle-c1-history-edit.md`
+
+### 22. Server-side settings (v4 C2)
+- Profile (not bodyweight — stays per device until C3), progression, coach config (API key included,
+  plain text) and the coach thread live in the `Settings` table, so the phone and the browser agree.
+  Theme, timer, server URL, HR strap, the dossier memo and per-session keys stay per device
+- localStorage is still the synchronous cache: contexts render from it, reconcile once per page load
+  (`reconcile()` in `shared/lib/settingsSync.ts`, with per-device last-synced markers in
+  `wt:settings-synced`), then write through (debounced 800 ms, flushed on hide). Server empty →
+  upload local (first device wins); server changed elsewhere → server wins; server unchanged but
+  local changed (failed write / rollback window) → upload
+- An older backend 404s `/api/settings` → silently local-only. The coach page waits for settings and
+  a fresh thread fetch; thread PUTs carry `baseUpdatedAt`, a 409 reloads the server's thread (toast)
+- `seed-staging.sh` blanks the API key and deletes the thread in staging's copy. Never add settings to
+  `api-snapshot.sh`. Bundle doc: `docs/v4-bundle-c2-settings.md`
 
 ---
 

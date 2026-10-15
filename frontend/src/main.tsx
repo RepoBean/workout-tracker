@@ -5,6 +5,7 @@ import { ThemeProvider } from './shared/context/ThemeContext';
 import { TimerProvider } from './shared/context/TimerContext';
 import { OfflineProvider } from './shared/context/OfflineContext';
 import { HeartRateProvider } from './shared/context/HeartRateContext';
+import { SettingsSyncProvider } from './shared/context/SettingsSyncContext';
 import { UserProfileProvider } from './shared/context/UserProfileContext';
 import { ProgressionProvider } from './shared/context/ProgressionContext';
 import { AiCoachProvider } from './shared/context/AiCoachContext';
@@ -50,15 +51,17 @@ createRoot(document.getElementById('root')!).render(
         <OfflineProvider>
           <TimerProvider>
             <HeartRateProvider>
-              <UserProfileProvider>
-                <ProgressionProvider>
-                  <AiCoachProvider>
-                    <ToastProvider>
-                      <App />
-                    </ToastProvider>
-                  </AiCoachProvider>
-                </ProgressionProvider>
-              </UserProfileProvider>
+              <SettingsSyncProvider>
+                <UserProfileProvider>
+                  <ProgressionProvider>
+                    <AiCoachProvider>
+                      <ToastProvider>
+                        <App />
+                      </ToastProvider>
+                    </AiCoachProvider>
+                  </ProgressionProvider>
+                </UserProfileProvider>
+              </SettingsSyncProvider>
             </HeartRateProvider>
           </TimerProvider>
         </OfflineProvider>

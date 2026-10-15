@@ -24,30 +24,39 @@ export function loadThread(): DisplayMessage[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (m): m is DisplayMessage =>
-          m &&
-          typeof m === 'object' &&
-          (m.role === 'user' || m.role === 'assistant') &&
-          typeof m.content === 'string'
-      )
-      .map((m) => {
-        const error =
-          m.error === true ||
-          (m.role === 'assistant' && m.content.startsWith(LEGACY_ERROR_PREFIX));
-        return error ? { role: m.role, content: m.content, error } : { role: m.role, content: m.content };
-      });
+    return normalizeThread(JSON.parse(raw));
   } catch {
     return [];
   }
 }
 
+/** The stored window of a thread (localStorage and the server keep the same 40). */
+export function storedThread(messages: DisplayMessage[]): DisplayMessage[] {
+  return messages.slice(-MAX_STORED);
+}
+
+/** Validate a parsed thread from localStorage or the server; drops anything malformed. */
+export function normalizeThread(parsed: unknown): DisplayMessage[] {
+  if (!Array.isArray(parsed)) return [];
+  return parsed
+    .filter(
+      (m): m is DisplayMessage =>
+        m &&
+        typeof m === 'object' &&
+        (m.role === 'user' || m.role === 'assistant') &&
+        typeof m.content === 'string'
+    )
+    .map((m) => {
+      const error =
+        m.error === true ||
+        (m.role === 'assistant' && m.content.startsWith(LEGACY_ERROR_PREFIX));
+      return error ? { role: m.role, content: m.content, error } : { role: m.role, content: m.content };
+    });
+}
+
 export function saveThread(messages: DisplayMessage[]): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(messages.slice(-MAX_STORED)));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedThread(messages)));
   } catch {
     // ignore quota errors
   }

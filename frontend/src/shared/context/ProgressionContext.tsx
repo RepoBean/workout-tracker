@@ -1,4 +1,6 @@
 import { createContext, useCallback, useContext, useState, ReactNode } from 'react';
+import { stableJson } from '../lib/settingsSync';
+import { useServerBacked } from './SettingsSyncContext';
 
 export interface ProgressionSettings {
   enabled: boolean;
@@ -16,22 +18,36 @@ const STORAGE_KEY = 'workout-tracker-progression';
 
 export const DEFAULT_PROGRESSION: ProgressionSettings = { enabled: false, incrementLbs: 5 };
 
+function normalizeSettings(value: unknown): ProgressionSettings {
+  const obj = (value && typeof value === 'object' ? value : {}) as Partial<ProgressionSettings>;
+  const incrementLbs =
+    typeof obj.incrementLbs === 'number' && obj.incrementLbs > 0
+      ? obj.incrementLbs
+      : DEFAULT_PROGRESSION.incrementLbs;
+  return {
+    enabled: obj.enabled === true,
+    incrementLbs,
+  };
+}
+
 function parseSettings(raw: string | null): ProgressionSettings {
   if (!raw) return DEFAULT_PROGRESSION;
   try {
-    const obj = JSON.parse(raw) as Partial<ProgressionSettings>;
-    const incrementLbs =
-      typeof obj.incrementLbs === 'number' && obj.incrementLbs > 0
-        ? obj.incrementLbs
-        : DEFAULT_PROGRESSION.incrementLbs;
-    return {
-      enabled: obj.enabled === true,
-      incrementLbs,
-    };
+    return normalizeSettings(JSON.parse(raw));
   } catch {
     return DEFAULT_PROGRESSION;
   }
 }
+
+function saveSettings(settings: ProgressionSettings) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+const DEFAULT_JSON = stableJson(DEFAULT_PROGRESSION);
 
 export function ProgressionProvider({ children }: { children: ReactNode }) {
   const [settings, setSettingsState] = useState<ProgressionSettings>(() => {
@@ -39,14 +55,24 @@ export function ProgressionProvider({ children }: { children: ReactNode }) {
     return parseSettings(localStorage.getItem(STORAGE_KEY));
   });
 
+  const { changed } = useServerBacked({
+    key: 'progression',
+    value: settings,
+    toServer: (s) => s,
+    isDefault: (s) => stableJson(s) === DEFAULT_JSON,
+    applyServer: (serverValue) => {
+      const next = normalizeSettings(serverValue);
+      setSettingsState(next);
+      saveSettings(next);
+      return next;
+    },
+  });
+
   const setSettings = useCallback((next: ProgressionSettings) => {
     setSettingsState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // ignore quota errors
-    }
-  }, []);
+    saveSettings(next);
+    changed(next);
+  }, [changed]);
 
   return (
     <ProgressionContext.Provider value={{ settings, setSettings }}>

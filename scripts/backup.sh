@@ -36,7 +36,10 @@ HOST_CHECK="$(python3 - "$OUT" <<'PY'
 import sqlite3, sys
 db = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 integ = db.execute("PRAGMA integrity_check").fetchone()[0]
-counts = {t: db.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in ["Programs","Workouts","Exercises","Sessions","Sets"]}
+names = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+# ExerciseCatalog (v3) and Settings (v4 C2) are counted when present, so older DBs still back up.
+tables = ["Programs","Workouts","Exercises","Sessions","Sets"] + [t for t in ["ExerciseCatalog","Settings"] if t in names]
+counts = {t: db.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0] for t in tables}
 print(("ok" if integ == "ok" else "BAD:" + integ) + " " + " ".join(f"{k}={v}" for k, v in counts.items()))
 PY
 )"

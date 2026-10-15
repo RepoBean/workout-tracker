@@ -12,6 +12,9 @@ import { runCoach } from './lib/coachLoop';
 import { describeCoachError } from './lib/errorMessage';
 import { COACH_SYSTEM_PROMPT } from './lib/persona';
 import { useCoachDossier } from './hooks/useCoachDossier';
+import { useThreadSync } from './hooks/useThreadSync';
+import { useSettingsHydrated } from '../../shared/context/SettingsSyncContext';
+import { useToast } from '../../shared/ui/Toast';
 import {
   DisplayMessage,
   clearThread,
@@ -68,6 +71,15 @@ export default function Coach() {
     saveThread(thread);
   }, [thread]);
 
+  const toast = useToast();
+  const settingsHydrated = useSettingsHydrated();
+  const { ready: threadReady } = useThreadSync({
+    thread,
+    setThread,
+    busy,
+    onConflict: () => toast.info('Coach chat changed on another device — reloaded'),
+  });
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [thread, draft, toolStatus]);
@@ -77,7 +89,8 @@ export default function Coach() {
 
   // The persona promises a dossier follows; never call the provider without one. A thread
   // already in flight keeps its pinned copy even if the live one is momentarily rebuilding.
-  const canSend = isReady || pinnedDossierRef.current !== null;
+  // Settings (profile, progression → the dossier) and the thread come from the server first.
+  const canSend = (isReady || pinnedDossierRef.current !== null) && settingsHydrated && threadReady;
 
   async function send(text: string) {
     const content = text.trim();
