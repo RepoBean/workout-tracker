@@ -1,6 +1,6 @@
 # v4 Bundle C4: Progression (better rule, per-exercise step, deload) + coach program edits
 
-Status: **on staging 2026-10-16 (code `c04127a` + fixes `8f6bc1c`, `03302dd`); main pending Jason's OK; wife later.** Written 2026-10-16 at `046d986`, from
+Status: **shipped to staging + main 2026-10-16 (`36e7fa2`; code `c04127a` + fixes `8f6bc1c`, `03302dd`); wife later.** Written 2026-10-16 at `046d986`, from
 `docs/v4-plan.md` §2 C4 re-checked against the code and **replayed against main's history** that day.
 The plan's "linear scheme" was dropped after that replay (§2); line numbers are from that read.
 
