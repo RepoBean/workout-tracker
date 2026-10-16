@@ -60,7 +60,10 @@ export function useApplyProgramEdit() {
             }));
           }
 
-          const base = (w.workout?.exercises?.length ?? 0) - w.removes.length;
+          // After the highest kept slot, not the count: removals leave gaps in orderIndex.
+          const removed = new Set(w.removes.map((e) => e.id));
+          const kept = (w.workout?.exercises ?? []).filter((e) => !removed.has(e.id));
+          const base = Math.max(-1, ...kept.map((e) => e.orderIndex)) + 1;
           const addedIds: number[] = [];
           for (const [i, a] of w.adds.entries()) {
             const { data } = await step(api.post<Exercise>('/exercises', {
