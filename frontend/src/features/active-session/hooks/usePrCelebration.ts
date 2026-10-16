@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { api } from '../../../shared/api/client';
-import { queryKeys, type ExerciseAllSet } from '../../../shared/api/queries';
+import { fetchExerciseAllSets, queryKeys } from '../../../shared/api/queries';
 import type { Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
@@ -49,13 +48,7 @@ export function usePrCelebration(sessionId: number) {
       try {
         const data = await queryClient.fetchQuery({
           queryKey: queryKeys.exerciseAllSets(savedSet.exerciseName),
-          queryFn: async () => {
-            const { data } = await api.get<{ sets: ExerciseAllSet[] }>(
-              '/exercises/all-sets-by-name',
-              { params: { name: savedSet.exerciseName } }
-            );
-            return data;
-          },
+          queryFn: () => fetchExerciseAllSets(savedSet.exerciseName),
           staleTime: 5 * 60 * 1000,
         });
         const preSessionBest = computeBestOneRepMax(data.sets, bodyweightAt);

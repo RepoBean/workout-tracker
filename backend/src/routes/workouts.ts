@@ -166,6 +166,7 @@ router.post('/:id/duplicate', validateParams(idParamSchema), async (req: Request
           cardioModality: e.cardioModality || null,
           targetDurationSec: e.targetDurationSec ?? null,
           targetDistance: e.targetDistance ?? null,
+          incrementLbs: e.incrementLbs ?? null,
           createdAt: ts,
           updatedAt: ts,
         }).run();

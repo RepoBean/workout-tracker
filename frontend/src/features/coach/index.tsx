@@ -1,10 +1,12 @@
+import { ProgramEditPreview } from './components/ProgramEditPreview';
+import type { ProgramEditPlan } from './lib/programEdit';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAiCoach, isCoachReady } from '../../shared/context/AiCoachContext';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
 import type { ProgramExportPayload } from '../../shared/api/types';
-import { exerciseTargetSummary } from '../../shared/api/cardio';
+import { exerciseTargetSummary, stepSuffix } from '../../shared/api/cardio';
 import { useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
 import { createCoachToolset } from './lib/tools';
@@ -53,6 +55,7 @@ export default function Coach() {
   const [toolStatus, setToolStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [importPreview, setImportPreview] = useState<ProgramExportPayload | null>(null);
+  const [editPreview, setEditPreview] = useState<ProgramEditPlan | null>(null);
 
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -63,7 +66,7 @@ export default function Coach() {
   const pinnedDossierRef = useRef<string | null>(null);
 
   const toolset = useMemo(
-    () => createCoachToolset({ onProposeProgram: setImportPreview }),
+    () => createCoachToolset({ onProposeProgram: setImportPreview, onProposeEdit: setEditPreview }),
     []
   );
 
@@ -293,7 +296,7 @@ export default function Coach() {
                           )}
                           {e.name}
                         </span>
-                        <span className="shrink-0 tabular-nums">{exerciseTargetSummary(e)}</span>
+                        <span className="shrink-0 tabular-nums">{exerciseTargetSummary(e)}{stepSuffix(e)}</span>
                       </li>
                     ))}
                   </ul>
@@ -314,6 +317,8 @@ export default function Coach() {
           </div>
         )}
       </Modal>
+
+      <ProgramEditPreview plan={editPreview} onClose={() => setEditPreview(null)} />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { Input } from '../../../shared/ui/Input';
 import { useExerciseSuggestions } from '../../../shared/api/queries';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { CARDIO_MODALITY_OPTIONS } from '../../../shared/api/cardio';
+import { useProgression } from '../../../shared/context/ProgressionContext';
 import type { CardioModality, Exercise, ExerciseType } from '../../../shared/api/types';
 
 const ALL_GROUPS = ['A', 'B', 'C', 'D', 'E'] as const;
@@ -30,6 +31,12 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
   const [targetDistance, setTargetDistance] = useState(
     exercise?.targetDistance != null ? String(exercise.targetDistance) : ''
   );
+  // Advanced: the slot's own progression step (blank = the global Settings increment).
+  const [incrementStr, setIncrementStr] = useState(
+    exercise?.incrementLbs != null ? String(exercise.incrementLbs) : ''
+  );
+  const [showAdvanced, setShowAdvanced] = useState(exercise?.incrementLbs != null);
+  const { settings: progression } = useProgression();
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [nextOrderIndex, setNextOrderIndex] = useState(orderIndex);
 
@@ -75,6 +82,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         cardioModality,
         targetDurationSec: hasDuration ? Math.round(durationMin * 60) : null,
         targetDistance: hasDistance ? distance : null,
+        incrementLbs: exercise?.incrementLbs ?? null,
       };
 
       if (isEditing) {
@@ -102,9 +110,13 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
 
     const setsNum = parseInt(targetSets);
     if (isNaN(setsNum) || setsNum < 1 || !targetReps.trim()) return;
+    const parsedStep = incrementStr.trim() ? parseFloat(incrementStr) : null;
+    if (parsedStep !== null && !(parsedStep > 0 && parsedStep <= 100)) return;
 
     const group = supersetGroup || null;
 
+    // The PUT always carries the whole exercise, never just the C4 field: an older backend
+    // strips incrementLbs and would 400 a body left empty (refine keys > 0).
     if (isEditing) {
       updateExercise.mutate({
         id: exercise.id,
@@ -116,6 +128,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         cardioModality: null,
         targetDurationSec: null,
         targetDistance: null,
+        incrementLbs: parsedStep,
       }, { onSuccess: onClose });
     } else {
       createExercise.mutate({
@@ -126,6 +139,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
         orderIndex: nextOrderIndex,
         supersetGroup: group,
         exerciseType: 'strength',
+        incrementLbs: parsedStep,
       }, {
         onSuccess: () => {
           if (action === 'close') {
@@ -135,6 +149,7 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             setTargetSets('3');
             setTargetReps('10');
             setSupersetGroup('');
+            setIncrementStr('');
             setNextOrderIndex(prev => prev + 1);
           }
         }
@@ -311,6 +326,37 @@ export function ExerciseForm({ workoutId, exercise, orderIndex, onClose, existin
             )}
           </div>
         </div>
+        )}
+
+        {!isCardio && (
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdvanced(v => !v)}
+              aria-expanded={showAdvanced}
+              className="flex items-center gap-1 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200"
+            >
+              <span aria-hidden className={`inline-block transition-transform ${showAdvanced ? 'rotate-90' : ''}`}>›</span>
+              Advanced
+            </button>
+            {showAdvanced && (
+              <div className="mt-2">
+                <Input
+                  label="Weight step (lb)"
+                  type="number"
+                  inputMode="decimal"
+                  value={incrementStr}
+                  onChange={(e) => setIncrementStr(e.target.value)}
+                  placeholder={`Default (${progression.incrementLbs})`}
+                  step="0.5"
+                  min={0}
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  How much auto-progression adds when you earn it. Blank uses the Settings value.
+                </p>
+              </div>
+            )}
+          </div>
         )}
 
         <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100 dark:border-white/[0.06]">

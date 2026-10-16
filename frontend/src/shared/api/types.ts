@@ -39,6 +39,8 @@ export interface Exercise {
   targetDurationSec: number | null;
   targetDistance: number | null; // miles
   catalogId: number | null; // derived from name by the server; null only on virtual (ad-hoc) exercises
+  /** Progression weight step for this slot; null = the global setting. Absent from a pre-C4 backend. */
+  incrementLbs?: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -216,6 +218,7 @@ export interface CreateExerciseRequest {
   cardioModality?: CardioModality | null;
   targetDurationSec?: number | null;
   targetDistance?: number | null;
+  incrementLbs?: number | null;
 }
 
 export interface UpdateExerciseRequest {
@@ -228,6 +231,7 @@ export interface UpdateExerciseRequest {
   cardioModality?: CardioModality | null;
   targetDurationSec?: number | null;
   targetDistance?: number | null;
+  incrementLbs?: number | null;
 }
 
 // ============================================
@@ -256,6 +260,7 @@ export interface ProgramExportExercise {
   cardioModality?: CardioModality | null;
   targetDurationSec?: number | null;
   targetDistance?: number | null;
+  incrementLbs?: number | null;
 }
 
 export interface ProgramExportWorkout {

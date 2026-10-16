@@ -72,7 +72,7 @@ describe('response shapes', () => {
       'createdAt', 'exercises', 'id', 'name', 'orderIndex', 'programId', 'updatedAt',
     ]);
     expect(Object.keys(bench).sort()).toEqual([
-      'cardioModality', 'catalogId', 'createdAt', 'exerciseType', 'id', 'name', 'orderIndex', 'supersetGroup',
+      'cardioModality', 'catalogId', 'createdAt', 'exerciseType', 'id', 'incrementLbs', 'name', 'orderIndex', 'supersetGroup',
       'targetDistance', 'targetDurationSec', 'targetReps', 'targetSets', 'updatedAt', 'workoutId',
     ]);
     expect(program.isActive).toBe(false);
@@ -451,6 +451,7 @@ describe('workouts', () => {
     expect(res.body.program.workouts[0].exercises[0]).toEqual({
       name: 'Bench Press', targetSets: 3, targetReps: '8-10', orderIndex: 0, supersetGroup: null,
       exerciseType: 'strength', cardioModality: null, targetDurationSec: null, targetDistance: null,
+      incrementLbs: null,
     });
   });
 });

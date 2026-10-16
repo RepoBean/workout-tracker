@@ -29,6 +29,11 @@ export const CARDIO_MODALITY_OPTIONS: { value: CardioModality; label: string }[]
  * Target summary for an exercise row — cardio shows modality + duration/distance
  * targets instead of the placeholder "1 × 1" sets/reps it stores.
  */
+/** " · +10 lb" when the exercise has its own progression step, else "". */
+export function stepSuffix(exercise: { incrementLbs?: number | null; exerciseType?: string }): string {
+  return exercise.exerciseType !== 'cardio' && exercise.incrementLbs ? ` · +${exercise.incrementLbs} lb` : '';
+}
+
 export function exerciseTargetSummary(
   exercise: Pick<Exercise, 'targetSets' | 'targetReps'> &
     Partial<Pick<Exercise, 'exerciseType' | 'cardioModality' | 'targetDurationSec' | 'targetDistance'>>

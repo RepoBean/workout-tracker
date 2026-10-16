@@ -9,7 +9,8 @@ import type { Exercise, Set } from '../../../shared/api/types';
 import { isCardioExercise } from '../../../shared/api/predicates';
 import { formatMMSS, formatWeight, parseDurationToSec } from '../../../shared/utils/format';
 import { useProgression } from '../../../shared/context/ProgressionContext';
-import { computeProgression } from '../logic/progression';
+import { computeProgression, couldDeload, historyFromSets } from '../logic/progression';
+import { useExerciseAllSets } from '../../../shared/api/queries';
 import { suggestReps } from '../logic/suggestReps';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
@@ -101,15 +102,22 @@ export function ExerciseCard({
   // Off by default, never for cardio. Only influences the pre-fill before the first
   // set is logged this session — once you've logged a set, that wins (see chain below).
   const noSetsLoggedYet = standardSets.length === 0;
+  const progressionOn = progressionSettings.enabled && !isCardio && !!previousHint?.sets?.length;
+  // The slot's own step, else the global one (a pre-C4 backend sends no field).
+  const incrementLbs = exercise.incrementLbs ?? progressionSettings.incrementLbs;
+  // The deload needs the lift's dated history; fetch it only when last session fell below the
+  // range, the one case the deload can fire. Same cache entry as the PR check.
+  const wantHistory = progressionOn && couldDeload(previousHint?.sets ?? [], exercise.targetReps);
+  const { data: allSets } = useExerciseAllSets(exercise.name, wantHistory);
   const progressionResult = useMemo(() => {
-    if (!progressionSettings.enabled || isCardio) return null;
-    if (!previousHint?.sets || previousHint.sets.length === 0) return null;
+    if (!progressionOn || !previousHint?.sets) return null;
     return computeProgression({
       previousSets: previousHint.sets,
       targetReps: exercise.targetReps,
-      incrementLbs: progressionSettings.incrementLbs,
+      incrementLbs,
+      history: wantHistory && allSets ? historyFromSets(allSets.sets) : undefined,
     });
-  }, [progressionSettings, isCardio, previousHint, exercise.targetReps]);
+  }, [progressionOn, previousHint, exercise.targetReps, incrementLbs, wantHistory, allSets]);
 
   // Priority: 1) Last set from THIS session, 2) Progression suggestion (pre-first-set),
   // 3) Matching set from previous session, 4) Previous session's last weight, 5) 0
@@ -544,11 +552,13 @@ export function ExerciseCard({
             {progressionResult && noSetsLoggedYet && (
               <div
                 className={`mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
-                  ${progressionResult.ready
+                  ${progressionResult.kind === 'up'
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                    : 'bg-gray-100 dark:bg-surface-800 text-gray-600 dark:text-gray-400'}`}
+                    : progressionResult.kind === 'deload'
+                      ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300'
+                      : 'bg-gray-100 dark:bg-surface-800 text-gray-600 dark:text-gray-400'}`}
               >
-                {progressionResult.ready && <span aria-hidden>📈</span>}
+                {progressionResult.kind === 'up' && <span aria-hidden>📈</span>}
                 <span>{progressionResult.reason}</span>
               </div>
             )}

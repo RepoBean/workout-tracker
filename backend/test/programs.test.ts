@@ -176,3 +176,51 @@ describe('duplicate + export round trip', () => {
     expect(Number(bike.targetDistance)).toBe(5);
   });
 });
+
+describe('incrementLbs through import / export / duplicate', () => {
+  it('keeps the step, and a v1 file without it imports as null', async () => {
+    const imported = await request(app).post('/api/programs/import').send({
+      version: 1,
+      program: {
+        name: 'Stepped',
+        workouts: [{
+          name: 'Day A', orderIndex: 0,
+          exercises: [
+            { name: 'Squat', targetSets: 3, targetReps: '5-8', orderIndex: 0, incrementLbs: 10 },
+            { name: 'Leg Curl', targetSets: 3, targetReps: '10-12', orderIndex: 1 },
+          ],
+        }],
+      },
+    });
+    expect(imported.status).toBe(201);
+    const [squat, curl] = (imported.body as ProgramWithWorkoutsAndExercises).workouts[0].exercises;
+    expect(squat.incrementLbs).toBe(10);
+    expect(curl.incrementLbs).toBeNull();
+
+    const exported = await request(app).get(`/api/programs/${imported.body.id}/export`);
+    expect(exported.body.program.workouts[0].exercises.map((e: { incrementLbs: number | null }) => e.incrementLbs))
+      .toEqual([10, null]);
+
+    const copy = await request(app).post(`/api/programs/${imported.body.id}/duplicate`);
+    expect((copy.body as ProgramWithWorkoutsAndExercises).workouts[0].exercises[0].incrementLbs).toBe(10);
+
+    const dayA = (imported.body as ProgramWithWorkoutsAndExercises).workouts[0];
+    const wCopy = await request(app).post(`/api/workouts/${dayA.id}/duplicate`);
+    expect(wCopy.body.exercises[0].incrementLbs).toBe(10);
+
+    const session = await request(app).post('/api/sessions/start').send({ workoutId: dayA.id });
+    expect(session.body.exercises[0].incrementLbs).toBe(10);
+    const fetched = await request(app).get(`/api/sessions/${session.body.id}`);
+    expect(fetched.body.exercises[0].incrementLbs).toBe(10);
+  });
+
+  it('rejects an invalid step on import', async () => {
+    const res = await request(app).post('/api/programs/import').send({
+      version: 1,
+      program: { name: 'Bad', workouts: [{ name: 'A', orderIndex: 0, exercises: [
+        { name: 'Squat', targetSets: 3, targetReps: '5', orderIndex: 0, incrementLbs: 0 },
+      ] }] },
+    });
+    expect(res.status).toBe(400);
+  });
+});

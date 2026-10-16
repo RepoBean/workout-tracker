@@ -371,7 +371,8 @@ export function buildProgramBlock(programs: Program[]): string {
         .sort((a, b) => a.orderIndex - b.orderIndex)
         .map((e) => {
           const superset = e.supersetGroup ? ` (superset ${e.supersetGroup})` : '';
-          return `${e.name} ${exerciseTargetSummary(e)}${superset}`;
+          const step = e.exerciseType !== 'cardio' && e.incrementLbs ? `, +${e.incrementLbs} lb steps` : '';
+          return `${e.name} ${exerciseTargetSummary(e)}${step}${superset}`;
         });
       lines.push(`  ${w.name}: ${exercises.join('; ') || 'no exercises'}`);
     }

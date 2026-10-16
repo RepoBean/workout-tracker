@@ -70,3 +70,42 @@ describe('param validation', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('incrementLbs (per-exercise progression step)', () => {
+  const base = { name: 'Squat', targetSets: 3, targetReps: '5-8', orderIndex: 0 };
+
+  it('defaults to null and stores a value on create', async () => {
+    const workout = await seedWorkout();
+    const plain = await request(app).post('/api/exercises').send({ ...base, workoutId: workout.id });
+    expect(plain.status).toBe(201);
+    expect(plain.body.incrementLbs).toBeNull();
+
+    const stepped = await request(app).post('/api/exercises').send({ ...base, workoutId: workout.id, incrementLbs: 10 });
+    expect(stepped.status).toBe(201);
+    expect(stepped.body.incrementLbs).toBe(10);
+  });
+
+  it('updates it alone, and clears it with null', async () => {
+    const workout = await seedWorkout();
+    const { body: ex } = await request(app).post('/api/exercises').send({ ...base, workoutId: workout.id });
+
+    const set = await request(app).put(`/api/exercises/${ex.id}`).send({ incrementLbs: 2.5 });
+    expect(set.status).toBe(200);
+    expect(set.body.incrementLbs).toBe(2.5);
+    expect(set.body.targetReps).toBe('5-8');
+
+    const other = await request(app).put(`/api/exercises/${ex.id}`).send({ targetSets: 4 });
+    expect(other.body.incrementLbs).toBe(2.5);
+
+    const cleared = await request(app).put(`/api/exercises/${ex.id}`).send({ incrementLbs: null });
+    expect(cleared.body.incrementLbs).toBeNull();
+  });
+
+  it('rejects zero, negative and over-100 steps', async () => {
+    const workout = await seedWorkout();
+    for (const incrementLbs of [0, -5, 101, 'ten']) {
+      const res = await request(app).post('/api/exercises').send({ ...base, workoutId: workout.id, incrementLbs });
+      expect(res.status).toBe(400);
+    }
+  });
+});

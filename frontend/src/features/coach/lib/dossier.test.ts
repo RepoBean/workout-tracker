@@ -504,6 +504,18 @@ describe('buildProgramBlock', () => {
     expect(out).not.toContain('1 × 1');
   });
 
+  it('shows a slot\'s own progression step', () => {
+    const stepped: Program = {
+      ...program,
+      workouts: [{
+        ...program.workouts![0],
+        exercises: [{ ...program.workouts![0].exercises![0], incrementLbs: 10, supersetGroup: 'A' }],
+      }],
+    };
+    expect(buildProgramBlock([stepped])).toContain('Goblet Squat 3 × 10-12, +10 lb steps (superset A)');
+    expect(buildProgramBlock([program])).not.toContain('lb steps');
+  });
+
   it('lists other programs and handles none active', () => {
     const archived: Program = { ...program, id: 3, name: 'Old Split', isActive: false, workouts: [] };
     expect(buildProgramBlock([program, archived])).toContain('Other programs (not active): Old Split');

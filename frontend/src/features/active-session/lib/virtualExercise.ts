@@ -26,6 +26,7 @@ export function makeVirtualExercise(
     targetDurationSec: null,
     targetDistance: null,
     catalogId: null,
+    incrementLbs: null, // virtual (ad-hoc / swap): always the global step
     createdAt: now,
     updatedAt: now,
     ...overrides,

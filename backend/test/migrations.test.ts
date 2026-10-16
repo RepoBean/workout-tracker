@@ -7,13 +7,13 @@ import { LIVE_DDL, PRE_LEGACY_DDL } from './fixtures/liveDdl.js';
 
 
 const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings', 'BodyWeights'];
-const MIGRATIONS = 6; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights
+const MIGRATIONS = 7; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights, 0006 exercise increment
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
   Workouts: ['id', 'programId', 'name', 'orderIndex', 'createdAt', 'updatedAt'],
   Exercises: ['id', 'workoutId', 'name', 'targetSets', 'targetReps', 'orderIndex', 'supersetGroup',
-    'exerciseType', 'cardioModality', 'targetDurationSec', 'targetDistance', 'createdAt', 'updatedAt', 'catalogId'],
+    'exerciseType', 'cardioModality', 'targetDurationSec', 'targetDistance', 'createdAt', 'updatedAt', 'catalogId', 'incrementLbs'],
   Sessions: ['id', 'programId', 'programName', 'workoutId', 'workoutName', 'completedAt', 'isAdHoc',
     'heartRateAvg', 'heartRateMin', 'heartRateMax', 'heartRateSeries', 'exerciseNotes', 'createdAt', 'updatedAt'],
   Sets: ['id', 'sessionId', 'exerciseId', 'exerciseName', 'weight', 'reps', 'setNumber', 'perceivedEffort',
@@ -23,9 +23,10 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   BodyWeights: ['id', 'date', 'weight', 'createdAt', 'updatedAt'],
 };
 
-// What 0002's ALTER TABLE ... ADD appends to a table's stored DDL.
+// What 0002's ALTER TABLE ... ADD appends to a table's stored DDL (and 0006 on Exercises).
 const withCatalogId = (ddl: string | null) =>
   ddl?.replace(/\)$/, ', `catalogId` integer REFERENCES ExerciseCatalog(id))');
+const withIncrement = (ddl: string | null | undefined) => ddl?.replace(/\)$/, ', `incrementLbs` real)');
 
 function columns(db: Database.Database, table: string): string[] {
   return (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map(c => c.name).sort();
@@ -69,7 +70,7 @@ describe('bootstrap on a fresh database', () => {
 });
 
 describe('bootstrap on the live (Sequelize-created) schema', () => {
-  it('adds only the migrations table, the indexes, the catalog, settings + bodyweights tables and the two catalogId columns', () => {
+  it('adds only the migrations table, the indexes, the catalog, settings + bodyweights tables, the two catalogId columns and incrementLbs', () => {
     const db = fresh(LIVE_DDL);
     const before = schemaObjects(db);
 
@@ -92,10 +93,11 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
       'sets_catalog_id',
       'sets_exercise_name_lower',
     ]);
-    // Sets and Exercises gain exactly the appended column; every other
+    // Sets and Exercises gain exactly the appended columns; every other
     // pre-existing object is byte-identical.
     for (const b of before) {
-      const expected = b.name === 'Sets' || b.name === 'Exercises' ? withCatalogId(b.sql) : b.sql;
+      const expected = b.name === 'Sets' ? withCatalogId(b.sql)
+        : b.name === 'Exercises' ? withIncrement(withCatalogId(b.sql)) : b.sql;
       expect(after.find(a => a.name === b.name)?.sql).toBe(expected);
     }
     expect(appliedMigrations(db)).toBe(MIGRATIONS);
@@ -129,6 +131,24 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
     expect(raw.createdAt).toBe('2026-09-14 12:00:00.000 +00:00');
     expect(raw.isActive).toBe(0);
     expect(raw.t).toBe('integer');
+  });
+});
+
+describe('incrementLbs (0006) and older images', () => {
+  it('leaves existing exercises NULL and accepts an insert that omits the column', () => {
+    const sqlite = fresh(LIVE_DDL);
+    sqlite.exec(`INSERT INTO Programs (name, isActive, isArchived, currentWorkoutIndex, createdAt, updatedAt)
+      VALUES ('Live', 1, 0, 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    sqlite.exec(`INSERT INTO Workouts (programId, name, orderIndex, createdAt, updatedAt)
+      VALUES (1, 'A', 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    const insertOld = `INSERT INTO Exercises (workoutId, name, targetSets, targetReps, orderIndex, createdAt, updatedAt)
+      VALUES (1, ?, 3, '8-12', 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`;
+    sqlite.prepare(insertOld).run('Squat');
+    bootstrap(sqlite);
+    // What a pre-C4 image's insert looks like: no incrementLbs column named.
+    sqlite.prepare(insertOld).run('Bench Press');
+    const rows = sqlite.prepare('SELECT name, incrementLbs FROM Exercises ORDER BY id').all();
+    expect(rows).toEqual([{ name: 'Squat', incrementLbs: null }, { name: 'Bench Press', incrementLbs: null }]);
   });
 });
 

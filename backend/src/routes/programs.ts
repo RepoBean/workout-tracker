@@ -36,6 +36,7 @@ const importExerciseSchema = z.object({
   cardioModality: z.enum(['running', 'cycling', 'treadmill', 'rowing', 'other']).nullable().optional().default(null),
   targetDurationSec: z.number().int().min(1).nullable().optional().default(null),
   targetDistance: z.number().min(0).nullable().optional().default(null),
+  incrementLbs: z.number().positive().max(100).nullable().optional().default(null),
 });
 
 const importWorkoutSchema = z.object({
@@ -112,6 +113,7 @@ function insertProgramTree(name: string, source: ImportProgram['workouts']): num
           cardioModality: e.cardioModality ?? null,
           targetDurationSec: e.targetDurationSec ?? null,
           targetDistance: e.targetDistance ?? null,
+          incrementLbs: e.incrementLbs ?? null,
           createdAt: ts,
           updatedAt: ts,
         }).run();
@@ -188,6 +190,7 @@ router.get('/:id/export', validateParams(idParamSchema), async (req: Request, re
             cardioModality: e.cardioModality || null,
             targetDurationSec: e.targetDurationSec ?? null,
             targetDistance: e.targetDistance ?? null,
+            incrementLbs: e.incrementLbs ?? null,
           })),
         })),
       },

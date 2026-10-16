@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '../../../shared/ui/Button';
 import { useProgramMutations } from '../hooks/usePrograms';
 import { ExerciseForm } from './ExerciseForm';
-import { exerciseTargetSummary } from '../../../shared/api/cardio';
+import { exerciseTargetSummary, stepSuffix } from '../../../shared/api/cardio';
 import type { Workout, Exercise } from '../../../shared/api/types';
 
 const SUPERSET_COLORS: Record<string, string> = {
@@ -181,7 +181,7 @@ export function WorkoutCard({ workout, isUpNext, onMoveUp, onMoveDown, canMoveUp
                       )}
                     </div>
                     <span className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-                      {exerciseTargetSummary(exercise)}
+                      {exerciseTargetSummary(exercise)}{stepSuffix(exercise)}
                     </span>
                   </div>
                   <svg className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

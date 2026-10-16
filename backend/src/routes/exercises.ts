@@ -15,6 +15,8 @@ const router = Router();
 
 const exerciseTypeSchema = z.enum(['strength', 'cardio']);
 const cardioModalitySchema = z.enum(['running', 'cycling', 'treadmill', 'rowing', 'other']);
+// Per-slot progression step (lbs); null = the global Settings increment
+const incrementSchema = z.number().positive().max(100).nullable();
 
 const createExerciseSchema = z.object({
   workoutId: z.number().int().positive(),
@@ -27,6 +29,7 @@ const createExerciseSchema = z.object({
   cardioModality: cardioModalitySchema.nullable().optional(),
   targetDurationSec: z.number().int().min(1).nullable().optional(),
   targetDistance: z.number().min(0).nullable().optional(),
+  incrementLbs: incrementSchema.optional(),
 }).superRefine((data, ctx) => {
   if (data.exerciseType === 'cardio') {
     const hasDuration = (data.targetDurationSec ?? 0) > 0;
@@ -51,6 +54,7 @@ const updateExerciseSchema = z.object({
   cardioModality: cardioModalitySchema.nullable().optional(),
   targetDurationSec: z.number().int().min(1).nullable().optional(),
   targetDistance: z.number().min(0).nullable().optional(),
+  incrementLbs: incrementSchema.optional(),
 }).refine(data => Object.keys(data).length > 0, {
   message: 'At least one field must be provided',
 });
@@ -162,7 +166,7 @@ router.post('/', validate(createExerciseSchema), (req: Request, res: Response) =
   try {
     const {
       workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
-      exerciseType, cardioModality, targetDurationSec, targetDistance,
+      exerciseType, cardioModality, targetDurationSec, targetDistance, incrementLbs,
     } = req.body;
 
     const workout = db.select({ id: workouts.id }).from(workouts).where(eq(workouts.id, workoutId)).get();
@@ -184,6 +188,7 @@ router.post('/', validate(createExerciseSchema), (req: Request, res: Response) =
       cardioModality: cardioModality ?? null,
       targetDurationSec: targetDurationSec ?? null,
       targetDistance: targetDistance ?? null,
+      incrementLbs: incrementLbs ?? null,
       createdAt: ts,
       updatedAt: ts,
     }).returning().get());
@@ -207,7 +212,7 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
 
     const {
       name, targetSets, targetReps, orderIndex, supersetGroup,
-      exerciseType, cardioModality, targetDurationSec, targetDistance,
+      exerciseType, cardioModality, targetDurationSec, targetDistance, incrementLbs,
     } = req.body;
 
     // A rename resolves to the catalog row for the NEW name ("this slot now does a
@@ -222,6 +227,7 @@ router.put('/:id', validateParams(idParamSchema), validate(updateExerciseSchema)
       ...(cardioModality !== undefined && { cardioModality }),
       ...(targetDurationSec !== undefined && { targetDurationSec }),
       ...(targetDistance !== undefined && { targetDistance }),
+      ...(incrementLbs !== undefined && { incrementLbs }),
       updatedAt: now(),
     }).where(eq(exercises.id, id)).returning().get());
 

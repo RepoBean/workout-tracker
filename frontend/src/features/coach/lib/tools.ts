@@ -5,8 +5,10 @@ import type {
   ProgramExportPayload,
   ProgramExportWorkout,
   ProgramExportExercise,
+  Program,
 } from '../../../shared/api/types';
 import { renderSessions } from './dossier';
+import { describePlan, planProgramEdit, type EditWorkoutInput, type ProgramEditPlan } from './programEdit';
 import type { ChatToolCall, ChatToolDef } from './providers/types';
 
 export interface CoachToolset {
@@ -17,6 +19,12 @@ export interface CoachToolset {
 }
 
 const SUPERSET_GROUPS = new Set(['A', 'B', 'C', 'D', 'E']);
+
+const STEP_PARAM = {
+  type: 'number',
+  description:
+    "Optional per-exercise weight step for auto-progression in lb (e.g. 10 for a barbell squat, 2.5 for a pin-stack machine). Leave it out to use the user's global increment.",
+};
 
 // ---------------------------------------------------------------------------
 // get_workout_history
@@ -197,11 +205,14 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-function normalizeExercise(raw: unknown, index: number): ProgramExportExercise | null {
-  const obj = asRecord(raw);
-  if (!obj) return null;
+/** Model step → a valid one (0 < step ≤ 100), null to clear, undefined when absent/junk. */
+function normalizeStep(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  return typeof value === 'number' && value > 0 && value <= 100 ? value : undefined;
+}
+
+function normalizeStrengthFields(obj: Record<string, unknown>) {
   const name = typeof obj.name === 'string' ? obj.name.trim() : '';
-  if (!name) return null;
   const targetSets =
     typeof obj.targetSets === 'number' && obj.targetSets >= 1 ? Math.round(obj.targetSets) : 3;
   const targetReps =
@@ -210,6 +221,14 @@ function normalizeExercise(raw: unknown, index: number): ProgramExportExercise |
       : String(obj.targetReps ?? '8-12').slice(0, 50);
   const supersetRaw = typeof obj.supersetGroup === 'string' ? obj.supersetGroup.toUpperCase() : null;
   const supersetGroup = supersetRaw && SUPERSET_GROUPS.has(supersetRaw) ? supersetRaw : null;
+  return { name, targetSets, targetReps, supersetGroup, incrementLbs: normalizeStep(obj.incrementLbs) };
+}
+
+function normalizeExercise(raw: unknown, index: number): ProgramExportExercise | null {
+  const obj = asRecord(raw);
+  if (!obj) return null;
+  const { name, targetSets, targetReps, supersetGroup, incrementLbs } = normalizeStrengthFields(obj);
+  if (!name) return null;
   const exerciseType = obj.exerciseType === 'cardio' ? 'cardio' : 'strength';
   return {
     name,
@@ -221,7 +240,28 @@ function normalizeExercise(raw: unknown, index: number): ProgramExportExercise |
     cardioModality: null,
     targetDurationSec: null,
     targetDistance: null,
+    incrementLbs: exerciseType === 'strength' ? incrementLbs ?? null : null,
   };
+}
+
+/** propose_program_edit input → workouts with their full new exercise lists, or null. */
+export function normalizeProgramEdit(input: Record<string, unknown>): EditWorkoutInput[] | null {
+  const workoutsRaw = Array.isArray(input.workouts) ? input.workouts : null;
+  if (!workoutsRaw) return null;
+  const workouts: EditWorkoutInput[] = [];
+  for (const raw of workoutsRaw) {
+    const w = asRecord(raw);
+    const name = w && typeof w.name === 'string' ? w.name.trim() : '';
+    if (!w || !name) return null;
+    const exercises = (Array.isArray(w.exercises) ? w.exercises : [])
+      .map((e) => asRecord(e))
+      .filter((e): e is Record<string, unknown> => e !== null)
+      .map(normalizeStrengthFields)
+      .filter((e) => e.name)
+      .map(({ incrementLbs, ...rest }) => (incrementLbs === undefined ? rest : { ...rest, incrementLbs }));
+    workouts.push({ name, exercises });
+  }
+  return workouts;
 }
 
 function normalizeWorkout(raw: unknown, index: number): ProgramExportWorkout | null {
@@ -260,8 +300,9 @@ function normalizeProgram(input: Record<string, unknown>): ProgramExportPayload 
 
 export function createCoachToolset(opts: {
   onProposeProgram: (payload: ProgramExportPayload) => void;
+  onProposeEdit: (plan: ProgramEditPlan) => void;
 }): CoachToolset {
-  // Two tools, down from six. The active program, stats, PRs, per-exercise all-time numbers
+  // Three tools, down from six. The active program, stats, PRs, per-exercise all-time numbers
   // and the last 20 sessions are all preloaded in the system prompt — keeping tools for them
   // just invites the model to spend a round trip re-fetching what it already has, and every
   // tool definition costs ~1,000 tokens on EVERY request.
@@ -322,6 +363,7 @@ export function createCoachToolset(opts: {
                             type: 'string',
                             description: 'Optional A-E to group supersets.',
                           },
+                          incrementLbs: STEP_PARAM,
                         },
                         required: ['name', 'targetSets', 'targetReps'],
                       },
@@ -335,6 +377,45 @@ export function createCoachToolset(opts: {
           },
         },
         required: ['program'],
+      },
+    },
+    {
+      name: 'propose_program_edit',
+      description:
+        "Call this when the user wants to CHANGE their active program (rep ranges, sets, swap/add/remove an exercise, reorder, weight steps, or add a workout day). For each workout you change, give its COMPLETE new exercise list in order, using the exact workout and exercise names from the dossier — any exercise you leave out of a listed workout is removed. Workouts you don't list stay as they are. A workout name that doesn't exist becomes a new workout. The user sees every change and taps Apply; nothing is saved by this call. Cardio exercises keep their targets (you can only keep, move or remove them).",
+      parameters: {
+        type: 'object',
+        properties: {
+          workouts: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                name: { type: 'string', description: 'Existing workout name exactly as in the dossier, or a new one.' },
+                exercises: {
+                  type: 'array',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      name: { type: 'string' },
+                      targetSets: { type: 'number' },
+                      targetReps: { type: 'string', description: 'e.g. "8-12" or "5".' },
+                      supersetGroup: { type: 'string', description: 'Optional A-E to group supersets.' },
+                      incrementLbs: {
+                        type: 'number',
+                        description:
+                          "Optional per-exercise weight step for auto-progression in lb (e.g. 10 for a barbell squat, 2.5 for a pin-stack machine). Omit to keep the exercise's current step.",
+                      },
+                    },
+                    required: ['name', 'targetSets', 'targetReps'],
+                  },
+                },
+              },
+              required: ['name', 'exercises'],
+            },
+          },
+        },
+        required: ['workouts'],
       },
     },
   ];
@@ -352,6 +433,18 @@ export function createCoachToolset(opts: {
           opts.onProposeProgram(payload);
           const total = payload.program.workouts.reduce((n, w) => n + w.exercises.length, 0);
           return `Shown "${payload.program.name}" (${payload.program.workouts.length} workout(s), ${total} exercise(s)) to the user for review. Tell them to tap Import to add it, then start it from Quick Workout.`;
+        }
+        case 'propose_program_edit': {
+          const edit = normalizeProgramEdit(call.input);
+          if (!edit) {
+            return 'The edit was malformed. Send { workouts: [{ name, exercises: [{ name, targetSets, targetReps }] }] }.';
+          }
+          // Fresh, not the dossier copy: the plan carries ids the Apply button writes to.
+          const { data: programs } = await api.get<Program[]>('/programs');
+          const result = planProgramEdit(programs, edit);
+          if ('error' in result) return result.error;
+          opts.onProposeEdit(result.plan);
+          return `${describePlan(result.plan)}\n\nShown to the user for review. They tap Apply to make these changes; nothing is saved until then.`;
         }
         default:
           return `Unknown tool: ${call.name}`;
@@ -373,6 +466,8 @@ export function createCoachToolset(opts: {
       }
       case 'propose_program':
         return 'Drafting a workout plan…';
+      case 'propose_program_edit':
+        return 'Drafting program changes…';
       default:
         return 'Working…';
     }

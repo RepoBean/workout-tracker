@@ -146,6 +146,22 @@ export function useExerciseHistoryByName(name: string) {
   });
 }
 
+/** Fetch fn shared by the PR check (fetchQuery) and the deload hint (useQuery): one cache entry. */
+export async function fetchExerciseAllSets(name: string): Promise<{ sets: ExerciseAllSet[] }> {
+  const { data } = await api.get<{ sets: ExerciseAllSet[] }>('/exercises/all-sets-by-name', { params: { name } });
+  return data;
+}
+
+/** All-time standard sets for a lift, only while `enabled` (the deload hint asks only when it could fire). */
+export function useExerciseAllSets(name: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.exerciseAllSets(name),
+    queryFn: () => fetchExerciseAllSets(name),
+    enabled: enabled && name.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 /**
  * Set row shape returned by /exercises/all-sets-by-name. Used by the active
  * session PR check (usePrCelebration fetches via queryClient.fetchQuery with

@@ -88,6 +88,8 @@ export const exercises = sqliteTable('Exercises', {
   targetDistance: real('targetDistance'), // miles
   ...timestamps,
   catalogId: catalogRef(),
+  // Per-slot weight step for the progression hint; NULL = the global Settings increment (v4 C4)
+  incrementLbs: real('incrementLbs'),
 }, (t) => [
   index('exercises_workout_id_order_index').on(t.workoutId, t.orderIndex),
   index('exercises_catalog_id').on(t.catalogId),

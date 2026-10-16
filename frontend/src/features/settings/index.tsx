@@ -307,9 +307,10 @@ export default function Settings() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Auto-Progression</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            When you hit the top of an exercise's rep range on every set, next session's
-            suggested weight goes up by this much. It only changes the recommendation — your
-            program is never edited.
+            When set 1 hits the top of an exercise's rep range and every set stays in the
+            range, next session's suggested weight goes up. Stuck for 3 sessions and below the
+            range, it suggests a 10% deload. It only changes the recommendation — your program
+            is never edited.
           </p>
         </div>
 
@@ -338,7 +339,8 @@ export default function Settings() {
             disabled={!progression.enabled}
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Added to the suggested weight once you top out the rep range. Default 5 lbs.
+            Default step for every exercise. Give one its own (e.g. 10 for a barbell squat) in
+            Programs → the exercise → Advanced.
           </p>
         </div>
       </div>
