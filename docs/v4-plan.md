@@ -200,9 +200,9 @@ disagreeing on HR zones and coach history. C3 builds on it.
 **Decide in the bundle doc**
 - Is `aiCoach.model` per instance (the plan) or per device? Recommend per instance.
 
-### [ ] C3: Bodyweight log
+### [x] C3: Bodyweight log
 
-> Bundle doc: `docs/v4-bundle-c3-bodyweight.md` (built 2026-10-16, on staging). Decision 2026-10-16: no first-run
+> Bundle doc: `docs/v4-bundle-c3-bodyweight.md`. Shipped to staging + main 2026-10-16 (`ddd221b`); wife pending. Decision 2026-10-16: no first-run
 > prompt or dismissal flag; Settings → Profile's bodyweight field logs today's weigh-in.
 
 **New table 8 (`BodyWeights`)**, with its own written case in the bundle doc. Needs C2 (the

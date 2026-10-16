@@ -1,6 +1,6 @@
 # v4 Bundle C3: Bodyweight log
 
-Status: **on staging 2026-10-16 (code `4478565`); main + wife pending.** Decisions in §6 (Jason 2026-10-16). Written 2026-10-15 at `0c2e3ec`, from `docs/v4-plan.md`
+Status: **shipped to staging + main 2026-10-16 (`ddd221b`, code `4478565`); wife pending.** Decisions in §6 (Jason 2026-10-16). Written 2026-10-15 at `0c2e3ec`, from `docs/v4-plan.md`
 §2 C3 re-checked against the code that day. Line numbers are from that read.
 
 **Gate:** both vitest suites and `tsc` pass; the new backend tests (§4.4) and the lookup tests pass;
