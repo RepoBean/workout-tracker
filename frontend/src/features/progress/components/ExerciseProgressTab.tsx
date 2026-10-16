@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { useProgressData, type ProgressMode } from '../hooks/useProgressData';
-import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { LiftOverview } from './LiftOverview';
 import { StrengthDetail, type ChartMetric } from './StrengthDetail';
 import { CardioDetail, type CardioMetric } from './CardioDetail';
@@ -33,7 +32,6 @@ export function ExerciseProgressTab() {
         activeCardioExercises,
         getCardioExerciseHistory,
     } = useProgressData();
-    const { profile: { bodyweight } } = useUserProfile();
 
     // Local, catalog-aware search over what this mode can chart (logic/exerciseSearch.ts)
     const filteredSuggestions = useMemo(
@@ -222,7 +220,6 @@ export function ExerciseProgressTab() {
                     metric={chartMetric}
                     onMetricChange={setChartMetric}
                     onClear={() => setSelectedExercise(null)}
-                    bodyweight={bodyweight}
                 />
             )}
 

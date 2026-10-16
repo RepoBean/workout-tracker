@@ -6,8 +6,8 @@ import * as schema from '../src/db/schema.js';
 import { LIVE_DDL, PRE_LEGACY_DDL } from './fixtures/liveDdl.js';
 
 
-const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings'];
-const MIGRATIONS = 5; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings
+const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings', 'BodyWeights'];
+const MIGRATIONS = 6; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
@@ -20,6 +20,7 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
     'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt', 'catalogId'],
   ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt'],
   Settings: ['key', 'value', 'createdAt', 'updatedAt'],
+  BodyWeights: ['id', 'date', 'weight', 'createdAt', 'updatedAt'],
 };
 
 // What 0002's ALTER TABLE ... ADD appends to a table's stored DDL.
@@ -47,7 +48,7 @@ function fresh(ddl = '') {
 }
 
 describe('bootstrap on a fresh database', () => {
-  it('creates all seven tables with every column, records every migration, and is idempotent', () => {
+  it('creates all eight tables with every column, records every migration, and is idempotent', () => {
     const db = fresh();
     bootstrap(db);
 
@@ -68,7 +69,7 @@ describe('bootstrap on a fresh database', () => {
 });
 
 describe('bootstrap on the live (Sequelize-created) schema', () => {
-  it('adds only the migrations table, the indexes, the catalog + settings tables and the two catalogId columns', () => {
+  it('adds only the migrations table, the indexes, the catalog, settings + bodyweights tables and the two catalogId columns', () => {
     const db = fresh(LIVE_DDL);
     const before = schemaObjects(db);
 
@@ -81,9 +82,11 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
       .filter(n => !n.startsWith('sqlite_autoindex_')) // SQLite's own PK index on the migrations table
       .sort();
     expect(added).toEqual([
+      'BodyWeights',
       'ExerciseCatalog',
       'Settings',
       '__drizzle_migrations',
+      'body_weights_date',
       'catalog_name_lower',
       'exercises_catalog_id',
       'sets_catalog_id',

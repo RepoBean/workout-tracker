@@ -6,7 +6,8 @@ import { catalogFingerprint, catalogNames } from '../../../shared/lib/catalog';
 import { localToday } from '../../../shared/lib/liftTrend';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { useProgression } from '../../../shared/context/ProgressionContext';
-import type { Session } from '../../../shared/api/types';
+import type { BodyWeight, Session } from '../../../shared/api/types';
+import { useBodyweightAt, useBodyweights } from '../../../shared/api/bodyweights';
 import {
   assembleDossier,
   buildAllTimeParts,
@@ -22,11 +23,12 @@ export const RECENT_SESSION_COUNT = 20;
 export const ALL_TIME_LIMIT = 1000;
 
 const ALLTIME_STORAGE_KEY = 'wt:coach-dossier-alltime';
+const NO_WEIGH_INS: BodyWeight[] = [];
 /**
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 4;
+const ALLTIME_FORMAT_VERSION = 5;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -63,7 +65,7 @@ function writeCache(value: CachedAllTime): void {
  *  - The recent-20 block is small and always fresh.
  *  - The all-time block needs every session (~618 KB). That fetch is made ONCE and the
  *    *computed text* — not the payload — is memoized to localStorage. The key is the newest
- *    session id + total session count + today + bodyweight + a catalog fingerprint, so it
+ *    session id + total session count + today + a weigh-ins fingerprint + a catalog fingerprint, so it
  *    recomputes when a workout completes (every 2-3 days), the date rolls over (the "dropped
  *    2.5mo" flags are relative to today), or an exercise merge/split regroups the rollup.
  *
@@ -95,11 +97,14 @@ export function useCoachDossier() {
   const totalSessions = stats?.totalSessions ?? 0;
   // Any edit anywhere in history (set edits bump their session's updatedAt), not just the last 20.
   const lastUpdatedAt = stats?.lastUpdatedAt ?? '';
-  // Bodyweight is in the key because assisted sets' effective loads depend on it.
-  const bodyweight = profile.bodyweight;
+  // Weigh-ins (+ the profile fallback) are in the key because assisted sets' effective
+  // loads depend on the bodyweight on each session's day.
+  const bodyweightQuery = useBodyweights();
+  const { bodyweightAt, ready: bodyweightReady, fingerprint: bodyweightKey } = useBodyweightAt();
+  const weighIns = bodyweightQuery.data?.weighIns ?? NO_WEIGH_INS;
   // Waits for stats + catalog so the big fetch runs once, under its final key, already grouped.
-  const cacheKey = newestId && stats && catalogEntries
-    ? `v${ALLTIME_FORMAT_VERSION}:${newestId}:${totalSessions}:${today}:${bodyweight ?? ''}:${catalogFingerprint(catalogEntries)}:${lastUpdatedAt}`
+  const cacheKey = newestId && stats && catalogEntries && bodyweightReady
+    ? `v${ALLTIME_FORMAT_VERSION}:${newestId}:${totalSessions}:${today}:bw${bodyweightKey}:${catalogFingerprint(catalogEntries)}:${lastUpdatedAt}`
     : '';
   // History answered and is empty: no completed sessions yet, nothing to fetch.
   const noHistory = Boolean(recentSessions) && newestId === 0;
@@ -122,24 +127,24 @@ export function useCoachDossier() {
         params: { limit: ALL_TIME_LIMIT },
         timeout: ALL_TIME_TIMEOUT_MS,
       });
-      const parts = buildAllTimeParts(data, today, bodyweight, catalog);
+      const parts = buildAllTimeParts(data, today, bodyweightAt, catalog);
       writeCache({ key: cacheKey, ...parts });
       return parts;
     },
   });
 
   const empty = useMemo(
-    () => (noHistory ? buildAllTimeParts([], today, bodyweight, catalog) : null),
-    [noHistory, today, bodyweight, catalog]
+    () => (noHistory ? buildAllTimeParts([], today, bodyweightAt, catalog) : null),
+    [noHistory, today, bodyweightAt, catalog]
   );
   const resolved = cached ?? allTimeQuery.data ?? empty;
 
   const dossier = useMemo(() => {
     // Every block real, or nothing: a dossier missing its program or stats is not pinned.
-    if (!resolved || !recentSessions || !programs || !stats) return null;
+    if (!resolved || !recentSessions || !programs || !stats || !bodyweightReady) return null;
     return assembleDossier({
       today,
-      athlete: buildAthleteLine(profile, progression, today),
+      athlete: buildAthleteLine(profile, progression, today, weighIns),
       programs: buildProgramBlock(programs),
       allTime: resolved.allTime,
       notes: resolved.notes,
@@ -147,7 +152,7 @@ export function useCoachDossier() {
       recentCount: recentSessions.length,
       stats: buildStatsBlock(stats),
     });
-  }, [resolved, recentSessions, today, profile, progression, programs, stats]);
+  }, [resolved, recentSessions, today, profile, progression, programs, stats, bodyweightReady, weighIns]);
 
   // Any query the dossier waits on can strand it; surface that instead of a dead input.
   const failed = [allTimeQuery, recentQuery, statsQuery, catalogQuery, programsQuery].filter(

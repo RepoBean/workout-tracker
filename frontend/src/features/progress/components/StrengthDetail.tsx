@@ -18,10 +18,9 @@ interface StrengthDetailProps {
     metric: ChartMetric;
     onMetricChange: (metric: ChartMetric) => void;
     onClear: () => void;
-    bodyweight: number | null;
 }
 
-export function StrengthDetail({ name, history, metric, onMetricChange, onClear, bodyweight }: StrengthDetailProps) {
+export function StrengthDetail({ name, history, metric, onMetricChange, onClear }: StrengthDetailProps) {
     const { range, setRange, visible } = useChartRange(history);
     // A session with no PR-eligible set (all 0 weight / 0 reps / drops) has no point to plot.
     const chartData = visible
@@ -84,8 +83,8 @@ export function StrengthDetail({ name, history, metric, onMetricChange, onClear,
                                             </span>
                                             <span>
                                                 {formatWeight(set.weight)} lbs x {set.reps}
-                                                {set.weight < 0 && bodyweight != null && (
-                                                    <span className="text-gray-400"> · {effectiveWeight(set.weight, bodyweight)} eff</span>
+                                                {set.weight < 0 && session.bodyweight != null && (
+                                                    <span className="text-gray-400"> · {effectiveWeight(set.weight, session.bodyweight)} eff</span>
                                                 )}
                                             </span>
                                             {set.perceivedEffort && (

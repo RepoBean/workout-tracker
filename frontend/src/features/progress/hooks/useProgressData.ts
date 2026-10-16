@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useCatalog, useHistory, usePrograms } from '../../../shared/api/queries';
 import type { Program, Session, Set } from '../../../shared/api/types';
 import { setVolume } from '../../../shared/lib/effectiveWeight';
-import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { useBodyweightAt } from '../../../shared/api/bodyweights';
 import { catalogNames } from '../../../shared/lib/catalog';
 import { localToday } from '../../../shared/lib/liftTrend';
 import {
@@ -71,10 +71,14 @@ export function useProgressData(): UseProgressDataReturn {
     // name. Until the catalog loads, rows fall back to their own names.
     const { data: catalogEntries } = useCatalog();
     const catalog = useMemo(() => catalogNames(catalogEntries), [catalogEntries]);
-    // Assisted (negative-weight) sets score as bodyweight + weight; without a
-    // bodyweight they are skipped from bests/volume, like 0-weight sets.
-    const { profile: { bodyweight } } = useUserProfile();
-    const volumeOf = useMemo(() => (set: Set) => setVolume(set, bodyweight), [bodyweight]);
+    // Assisted (negative-weight) sets score as bodyweight on that session's day + weight
+    // (shared/lib/bodyweight.ts); without any bodyweight they are skipped from
+    // bests/volume, like 0-weight sets.
+    const { bodyweightAt } = useBodyweightAt();
+    const volumeOf = useMemo(
+        () => (set: Set, completedAt: string | null) => setVolume(set, bodyweightAt(completedAt)),
+        [bodyweightAt]
+    );
 
     // Picker names, most-trained, and active-program names (logic/exerciseIndex.ts)
     const index = useMemo(
@@ -85,8 +89,8 @@ export function useProgressData(): UseProgressDataReturn {
     // Per-lift status / last set / sparkline (logic/liftOverview.ts, rule in shared/lib/liftTrend.ts)
     const [today] = useState(localToday);
     const liftOverview = useMemo(
-        () => buildLiftOverview(sessions ?? NO_SESSIONS, index.overviewLifts, bodyweight, today, catalog),
-        [sessions, index, bodyweight, today, catalog]
+        () => buildLiftOverview(sessions ?? NO_SESSIONS, index.overviewLifts, bodyweightAt, today, catalog),
+        [sessions, index, bodyweightAt, today, catalog]
     );
 
     // Search only what Progress can chart for the mode (logic/exerciseSearch.ts)
@@ -102,8 +106,8 @@ export function useProgressData(): UseProgressDataReturn {
     // Get exercise history for chart/list
     const getExerciseHistory = useMemo(() => {
         return (name: string): ExerciseSession[] =>
-            sessions ? strengthHistory(sessions, name, bodyweight, catalog) : [];
-    }, [sessions, bodyweight, catalog]);
+            sessions ? strengthHistory(sessions, name, bodyweightAt, catalog) : [];
+    }, [sessions, bodyweightAt, catalog]);
 
     const getCardioExerciseHistory = useMemo(() => {
         return (name: string): CardioExerciseSession[] =>
@@ -123,8 +127,8 @@ export function useProgressData(): UseProgressDataReturn {
     // Best 1RM per exercise (same rule as the in-session PR toast)
     const personalRecords = useMemo(
         (): PersonalRecord[] =>
-            sessions ? computePersonalRecords(sessions, bodyweight, new Date(), catalog) : [],
-        [sessions, bodyweight, catalog]
+            sessions ? computePersonalRecords(sessions, bodyweightAt, new Date(), catalog) : [],
+        [sessions, bodyweightAt, catalog]
     );
 
     return {

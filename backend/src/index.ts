@@ -10,6 +10,7 @@ import exercisesRouter from './routes/exercises.js';
 import sessionsRouter from './routes/sessions.js';
 import catalogRouter from './routes/catalog.js';
 import settingsRouter, { settingsJsonParser } from './routes/settings.js';
+import bodyweightsRouter from './routes/bodyweights.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -46,6 +47,7 @@ app.use('/api/workouts', workoutsRouter);
 app.use('/api/exercises', exercisesRouter);
 app.use('/api/sessions', sessionsRouter);
 app.use('/api/catalog', catalogRouter);
+app.use('/api/bodyweights', bodyweightsRouter);
 
 // SPA fallback — serve index.html for client-side routes
 app.use((req: express.Request, res: express.Response, next: express.NextFunction) => {

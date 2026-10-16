@@ -21,6 +21,9 @@ import { ServerCard } from './components/ServerCard';
 import { AndroidCard } from './components/AndroidCard';
 import { ExerciseCatalogCard } from './components/ExerciseCatalogCard';
 import { isNativeApp } from '../../shared/lib/platform';
+import { useBodyweights, useLogWeighIn } from '../../shared/api/bodyweights';
+import { formatBodyweight, latestWeighIn } from '../../shared/lib/bodyweight';
+import { localToday } from '../../shared/lib/liftTrend';
 
 const SEX_OPTIONS: Array<{ value: Sex; label: string }> = [
   { value: 'male', label: 'Male' },
@@ -43,6 +46,14 @@ export default function Settings() {
   const { profile, setProfile } = useUserProfile();
   const { settings: progression, setSettings: setProgression } = useProgression();
   const toast = useToast();
+  // Bodyweight is a weigh-in log on the server (v4 C3). The field shows the latest one and
+  // saving a new value logs it for today; the device's profile value is only the fallback
+  // (nothing logged yet, or a pre-C3 server) and is kept in step.
+  const bodyweightLog = useBodyweights();
+  const logWeighIn = useLogWeighIn({ toast: false });
+  const latest = latestWeighIn(bodyweightLog.data?.weighIns ?? []);
+  const shownBodyweight = latest?.weight ?? profile.bodyweight;
+  const weighInsAvailable = bodyweightLog.data?.available ?? false;
 
   const [incrementStr, setIncrementStr] = useState(String(progression.incrementLbs));
 
@@ -59,7 +70,7 @@ export default function Settings() {
   const [sex, setSex] = useState<Sex>(profile.sex);
   const [restingHrStr, setRestingHrStr] = useState(toInputString(profile.restingHr));
   const [maxHrStr, setMaxHrStr] = useState(toInputString(profile.maxHrOverride));
-  const [bodyweightStr, setBodyweightStr] = useState(toInputString(profile.bodyweight));
+  const [bodyweightStr, setBodyweightStr] = useState(toInputString(shownBodyweight));
   const [errors, setErrors] = useState<FieldErrors>({});
 
   // The form copies the profile. Re-copy when it changes: after mount that is only the
@@ -71,6 +82,9 @@ export default function Settings() {
     setRestingHrStr(toInputString(profile.restingHr));
     setMaxHrStr(toInputString(profile.maxHrOverride));
   }, [profile]);
+  useEffect(() => {
+    setBodyweightStr(toInputString(shownBodyweight == null ? null : Number(formatBodyweight(shownBodyweight))));
+  }, [shownBodyweight]);
   useEffect(() => {
     setIncrementStr(String(progression.incrementLbs));
   }, [progression.incrementLbs]);
@@ -121,7 +135,7 @@ export default function Settings() {
       if (!Number.isFinite(parsed) || parsed < min || parsed > max) {
         fieldErrors.bodyweight = `Bodyweight must be ${min}–${max} lbs`;
       } else {
-        next.bodyweight = parsed;
+        next.bodyweight = Math.round(parsed * 10) / 10;
       }
     }
 
@@ -138,6 +152,11 @@ export default function Settings() {
     }
     setErrors({});
     setProfile(next);
+    if (weighInsAvailable && next.bodyweight != null && next.bodyweight !== shownBodyweight) {
+      logWeighIn.mutate({ date: localToday(), weight: next.bodyweight });
+      toast.success("Profile saved · logged as today's weigh-in");
+      return;
+    }
     toast.success('Profile saved');
   }
 
@@ -169,7 +188,7 @@ export default function Settings() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Profile</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Used for heart rate zones and assisted lifts. Stored locally on this device.
+            Used for heart rate zones and assisted lifts. Shared by your devices through this server.
           </p>
         </div>
 
@@ -256,6 +275,13 @@ export default function Settings() {
           />
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             Only needed for assisted lifts: a −40 assisted pull-up counts as bodyweight − 40 in volume, 1RM and PRs.
+            {weighInsAvailable && (
+              <>
+                {' '}A new value is logged as today's weigh-in
+                {latest && <> (latest: {formatBodyweight(latest.weight)} lbs on {latest.date})</>}.
+                {' '}History and past dates: <Link to="/progress" className="text-primary-600 hover:text-primary-700">Progress → Body</Link>.
+              </>
+            )}
           </p>
         </div>
 

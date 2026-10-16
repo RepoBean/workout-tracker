@@ -19,6 +19,14 @@ import { isCardioSet } from '../../../shared/api/predicates';
 import { exerciseTargetSummary } from '../../../shared/api/cardio';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import {
+  bodyweightChange,
+  constantBodyweight,
+  formatBodyweight,
+  latestWeighIn,
+  type BodyweightAt,
+  type WeighIn,
+} from '../../../shared/lib/bodyweight';
 import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 import { computeAge, type UserProfile } from '../../../shared/lib/hrZones';
 import {
@@ -156,7 +164,7 @@ interface ExerciseRollup {
 
 /**
  * Weight figures use effective load: an assisted set (−40 = 40 lb of help) counts as
- * bodyweight − 40, on the same scale as history hand-entered as an effective load. Without
+ * that day's bodyweight − 40, on the same scale as history hand-entered as an effective load. Without
  * a bodyweight, assisted sets add to counts but not to any weight figure.
  *
  * Keyed by exercise-catalog identity: spellings merged in Settings roll up as one lift
@@ -164,7 +172,7 @@ interface ExerciseRollup {
  */
 function rollupExercises(
   sessions: Session[],
-  bodyweight: number | null,
+  bodyweightAt: BodyweightAt,
   catalog: CatalogNames
 ): Map<string, ExerciseRollup> {
   const out = new Map<string, ExerciseRollup>();
@@ -175,6 +183,7 @@ function rollupExercises(
 
   for (const session of ordered) {
     const date = isoDate(session.completedAt);
+    const bodyweight = bodyweightAt(session.completedAt);
     for (const set of session.sets ?? []) {
       if (!isWorkingSet(set)) continue;
       const name = groupName(set.catalogId, set.exerciseName, catalog);
@@ -296,10 +305,10 @@ function renderRollup(r: ExerciseRollup, today: string): string {
 export function buildAllTimeBlock(
   sessions: Session[],
   today: string,
-  bodyweight: number | null = null,
+  bodyweightAt: BodyweightAt = constantBodyweight(null),
   catalog: CatalogNames = NO_CATALOG
 ): string {
-  const rollups = [...rollupExercises(sessions, bodyweight, catalog).values()].sort(
+  const rollups = [...rollupExercises(sessions, bodyweightAt, catalog).values()].sort(
     (a, b) => b.sets - a.sets || a.name.localeCompare(b.name)
   );
   if (rollups.length === 0) return 'All-time per exercise: none yet.';
@@ -380,7 +389,8 @@ export function buildProgramBlock(programs: Program[]): string {
 export function buildAthleteLine(
   profile: UserProfile,
   progression: ProgressionSettings,
-  today: string
+  today: string,
+  weighIns: readonly WeighIn[] = []
 ): string {
   const parts: string[] = [];
   const age = computeAge(profile.dob, new Date(`${today}T00:00:00`));
@@ -388,13 +398,30 @@ export function buildAthleteLine(
   if (age != null) parts.push(`${age}${sexLabel}`);
   else if (sexLabel) parts.push(sexLabel);
   if (profile.restingHr != null) parts.push(`resting HR ${profile.restingHr}`);
-  if (profile.bodyweight != null) parts.push(`bodyweight ${profile.bodyweight} lb`);
+  const bodyweight = buildBodyweightPart(profile.bodyweight, weighIns);
+  if (bodyweight) parts.push(bodyweight);
   parts.push(
     progression.enabled
       ? `auto-progression on (+${progression.incrementLbs} lb)`
       : 'auto-progression off'
   );
   return `Athlete: ${parts.join(' · ')}`;
+}
+
+/**
+ * "bodyweight 182.4 lb (2026-10-10), −4 lb over 90 d" from the weigh-in log; the device's
+ * profile value ("bodyweight 185 lb") when nothing has been logged.
+ */
+export function buildBodyweightPart(fallback: number | null, weighIns: readonly WeighIn[]): string {
+  const latest = latestWeighIn(weighIns);
+  if (!latest) return fallback != null ? `bodyweight ${formatBodyweight(fallback)} lb` : '';
+  let text = `bodyweight ${formatBodyweight(latest.weight)} lb (${latest.date})`;
+  const change = bodyweightChange(weighIns, 90);
+  if (change) {
+    const sign = change.delta > 0 ? '+' : change.delta < 0 ? '−' : '±';
+    text += `, ${sign}${formatBodyweight(Math.abs(change.delta))} lb over ${change.days} d`;
+  }
+  return text;
 }
 
 export function buildStatsBlock(stats: StatsResponse | null): string {
@@ -445,11 +472,11 @@ export function assembleDossier(parts: DossierParts): string {
 export function buildAllTimeParts(
   sessions: Session[],
   today: string,
-  bodyweight: number | null,
+  bodyweightAt: BodyweightAt,
   catalog: CatalogNames = NO_CATALOG
 ): { allTime: string; notes: string } {
   return {
-    allTime: buildAllTimeBlock(sessions, today, bodyweight, catalog),
+    allTime: buildAllTimeBlock(sessions, today, bodyweightAt, catalog),
     notes: buildNotesBlock(sessions),
   };
 }

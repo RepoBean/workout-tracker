@@ -25,6 +25,15 @@ describe('startOfWeek / localDateKey', () => {
     });
 });
 
+describe('volumeOf', () => {
+    it('is called with each set\'s session completedAt (picks the bodyweight)', () => {
+        const s = session(at(2026, 9, 30), 100);
+        const seen: Array<string | null> = [];
+        weeklyVolumes([s], (set, completedAt) => { seen.push(completedAt); return set.weight; }, at(2026, 10, 1, 12), 1);
+        expect(seen).toEqual([s.completedAt]);
+    });
+});
+
 describe('weeklyVolumes', () => {
     it('buckets whole Sunday weeks, oldest first, ending with the current week', () => {
         const now = at(2026, 10, 1, 12); // Thursday

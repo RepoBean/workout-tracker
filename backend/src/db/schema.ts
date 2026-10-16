@@ -2,9 +2,9 @@
 // table names, column names, defaults, foreign-key actions, and index names.
 // Existing databases are used as-is (see migrate.ts); do not rename anything
 // here without a migration. ExerciseCatalog (v3 Bundle 2) is the sixth, Settings
-// (v4 C2) the seventh.
+// (v4 C2) the seventh, BodyWeights (v4 C3) the eighth.
 import { relations, sql } from 'drizzle-orm';
-import { index, integer, real, sqliteTable, text, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { index, integer, real, sqliteTable, text, uniqueIndex, type AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { sequelizeDate } from './columns.js';
 
 export type ExerciseType = 'strength' | 'cardio';
@@ -34,6 +34,17 @@ export const settings = sqliteTable('Settings', {
   value: text('value', { mode: 'json' }).$type<unknown>().notNull(),
   ...timestamps,
 });
+
+// Dated weigh-ins (v4 C3, docs/v4-bundle-c3-bodyweight.md). `date` is a plain local
+// calendar day (YYYY-MM-DD), not an instant; one weigh-in per day.
+export const bodyWeights = sqliteTable('BodyWeights', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  date: text('date').notNull(),
+  weight: real('weight').notNull(),
+  ...timestamps,
+}, (t) => [
+  uniqueIndex('body_weights_date').on(t.date),
+]);
 
 // No ON DELETE action on purpose (SQLite's NO ACTION): a catalog row history
 // points at cannot be deleted. drizzle-kit's ADD COLUMN drops actions anyway.
@@ -169,6 +180,7 @@ export const setsRelations = relations(sets, ({ one }) => ({
 // ---- Row types ----
 
 export type SettingRow = typeof settings.$inferSelect;
+export type BodyWeight = typeof bodyWeights.$inferSelect;
 export type CatalogEntry = typeof exerciseCatalog.$inferSelect;
 export type NewCatalogEntry = typeof exerciseCatalog.$inferInsert;
 export type Program = typeof programs.$inferSelect;

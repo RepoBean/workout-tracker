@@ -81,6 +81,15 @@ export interface Set {
 }
 
 /** GET /api/catalog row: one lift, the spellings folded into it, and what points at it. */
+/** One weigh-in (v4 C3). `date` is a local calendar day, YYYY-MM-DD. */
+export interface BodyWeight {
+  id: number;
+  date: string;
+  weight: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CatalogEntry {
   id: number;
   name: string;

@@ -42,9 +42,9 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
 
 ## 2. Bundles, in order
 
-### [ ] C1: History editing + logging past workouts
+### [x] C1: History editing + logging past workouts
 
-> Bundle doc: `docs/v4-bundle-c1-history-edit.md` (built 2026-10-15, on staging).
+> Bundle doc: `docs/v4-bundle-c1-history-edit.md`. Shipped to staging + main 2026-10-15 (`7cc9b04`); wife pending.
 
 **UI**
 - History → open a session → edit mode: change weight/reps/RPE, add or delete sets, change the date.
@@ -135,7 +135,9 @@ openGym is **AGPL-3.0**. Ideas only: no code, mappings, catalog or media copied 
   `docker exec workout-tracker-staging-backend node -e 'console.log(new Date().toString())'`.
 - Date-edit bounds: allow any past date? Recommend no future dates, and no lower bound.
 
-### [ ] C2: Server-side settings
+### [x] C2: Server-side settings
+
+> Bundle doc: `docs/v4-bundle-c2-settings.md`. Shipped to staging + main 2026-10-15 (`133aef8`); wife pending.
 
 **New table 7 (`Settings`)**, so the written case goes in the bundle doc first, and the CLAUDE.md
 updates in §3 apply. Split from the bodyweight log (C3) because it is the riskier half (sync cache,
@@ -199,6 +201,9 @@ disagreeing on HR zones and coach history. C3 builds on it.
 - Is `aiCoach.model` per instance (the plan) or per device? Recommend per instance.
 
 ### [ ] C3: Bodyweight log
+
+> Bundle doc: `docs/v4-bundle-c3-bodyweight.md` (built 2026-10-16, on staging). Decision 2026-10-16: no first-run
+> prompt or dismissal flag; Settings → Profile's bodyweight field logs today's weigh-in.
 
 **New table 8 (`BodyWeights`)**, with its own written case in the bundle doc. Needs C2 (the
 first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyWeights to the
@@ -393,7 +398,7 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
 - **Coach memo:** any change to what feeds the all-time block bumps `ALLTIME_FORMAT_VERSION`
   (C1 local day, C3 weigh-ins, C5 muscles).
 - **Docs on ship:**
-  - CLAUDE.md: the tables rule ("Six" → eight, with the C2 and C3 cases), schema diagram, API table, the
+  - CLAUDE.md: the tables rule (now "Eight" after C3, with the C2 and C3 cases), schema diagram, API table, the
     tree (new routes; profile/progression/coach contexts become server-backed), and the Scope line
     (same-instance settings sharing is not cloud sync).
   - `v3-plan.md`: a pointer that v4 reversed the browser-only API key decision.

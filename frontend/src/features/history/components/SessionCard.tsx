@@ -4,7 +4,7 @@ import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { parseSeries } from '../../../shared/utils/heartRate';
 import { formatMMSS, formatWeight } from '../../../shared/utils/format';
-import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { useBodyweightAt } from '../../../shared/api/bodyweights';
 import { effectiveWeight, setVolume } from '../../../shared/lib/effectiveWeight';
 import { SessionHRChart } from './SessionHRChart';
 import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
@@ -50,7 +50,8 @@ interface ExerciseGroup {
 export function SessionCard({ session, highlightId, onDelete }: SessionCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const confirmTimeoutRef = useRef<number | null>(null);
-  const { profile: { bodyweight } } = useUserProfile();
+  const { bodyweightAt } = useBodyweightAt();
+  const bodyweight = bodyweightAt(session.completedAt);
   const [isExpanded, setIsExpanded] = useState(
     highlightId ? session.id === Number(highlightId) : false
   );

@@ -7,6 +7,7 @@ import type { Program, Session, Set } from '../../../shared/api/types';
 import { isCardioExercise, isCardioSet } from '../../../shared/api/predicates';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import type { BodyweightAt } from '../../../shared/lib/bodyweight';
 import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 
 export interface ExerciseSession {
@@ -23,6 +24,7 @@ export interface ExerciseSession {
     bestWeight: number;     // heaviest weight in this session
     bestVolume: number;     // highest (weight × reps) from a single set
     bestEstimated1RM: number; // Epley: weight × (1 + reps/30) from best volume set
+    bodyweight: number | null; // on that session's day — scores its assisted sets
 }
 
 /**
@@ -135,7 +137,7 @@ export function buildExerciseIndex(
 export function strengthHistory(
     sessions: Session[],
     name: string,
-    bodyweight: number | null,
+    bodyweightAt: BodyweightAt,
     catalog: CatalogNames = NO_CATALOG,
 ): ExerciseSession[] {
     const result: ExerciseSession[] = [];
@@ -149,12 +151,13 @@ export function strengthHistory(
         ) || [];
 
         if (exerciseSets.length === 0) return;
+        const bodyweight = bodyweightAt(session.completedAt);
 
         // Bests use the PR filters (personalRecords below, the in-session toast in
         // active-session/logic/personalRecord.ts): working sets only, effective
         // weight > 0, reps > 0. The display list below keeps every set.
         // Effective load keeps an assisted lift's chart on one scale
-        // (−40 at 185 bw plots as 145, like hand-entered effective sets).
+        // (−40 at 185 bw that day plots as 145, like hand-entered effective sets).
         const workingSets = exerciseSets
             .filter(s => (s.dropIndex || 0) === 0 && s.reps > 0)
             .flatMap(s => {
@@ -186,6 +189,7 @@ export function strengthHistory(
             sessionId: session.id,
             date: session.completedAt,
             workoutName: session.workoutName,
+            bodyweight,
             sets: exerciseSets
                 .map(s => ({
                     weight: s.weight,
@@ -279,7 +283,7 @@ export function cardioHistory(
 /** Best estimated 1RM per strength lift (see PersonalRecord), strongest first. */
 export function personalRecords(
     sessions: Session[],
-    bodyweight: number | null,
+    bodyweightAt: BodyweightAt,
     now: Date = new Date(),
     catalog: CatalogNames = NO_CATALOG,
 ): PersonalRecord[] {
@@ -288,6 +292,7 @@ export function personalRecords(
     sessions.forEach(session => {
         if (!session.completedAt) return;
         const date = session.completedAt;
+        const bodyweight = bodyweightAt(date);
 
         session.sets?.forEach((set: Set) => {
             if (!set.exerciseName) return;

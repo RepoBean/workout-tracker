@@ -13,6 +13,7 @@ import exercisesRouter from '../src/routes/exercises.js';
 import sessionsRouter from '../src/routes/sessions.js';
 import catalogRouter from '../src/routes/catalog.js';
 import settingsRouter, { settingsJsonParser } from '../src/routes/settings.js';
+import bodyweightsRouter from '../src/routes/bodyweights.js';
 import { errorHandler } from '../src/middleware/errorHandler.js';
 
 if (process.env.DB_PATH !== ':memory:') {
@@ -31,6 +32,7 @@ export function createTestApp() {
   app.use('/api/exercises', exercisesRouter);
   app.use('/api/sessions', sessionsRouter);
   app.use('/api/catalog', catalogRouter);
+  app.use('/api/bodyweights', bodyweightsRouter);
   app.use(errorHandler);
   return app;
 }
@@ -38,7 +40,7 @@ export function createTestApp() {
 /** Empty every table and reset autoincrement — call in beforeEach for a clean slate. */
 export async function resetDb() {
   sqlite.pragma('foreign_keys = OFF');
-  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs', 'ExerciseCatalog', 'Settings']) {
+  for (const table of ['Sets', 'Sessions', 'Exercises', 'Workouts', 'Programs', 'ExerciseCatalog', 'Settings', 'BodyWeights']) {
     sqlite.exec(`DELETE FROM "${table}"`);
   }
   sqlite.exec('DELETE FROM sqlite_sequence');

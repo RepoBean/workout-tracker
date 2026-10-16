@@ -7,6 +7,7 @@ import type { Session, Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
+import type { BodyweightAt } from '../../../shared/lib/bodyweight';
 import { groupName, NO_CATALOG, type CatalogNames } from '../../../shared/lib/catalog';
 import { localDateKey } from '../../../shared/lib/localDate';
 import {
@@ -56,7 +57,7 @@ function isoDate(completedAt: string): string {
 export function buildLiftOverview(
     sessions: Session[],
     names: string[],
-    bodyweight: number | null,
+    bodyweightAt: BodyweightAt,
     today: string,
     catalog: CatalogNames = NO_CATALOG,
 ): LiftOverview {
@@ -66,6 +67,7 @@ export function buildLiftOverview(
     for (const session of sessions) {
         if (!session.completedAt) continue;
         const date = isoDate(session.completedAt);
+        const bodyweight = bodyweightAt(session.completedAt);
         for (const set of session.sets ?? ([] as Set[])) {
             if (isCardioSet(set) || (set.dropIndex || 0) > 0) continue;
             const name = groupName(set.catalogId, set.exerciseName, catalog);

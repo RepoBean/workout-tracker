@@ -20,7 +20,8 @@ export interface VolumeComparison {
     lastMonth: number;      // last month's 1st → end of the same day of month (clamped)
 }
 
-export type VolumeOf = (set: Set) => number;
+/** A set's volume; `completedAt` picks the bodyweight its assisted sets score at. */
+export type VolumeOf = (set: Set, completedAt: string | null) => number;
 
 export { localDateKey };
 
@@ -35,7 +36,7 @@ function addDays(d: Date, days: number): Date {
 
 function sessionVolume(session: Session, volumeOf: VolumeOf): number {
     let total = 0;
-    session.sets?.forEach(set => { total += volumeOf(set); });
+    session.sets?.forEach(set => { total += volumeOf(set, session.completedAt); });
     return total;
 }
 

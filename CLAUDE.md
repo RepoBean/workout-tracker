@@ -40,7 +40,7 @@ v3 (`docs/v3-plan.md` §2) — the line now is *data and lookups on the server, 
 
 | Rule | Constraint |
 |------|------------|
-| Tables | Seven: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog, Settings (case: `docs/v4-bundle-c2-settings.md` §2). A new table needs a written case in `docs/` first (v3 allowed exactly one; `SessionExercises` was parked on 2026-09-28) |
+| Tables | Eight: Programs, Workouts, Exercises, Sessions, Sets, ExerciseCatalog, Settings, BodyWeights (cases: `docs/v4-bundle-c2-settings.md` §2, `docs/v4-bundle-c3-bodyweight.md` §2). A new table needs a written case in `docs/` first (v3 allowed exactly one; `SessionExercises` was parked on 2026-09-28) |
 | Database | SQLite only. Schema changes are drizzle-kit SQL migrations in `backend/drizzle/`, applied at boot, **additive until an explicit cutover**. Never hand-edit the live DB. Dates stay in Sequelize's text format |
 | Compatibility | The API only ever **gains** fields. An older frontend/APK must keep working against a newer backend, and an older backend image must boot on a newer DB (rollback = old tag, no restore) |
 | Instances | One checkout, three compose profiles (main / wife / staging). Every change ships staging → main → wife, same commit. Never `docker compose down -v` |
@@ -79,6 +79,8 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
 ExerciseCatalog (id, name, aliases, createdAt, updatedAt)   ← Exercise.catalogId, Set.catalogId
 
 Settings (key, value, createdAt, updatedAt)   ← key ∈ profile | progression | aiCoach | coachThread, value JSON
+
+BodyWeights (id, date, weight, createdAt, updatedAt)   ← date = local YYYY-MM-DD, unique (one weigh-in per day)
 ```
 
 ### Key Patterns
@@ -94,7 +96,7 @@ Settings (key, value, createdAt, updatedAt)   ← key ∈ profile | progression 
 | **Ad-hoc Exercises** | `exerciseId: null` with `exerciseName` stored — added mid-workout |
 | **Supersets** | `supersetGroup` field (letters A-E) groups exercises that rotate together |
 | **RPE Scale** | `perceivedEffort` is 1-10 |
-| **Assisted Lifts** | `weight < 0` means assistance: `−40` = 40 lbs of help (assisted pull-up/dip). Floor is `-500` (backend Zod). Entry, prefill and progression keep the raw signed value (`−40 → −35` is progress); volume, 1RM, PRs, Progress bests and the coach all-time block use `effectiveWeight()` (`shared/lib/effectiveWeight.ts`) = profile bodyweight + weight, skipping the set when no bodyweight is set. Display via `formatWeight()` (real minus sign). No schema change. |
+| **Assisted Lifts** | `weight < 0` means assistance: `−40` = 40 lbs of help (assisted pull-up/dip). Floor is `-500` (backend Zod). Entry, prefill and progression keep the raw signed value (`−40 → −35` is progress); volume, 1RM, PRs, Progress bests and the coach all-time block use `effectiveWeight()` (`shared/lib/effectiveWeight.ts`) = bodyweight **on that session's local day** + weight (`bodyweightLookup` in `shared/lib/bodyweight.ts`: latest weigh-in on or before the day, else the earliest, else the device's profile value; the session in progress uses the latest), skipping the set when there is no bodyweight at all. Display via `formatWeight()` (real minus sign). No schema change. |
 | **Drop Sets** | `dropIndex` field on Sets — standard sets have `dropIndex = 0`, drops have `1, 2, 3...` |
 | **Cardio Exercises** | `exerciseType` is `'strength'` (default) or `'cardio'`. Cardio exercises may set `cardioModality` (running/cycling/treadmill/rowing/other) and targets (`targetDurationSec`, `targetDistance`). Cardio sets store `durationSec`/`distance`; weight/reps are 0. |
 | **Heart Rate** | From a BLE HR strap (Web Bluetooth). Sessions store `heartRateAvg/Min/Max` + `heartRateSeries` (JSON string of downsampled samples); Sets store per-set `heartRateAvg`/`heartRateMax`. All nullable — absent when no strap connected. |
@@ -185,6 +187,9 @@ src/
 │   │   │   ├── detailParts.tsx           # DetailHeader, SegmentedControl, RangeSelector, useChartRange
 │   │   │   ├── VolumeTrendsTab.tsx       # Total volume trends with metric toggle
 │   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
+│   │   │   ├── BodyTab.tsx               # Bodyweight log: log form, summary, chart, history list (v4 C3)
+│   │   │   ├── WeighInRow.tsx            # One weigh-in: tap to edit, swipe to delete
+│   │   │   ├── weighInForm.ts            # Weight parsing + date bound for the Body tab form and row editor
 │   │   │   └── ProgressChart.tsx         # Recharts line on a numeric time axis (shared by both detail views)
 │   │   ├── hooks/
 │   │   │   └── useProgressData.ts        # Thin useMemo wrapper over the logic/ modules
@@ -248,6 +253,7 @@ src/
 │   │   ├── TimeInZoneBar.tsx      # Time-in-zone bar for a session HR series
 │   │   └── ErrorBoundary.tsx      # Crash protection wrapper
 │   ├── api/
+│   │   ├── bodyweights.ts         # Weigh-in query + mutations, useBodyweightAt() (404 → profile fallback)
 │   │   ├── client.ts              # Axios instance, error handling
 │   │   ├── types.ts               # Shared API request/response types
 │   │   ├── queries.ts             # TanStack Query definitions
@@ -258,6 +264,7 @@ src/
 │   ├── lib/
 │   │   ├── hrZones.ts             # HR zone math: Karvonen/Gulati, zones, time-in-zone (+ tests)
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
+│   │   ├── bodyweight.ts          # Weigh-ins → bodyweight on a session's day, fingerprint, change over N days (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
 │   │   ├── settingsSync.ts        # /api/settings GET/PUT, last-synced markers, reconcile() (+ tests)
 │   │   ├── liftTrend.ts           # Stall run + lift status (coach + Progress share it), localToday (+ tests)
@@ -277,7 +284,7 @@ src/
 │       ├── ThemeContext.tsx       # Dark mode state
 │       ├── HeartRateContext.tsx   # HR strap connection (via hrTransport) + live samples
 │       ├── SettingsSyncContext.tsx # Page-load /api/settings GET + useServerBacked (reconcile, debounced write-through)
-│       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones); server-backed except bodyweight
+│       ├── UserProfileContext.tsx # DOB/sex/resting+max HR profile (for zones); server-backed except bodyweight (local fallback only, C3)
 │       ├── ProgressionContext.tsx # Auto-progression settings (enabled, increment); server-backed
 │       └── AiCoachContext.tsx     # AI Coach settings + enabled state; server-backed (key included)
 │
@@ -302,7 +309,8 @@ backend/
 │   │   ├── exercises.ts     # CRUD for exercises
 │   │   ├── sessions.ts      # CRUD for sessions + sets
 │   │   ├── catalog.ts       # Exercise catalog: list (with counts), merge, split
-│   │   └── settings.ts      # Per-instance settings: GET all, PUT one key (own 1 MB parser; coachThread 409 check)
+│   │   ├── settings.ts      # Per-instance settings: GET all, PUT one key (own 1 MB parser; coachThread 409 check)
+│   │   └── bodyweights.ts   # Weigh-ins: list, log (upsert by date), edit (409 on date clash), delete
 │   ├── db/
 │   │   ├── schema.ts        # Drizzle tables + relations (mirrors the live DDL exactly) + row types
 │   │   ├── columns.ts       # sequelizeDate custom column (Sequelize text date format, read + write)
@@ -383,6 +391,10 @@ backend/
 | POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
 | POST | /api/catalog/:id/split | Split `{ alias }` off `:id` into its own entry again (exact inverse of merge) |
 | GET | /api/settings | `{ profile, progression, aiCoach, coachThread }`, each `{ value, updatedAt }` or **null** if never stored (no defaults). Only place the coach API key is served |
+| GET | /api/bodyweights | Every weigh-in `{id, date, weight, createdAt, updatedAt}[]`, oldest first |
+| POST | /api/bodyweights | `{ date, weight }` (local `YYYY-MM-DD` ≤ tomorrow, 50–700 lbs). Same date again overwrites (201 new / 200 overwrite) |
+| PUT | /api/bodyweights/:id | `{ date?, weight? }`; moving onto another weigh-in's date → 409 |
+| DELETE | /api/bodyweights/:id | Delete a weigh-in |
 | PUT | /api/settings/:key | `{ value, baseUpdatedAt? }`; value validated per key (unknown fields stripped). Last write wins, except `coachThread`: `baseUpdatedAt` required, mismatch → 409 `{ current }` |
 
 ---
@@ -456,7 +468,7 @@ backend/
 - Starts session with `isAdHoc: true`
 
 ### 13. Progress Page
-- Tabbed interface: Exercise Progress, Volume Trends, Personal Records
+- Tabbed interface: Exercise Progress, Volume Trends, Personal Records, Body (weigh-in log + chart, v4 C3)
 - Exercise Progress, Strength mode opens to **Your lifts** (`LiftOverview.tsx`, data from
   `logic/liftOverview.ts`): one row per active-program strength lift (else the 8 most trained),
   catalog-grouped — status chip, last top set (raw signed weight), inline-SVG best-1RM sparkline over
@@ -546,7 +558,7 @@ backend/
 
 ### 19. Assisted Lifts
 - Negative weight = assistance (`−40` is 40 lb of help); `lbs`/`assist` toggle in SetInput; backend floor −500
-- Volume, 1RM, PRs and the coach use `effectiveWeight()` = profile bodyweight + weight (set skipped without a bodyweight)
+- Volume, 1RM, PRs and the coach use `effectiveWeight()` = bodyweight on that session's day + weight (set skipped without any bodyweight)
 
 ### 20. Android App
 - Capacitor WebView around the same React build; native BLE for the strap, exact local notification for the timer, foreground service while a session is active
@@ -564,7 +576,7 @@ backend/
   CSV date and `/stats` streak. Bundle doc: `docs/v4-bundle-c1-history-edit.md`
 
 ### 22. Server-side settings (v4 C2)
-- Profile (not bodyweight — stays per device until C3), progression, coach config (API key included,
+- Profile (not bodyweight — that is the C3 weigh-in log), progression, coach config (API key included,
   plain text) and the coach thread live in the `Settings` table, so the phone and the browser agree.
   Theme, timer, server URL, HR strap, the dossier memo and per-session keys stay per device
 - localStorage is still the synchronous cache: contexts render from it, reconcile once per page load
@@ -576,6 +588,14 @@ backend/
   a fresh thread fetch; thread PUTs carry `baseUpdatedAt`, a 409 reloads the server's thread (toast)
 - `seed-staging.sh` blanks the API key and deletes the thread in staging's copy. Never add settings to
   `api-snapshot.sh`. Bundle doc: `docs/v4-bundle-c2-settings.md`
+
+### 23. Bodyweight log (v4 C3)
+- `BodyWeights`: one weigh-in per local day on the instance's server. Logged from Progress → Body (any past
+  date; same date overwrites; tap to edit, swipe to delete) or Settings → Profile (a new value = today's weigh-in)
+- Assisted sets score at the bodyweight on their session's local day (Key Patterns → Assisted Lifts). The
+  device's old profile `bodyweight` is only the fallback (nothing logged, or an older backend 404s the route)
+- Coach athlete line: `bodyweight 182.4 lb (2026-10-10), −4 lb over 90 d`; the all-time memo key carries a
+  weigh-ins fingerprint. Bundle doc: `docs/v4-bundle-c3-bodyweight.md`
 
 ---
 

@@ -70,7 +70,7 @@ export function AiCoachSettingsCard() {
         <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">AI Coach</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
           Chat with an AI coach that reads your training history and can draft programs. Bring
-          your own API key — it's stored in plaintext in this browser only.
+          your own API key — it's stored in plaintext on this server (VPN only) and shared by your devices.
         </p>
       </div>
 

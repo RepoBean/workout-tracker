@@ -1,3 +1,4 @@
+import { constantBodyweight as bw } from '../../../shared/lib/bodyweight';
 import { describe, expect, it } from 'vitest';
 import type { Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
 import { DEFAULT_PROFILE } from '../../../shared/lib/hrZones';
@@ -348,7 +349,7 @@ describe('buildAllTimeBlock', () => {
         }),
       ],
       TODAY,
-      null,
+      bw(null),
       new Map([[7, 'Low Incline DB Press']])
     );
     expect(out).toBe([
@@ -374,7 +375,7 @@ describe('buildAllTimeBlock', () => {
         }),
       ],
       TODAY,
-      185
+      bw(185)
     );
     expect(out).toContain('Neutral Grip Pull-Up: 2 sets, 2 dates, 135→145 lb effective (assisted), best 145x8');
   });
@@ -389,7 +390,7 @@ describe('buildAllTimeBlock', () => {
         })
       ),
       TODAY,
-      185
+      bw(185)
     );
     expect(out).toContain('stalled 3 sessions @135');
   });
@@ -438,6 +439,21 @@ describe('buildAthleteLine', () => {
       TODAY
     );
     expect(line).toBe('Athlete: bodyweight 185 lb · auto-progression off');
+  });
+
+  it('uses the weigh-in log over the profile value: latest, date, 90-day change', () => {
+    const profile = { dob: null, sex: 'unspecified' as const, restingHr: null, maxHrOverride: null, bodyweight: 199 };
+    const off = { enabled: false, incrementLbs: 5 };
+    const w = (date: string, weight: number) => ({ date, weight, updatedAt: '' });
+    expect(buildAthleteLine(profile, off, TODAY, [w('2026-10-10', 182.4)])).toBe(
+      'Athlete: bodyweight 182.4 lb (2026-10-10) · auto-progression off'
+    );
+    expect(buildAthleteLine(profile, off, TODAY, [w('2026-06-01', 186.4), w('2026-07-15', 190), w('2026-10-10', 182.4)])).toBe(
+      'Athlete: bodyweight 182.4 lb (2026-10-10), −4 lb over 131 d · auto-progression off'
+    );
+    expect(buildAthleteLine(profile, off, TODAY, [w('2026-10-01', 180), w('2026-10-10', 182)])).toBe(
+      'Athlete: bodyweight 182 lb (2026-10-10), +2 lb over 9 d · auto-progression off'
+    );
   });
 
   it('degrades gracefully with an empty profile', () => {

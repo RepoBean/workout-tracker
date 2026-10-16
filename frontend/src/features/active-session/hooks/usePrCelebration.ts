@@ -5,7 +5,7 @@ import { queryKeys, type ExerciseAllSet } from '../../../shared/api/queries';
 import type { Set } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { useToast } from '../../../shared/ui/Toast';
-import { useUserProfile } from '../../../shared/context/UserProfileContext';
+import { useBodyweightAt } from '../../../shared/api/bodyweights';
 import { effectiveWeight } from '../../../shared/lib/effectiveWeight';
 import { formatWeight } from '../../../shared/utils/format';
 import { computeBestOneRepMax, epleyOneRepMax } from '../logic/personalRecord';
@@ -19,7 +19,7 @@ import { computeBestOneRepMax, epleyOneRepMax } from '../logic/personalRecord';
 export function usePrCelebration(sessionId: number) {
   const queryClient = useQueryClient();
   const toast = useToast();
-  const { profile: { bodyweight } } = useUserProfile();
+  const { bodyweightAt } = useBodyweightAt();
 
   const sessionPRsRef = useRef<Map<string, number>>(new Map());
 
@@ -36,9 +36,10 @@ export function usePrCelebration(sessionId: number) {
   async function checkAndCelebratePR(savedSet: Set): Promise<void> {
     if (savedSet.dropIndex > 0) return;
     if (isCardioSet(savedSet)) return;
-    // 1RM uses effective load (assisted sets: bodyweight + weight); the toast
+    // 1RM uses effective load (assisted sets: today's bodyweight + weight; history at
+    // each set's own day's bodyweight); the toast
     // shows the raw entry.
-    const weight = effectiveWeight(savedSet.weight, bodyweight);
+    const weight = effectiveWeight(savedSet.weight, bodyweightAt(null));
     if (weight == null || weight <= 0 || savedSet.reps <= 0) return;
 
     const key = savedSet.exerciseName.toLowerCase();
@@ -57,7 +58,7 @@ export function usePrCelebration(sessionId: number) {
           },
           staleTime: 5 * 60 * 1000,
         });
-        const preSessionBest = computeBestOneRepMax(data.sets, bodyweight);
+        const preSessionBest = computeBestOneRepMax(data.sets, bodyweightAt);
         // Skip first-ever exercise — silent baseline establishment.
         if (preSessionBest <= 0) return;
         sessionPRsRef.current.set(key, preSessionBest);

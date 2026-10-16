@@ -30,6 +30,7 @@ export const queryKeys = {
   stats: ['stats'] as const,
   progressHistory: ['progressHistory'] as const,
   catalog: ['catalog'] as const,
+  bodyweights: ['bodyweights'] as const,
 };
 
 // ============================================

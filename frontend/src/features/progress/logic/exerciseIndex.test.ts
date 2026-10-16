@@ -1,3 +1,4 @@
+import { bodyweightLookup, constantBodyweight as bw } from '../../../shared/lib/bodyweight';
 import { describe, expect, it } from 'vitest';
 import type { Exercise, Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
 import {
@@ -213,21 +214,21 @@ describe('buildExerciseIndex', () => {
 
 describe('strengthHistory', () => {
     it('returns completed sessions oldest first with bests excluding drop sets', () => {
-        expect(strengthHistory(SESSIONS, 'Leg Press', null)).toEqual([
+        expect(strengthHistory(SESSIONS, 'Leg Press', bw(null))).toEqual([
             {
-                sessionId: 1, date: APR, workoutName: 'Upper',
+                sessionId: 1, date: APR, workoutName: 'Upper', bodyweight: null,
                 sets: [{ weight: 200, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
                 bestWeight: 200, bestVolume: 2000, bestEstimated1RM: 267,
             },
             {
-                sessionId: 2, date: JUN, workoutName: 'Upper',
+                sessionId: 2, date: JUN, workoutName: 'Upper', bodyweight: null,
                 sets: [{ weight: 220, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
                 bestWeight: 220, bestVolume: 2200, bestEstimated1RM: 293,
             },
         ]);
 
-        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', null)).toEqual([{
-            sessionId: 1, date: APR, workoutName: 'Upper',
+        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', bw(null))).toEqual([{
+            sessionId: 1, date: APR, workoutName: 'Upper', bodyweight: null,
             sets: [
                 { weight: 60, reps: 10, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 },
                 { weight: 60, reps: 8, setNumber: 2, perceivedEffort: undefined, dropIndex: 0 },
@@ -238,15 +239,15 @@ describe('strengthHistory', () => {
     });
 
     it('keeps a renamed lift as two separate series (name-keyed)', () => {
-        expect(strengthHistory(SESSIONS, 'Low Incline DB Press', null).map(s => s.sessionId)).toEqual([2]);
-        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', null).map(s => s.sessionId)).toEqual([1]);
+        expect(strengthHistory(SESSIONS, 'Low Incline DB Press', bw(null)).map(s => s.sessionId)).toEqual([2]);
+        expect(strengthHistory(SESSIONS, 'Low Incline Dumbbell Press', bw(null)).map(s => s.sessionId)).toEqual([1]);
     });
 
     it('scores assisted sets at effective load, zero bests without a bodyweight', () => {
-        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', 185)[0]).toMatchObject({
+        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', bw(185))[0]).toMatchObject({
             bestWeight: 145, bestVolume: 1160, bestEstimated1RM: 184,
         });
-        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', null)[0]).toMatchObject({
+        expect(strengthHistory(SESSIONS, 'Neutral Grip Pull-Up', bw(null))[0]).toMatchObject({
             sets: [{ weight: -40, reps: 8, setNumber: 1, perceivedEffort: undefined, dropIndex: 0 }],
             bestWeight: 0, bestVolume: 0, bestEstimated1RM: 0,
         });
@@ -258,14 +259,14 @@ describe('strengthHistory', () => {
             set({ exerciseName: 'Row', weight: 0, reps: 20, setNumber: 2 }),
             set({ exerciseName: 'Row', weight: 100, reps: 8, setNumber: 3 }),
         ])];
-        const [row] = strengthHistory(sessions, 'Row', null);
+        const [row] = strengthHistory(sessions, 'Row', bw(null));
         expect(row).toMatchObject({ bestWeight: 100, bestVolume: 800, bestEstimated1RM: 127 });
         expect(row.sets).toHaveLength(3);
     });
 
     it('ignores cardio sets and unknown names', () => {
-        expect(strengthHistory(SESSIONS, 'Treadmill', null)).toEqual([]);
-        expect(strengthHistory(SESSIONS, 'Nope', null)).toEqual([]);
+        expect(strengthHistory(SESSIONS, 'Treadmill', bw(null))).toEqual([]);
+        expect(strengthHistory(SESSIONS, 'Nope', bw(null))).toEqual([]);
     });
 });
 
@@ -285,7 +286,7 @@ describe('cardioHistory', () => {
 
 describe('personalRecords', () => {
     it('keys by name, excludes cardio/drop/incomplete, sorts by 1RM', () => {
-        expect(personalRecords(SESSIONS, 185, NOW)).toEqual([
+        expect(personalRecords(SESSIONS, bw(185), NOW)).toEqual([
             { exerciseName: 'Leg Press', estimated1RM: 293, weight: 220, reps: 10, date: JUN, isRecentPR: false },
             { exerciseName: 'Neutral Grip Pull-Up', estimated1RM: 184, weight: 145, reps: 8, date: SEP, isRecentPR: true },
             { exerciseName: 'Low Incline DB Press', estimated1RM: 87, weight: 65, reps: 10, date: JUN, isRecentPR: false },
@@ -298,17 +299,29 @@ describe('personalRecords', () => {
         const records = personalRecords([
             session(21, SEP, 'Upper', [set({ exerciseName: 'Bench', weight: 150, reps: 5 })]),
             session(20, JUN, 'Upper', [set({ exerciseName: 'Bench', weight: 100, reps: 20 })]),
-        ], null, NOW);
+        ], bw(null), NOW);
         expect(records).toEqual([
             { exerciseName: 'Bench', estimated1RM: 175, weight: 150, reps: 5, date: SEP, isRecentPR: true },
         ]);
+    });
+
+    it('scores assisted PRs at the bodyweight on each session\'s day', () => {
+        const at = bodyweightLookup([
+            { date: '2026-06-01', weight: 200, updatedAt: '' },
+            { date: '2026-09-01', weight: 180, updatedAt: '' },
+        ], 999);
+        const records = personalRecords([
+            session(26, SEP, 'Upper', [set({ exerciseName: 'Pull-Up', weight: -40, reps: 8 })]), // 140
+            session(27, JUN, 'Upper', [set({ exerciseName: 'Pull-Up', weight: -40, reps: 8 })]), // 160
+        ], at, NOW);
+        expect(records[0]).toMatchObject({ weight: 160, date: JUN });
     });
 
     it('a tie keeps the first time the 1RM was reached', () => {
         const records = personalRecords([
             session(23, SEP, 'Upper', [set({ exerciseName: 'Bench', weight: 150, reps: 5 })]),
             session(22, JUN, 'Upper', [set({ exerciseName: 'Bench', weight: 150, reps: 5 })]),
-        ], null, NOW);
+        ], bw(null), NOW);
         expect(records[0]).toMatchObject({ date: JUN, isRecentPR: false });
     });
 
@@ -318,17 +331,17 @@ describe('personalRecords', () => {
                 set({ exerciseName: 'Plank', weight: 0, reps: 12 }),
                 set({ exerciseName: 'Bench', weight: 135, reps: 0 }),
             ]),
-        ], null, NOW)).toEqual([]);
+        ], bw(null), NOW)).toEqual([]);
     });
 
     it('a single is its own 1RM', () => {
         expect(personalRecords([
             session(25, SEP, 'Upper', [set({ exerciseName: 'Deadlift', weight: 315, reps: 1 })]),
-        ], null, NOW)[0]).toMatchObject({ estimated1RM: 315, weight: 315, reps: 1 });
+        ], bw(null), NOW)[0]).toMatchObject({ estimated1RM: 315, weight: 315, reps: 1 });
     });
 
     it('drops assisted lifts without a bodyweight', () => {
-        expect(personalRecords(SESSIONS, null, NOW).map(r => r.exerciseName)).toEqual([
+        expect(personalRecords(SESSIONS, bw(null), NOW).map(r => r.exerciseName)).toEqual([
             'Leg Press', 'Low Incline DB Press', 'Low Incline Dumbbell Press',
         ]);
     });
@@ -355,13 +368,13 @@ describe('catalog identity (after a merge)', () => {
         ]);
         expect(index.mostTrainedStrength[0]).toBe('Low Incline DB Press'); // 5 sets
 
-        const series = strengthHistory(merged, 'Low Incline DB Press', null, catalog);
+        const series = strengthHistory(merged, 'Low Incline DB Press', bw(null), catalog);
         expect(series.map(s => [s.sessionId, s.bestWeight])).toEqual([[1, 60], [2, 65]]);
-        expect(strengthHistory(merged, 'Low Incline Dumbbell Press', null, catalog)).toEqual([]);
+        expect(strengthHistory(merged, 'Low Incline Dumbbell Press', bw(null), catalog)).toEqual([]);
     });
 
     it('records key by the catalog entry', () => {
-        const records = personalRecords(merged, 185, NOW, catalog);
+        const records = personalRecords(merged, bw(185), NOW, catalog);
         expect(records.map(r => r.exerciseName)).toEqual(['Leg Press', 'Neutral Grip Pull-Up', 'Low Incline DB Press']);
         expect(records[2]).toMatchObject({ weight: 65, reps: 10, date: JUN, estimated1RM: 87 });
     });
