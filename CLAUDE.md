@@ -67,7 +67,7 @@ Program (id, name, isActive, isArchived, currentWorkoutIndex, createdAt, updated
 └─> Workout (id, programId, name, orderIndex, createdAt, updatedAt)
     └─> Exercise (id, workoutId, name, targetSets, targetReps, orderIndex, supersetGroup,
                   exerciseType, cardioModality, targetDurationSec, targetDistance,
-                  catalogId, createdAt, updatedAt)
+                  catalogId, incrementLbs, createdAt, updatedAt)
 
 Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc,
          heartRateAvg, heartRateMin, heartRateMax, heartRateSeries, exerciseNotes,
@@ -95,6 +95,7 @@ BodyWeights (id, date, weight, createdAt, updatedAt)   ← date = local YYYY-MM-
 | **Ad-hoc Sessions** | `isAdHoc: true` on Session means it doesn't advance the program index |
 | **Ad-hoc Exercises** | `exerciseId: null` with `exerciseName` stored — added mid-workout |
 | **Supersets** | `supersetGroup` field (letters A-E) groups exercises that rotate together |
+| **Progression step** | `Exercises.incrementLbs` (nullable, v4 C4): the slot's own auto-progression step; NULL = the global Settings increment. Per slot (equipment), not per catalog lift. Virtual (ad-hoc/swap) exercises always use the global one |
 | **RPE Scale** | `perceivedEffort` is 1-10 |
 | **Assisted Lifts** | `weight < 0` means assistance: `−40` = 40 lbs of help (assisted pull-up/dip). Floor is `-500` (backend Zod). Entry, prefill and progression keep the raw signed value (`−40 → −35` is progress); volume, 1RM, PRs, Progress bests and the coach all-time block use `effectiveWeight()` (`shared/lib/effectiveWeight.ts`) = bodyweight **on that session's local day** + weight (`bodyweightLookup` in `shared/lib/bodyweight.ts`: latest weigh-in on or before the day, else the earliest, else the device's profile value; the session in progress uses the latest), skipping the set when there is no bodyweight at all. Display via `formatWeight()` (real minus sign). No schema change. |
 | **Drop Sets** | `dropIndex` field on Sets — standard sets have `dropIndex = 0`, drops have `1, 2, 3...` |
@@ -149,7 +150,7 @@ src/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   ├── plates.ts          # Plate calculator math
 │   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress `personalRecords()`)
-│   │   │   ├── progression.ts     # Deterministic double-progression hint (+ tests)
+│   │   │   ├── progression.ts     # Double progression on the heaviest-weight sets: up / hold / deload (+ tests)
 │   │   │   ├── suggestReps.ts     # Per-set rep prefill rules + parseRepTarget (+ tests)
 │   │   │   └── averageRpe.ts      # Working-set RPE average (+ tests)
 │   │   └── index.tsx              # WorkoutSession page entry (~580 lines)
@@ -223,10 +224,12 @@ src/
 │   └── coach/                     # AI Coach (opt-in, BYO API key)
 │       ├── components/
 │       │   ├── AiCoachSettingsCard.tsx  # Settings card: provider/model/key config
-│       │   └── CoachMarkdown.tsx        # Markdown renderer for assistant bubbles
+│       │   ├── CoachMarkdown.tsx        # Markdown renderer for assistant bubbles
+│       │   └── ProgramEditPreview.tsx   # propose_program_edit preview + Apply
 │       ├── hooks/
 │       │   ├── useCoachDossier.ts     # Assembles the preloaded dossier (memoized all-time block)
-│       │   └── useThreadSync.ts       # Coach thread ↔ server (updatedAt check, 409 → reload)
+│       │   ├── useThreadSync.ts       # Coach thread ↔ server (updatedAt check, 409 → reload)
+│       │   └── useApplyProgramEdit.ts # The user's Apply: runs an edit plan through the program endpoints
 │       ├── lib/
 │       │   ├── dossier.ts             # Pure dossier builders — the coach's whole view (+ tests)
 │       │   ├── providers/
@@ -236,7 +239,8 @@ src/
 │       │   │   ├── openaiCompatible.ts # OpenAI-compatible fetch adapter
 │       │   │   └── index.ts           # createProvider factory
 │       │   ├── coachLoop.ts           # Neutral agentic loop (tool calls)
-│       │   ├── tools.ts               # get_workout_history + propose_program (read-only)
+│       │   ├── tools.ts               # get_workout_history, propose_program, propose_program_edit (read-only)
+│       │   ├── programEdit.ts         # Diff a proposed edit against the active program (+ tests)
 │       │   ├── persona.ts             # System prompt
 │       │   └── thread.ts              # Thread persistence (localStorage cache; server via useThreadSync)
 │       └── index.tsx                  # Coach page entry
@@ -511,7 +515,8 @@ backend/
 - Bring your own API key: supports Anthropic, OpenAI, OpenRouter, Google AI Studio, or any OpenAI-compatible endpoint
 - Provider abstraction in `features/coach/lib/providers/` — Anthropic uses `@anthropic-ai/sdk` directly; all others use a fetch-based OpenAI-compatible adapter
 - Neutral agentic loop (`coachLoop.ts`) handles tool call cycles across providers
-- Read-only tools (`tools.ts`) over existing `/api` endpoints — the AI never writes the database
+- Read-only tools (`tools.ts`) over existing `/api` endpoints — the AI never writes the database; the
+  user's Import / Apply tap does, through the ordinary endpoints
 - "Build a program" flow emits version-1 export JSON into the existing import preview Modal (reuses the existing import path)
 - Conversation thread on the instance's server (v4 C2), localStorage as the cache
 - Google AI Studio routed through `/ai-proxy/google/` nginx+Vite same-origin proxy (avoids CORS)
@@ -544,9 +549,14 @@ backend/
   count too) and, with the user turn behind them, are never sent to the model; the 12-message
   window always starts on a user turn. A reply that hits the output cap (Anthropic 4,096) is
   marked cut off and its tool calls are not run.
-- Toolset is 2: `get_workout_history` (the tail past the 20-session window; prefer `monthsBack`)
-  and `propose_program`. The coach remains strictly read-only — no POST/PUT/DELETE anywhere.
-  The import preview lists every workout and exercise (sets × reps) before Import.
+- Toolset is 3: `get_workout_history` (the tail past the 20-session window; prefer `monthsBack`),
+  `propose_program` and `propose_program_edit` (v4 C4). The coach itself never POSTs/PUTs/DELETEs:
+  the import preview lists every workout and exercise (sets × reps) before Import, and the edit
+  preview lists every change (adds, removals, range/superset/step changes, new order) before Apply.
+- `propose_program_edit`: each changed workout's **complete** new exercise list; unlisted workouts are
+  untouched (never deleted), an unknown workout name is a new workout, a left-out superset/step keeps
+  the current one. Diffed against a fresh `GET /programs` (`lib/programEdit.ts`); Apply is not
+  transactional and says "Applied N of M" on a failure.
 
 ---
 
@@ -596,6 +606,16 @@ backend/
   device's old profile `bodyweight` is only the fallback (nothing logged, or an older backend 404s the route)
 - Coach athlete line: `bodyweight 182.4 lb (2026-10-10), −4 lb over 90 d`; the all-time memo key carries a
   weigh-ins fingerprint. Bundle doc: `docs/v4-bundle-c3-bodyweight.md`
+
+### 24. Progression (v4 C4)
+- Gated by Settings → **Enable auto-progression** (per instance). Pre-fill hint before the first set only
+- Double progression judged on last session's sets at its **heaviest** weight (ramp sets ignored): **up** when
+  set 1 hit the top of the range and every set stayed in it (+ the slot's step, else the global increment);
+  **deload** −10% to the nearest 5 lb when stalled 3+ sessions (`stallRun`) **and** the best set fell below the
+  range (skipped when rounding gives the same weight); else **hold**. The all-sets fetch for the deload runs
+  only when last session was below the range
+- Per-exercise step: exercise form → Advanced. Bundle doc: `docs/v4-bundle-c4-progression.md` (replay of
+  main's history: old rule 54 bumps vs 95 actual vs new rule 114; linear scheme and 5×5 presets dropped)
 
 ---
 

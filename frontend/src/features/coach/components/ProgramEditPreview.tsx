@@ -52,7 +52,13 @@ export function ProgramEditPreview({ plan, onClose }: ProgramEditPreviewProps) {
                       <span className="shrink-0 text-right tabular-nums">{u.changes.join(' · ')}</span>
                     </li>
                   ))}
-                  {w.reordered && <li className="text-gray-500 dark:text-gray-400">Order changed</li>}
+                  {w.reordered && (
+                    <li className="text-gray-500 dark:text-gray-400">
+                      New order: {w.order.map((o) => ('id' in o
+                        ? w.workout?.exercises?.find((e) => e.id === o.id)?.name
+                        : w.adds[o.add].name)).join(' → ')}
+                    </li>
+                  )}
                 </ul>
               </div>
             ))}

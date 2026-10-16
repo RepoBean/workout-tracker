@@ -242,7 +242,11 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
   date/updatedAt); a format-version bump alone won't refresh it on a new weigh-in. Bump
   `ALLTIME_FORMAT_VERSION` too.
 
-### [ ] C4: Progression schemes
+### [~] C4: Progression schemes
+
+> Bundle doc: `docs/v4-bundle-c4-progression.md`. Became: a better double-progression rule, a per-exercise
+> step, a deload hint and coach propose-edit; the linear scheme and presets were dropped after replaying
+> main's history. On staging 2026-10-16; main pending Jason's OK.
 - Per-exercise `progressionScheme` column on Exercises, **`NOT NULL DEFAULT 'double'`** (= today's
   behaviour) so an older image's inserts still succeed.
 - `computeProgression` is called only from `ExerciseCard.tsx` ~104, with the previous session's sets

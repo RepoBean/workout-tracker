@@ -1,6 +1,6 @@
 # v4 Bundle C4: Progression (better rule, per-exercise step, deload) + coach program edits
 
-Status: **building (decisions §6, Jason 2026-10-16).** Written 2026-10-16 at `046d986`, from
+Status: **on staging 2026-10-16 (code `c04127a` + fixes `8f6bc1c`, `03302dd`); main pending Jason's OK; wife later.** Written 2026-10-16 at `046d986`, from
 `docs/v4-plan.md` §2 C4 re-checked against the code and **replayed against main's history** that day.
 The plan's "linear scheme" was dropped after that replay (§2); line numbers are from that read.
 
@@ -166,4 +166,23 @@ unmatched workouts untouched, cardio kept, empty diff and emptied workout reject
 
 ## 9. Ship notes
 
-_(filled in after staging)_
+- Backend 131 tests (+6 new, 2 characterization tests gained the field); frontend 324 (+36), also under
+  `TZ=America/New_York`; `tsc` clean.
+- `api-snapshot` staging before/after (`c04127a`): 17 files differ, every changed line is an added
+  `"incrementLbs": null` (477) — programs, exports, session exercises. Nothing else.
+- Rollback: `ddd221b` backend on a copy of the migrated staging DB boots (7 migrations recorded, none
+  re-run), `/stats` and `/programs` read fine without the field, and its create stores `incrementLbs`
+  NULL even when the field is sent.
+- Headless (Pixel 7, 8037; staging progression switched on, coach pointed at a Playwright-intercepted
+  fake endpoint since staging has no key): Advanced field saves 10 on Squat and the row reads
+  `3 × 5-8 · +10 lb`; Full Body A hints — Squat `Last: 145×8 → Try: 155 ↑` (its own step), Low Incline
+  DB `45×12 → 50 ↑`, Cable Row / Hip Abduction / Bicep Curl hold; a seeded `C4 Deload Lift` (3 past
+  sessions 225×4/4/3 on 5-8) shows the amber `Stuck at 225 for 3 sessions → Try: 200 ↓` and pre-fills
+  200×5. Coach edit on Full Body B: preview → Apply → workout matches (Cable Crunch removed, Face Pull
+  added, ranges narrowed, Deadlift +10 step); a second edit (reorder + add mid-list + remove) applied in
+  the right order.
+- Found and fixed on staging: (1) an edit that left out `supersetGroup` ungrouped the exercise — now
+  left out = keep, `"none"` = ungroup (`8f6bc1c`); (2) adds after a removal reused an `orderIndex` —
+  now placed after the highest kept slot (`03302dd`). The preview now spells out the new order.
+- Staging test data left in place until the next `seed-staging.sh`: `C4 Deload Lift` on Full Body A with
+  three logged past sessions (Oct 8/11/14), Full Body B edited by the two coach tests, Squat step 10.
