@@ -36,7 +36,7 @@ export function ProgramEditPreview({ plan, onClose }: ProgramEditPreviewProps) {
                     <li key={`a${i}`} className="flex justify-between gap-3 text-primary-700 dark:text-primary-300">
                       <span className="min-w-0 break-words">+ {a.name}</span>
                       <span className="shrink-0 tabular-nums">
-                        {a.targetSets} × {a.targetReps}
+                        {a.supersetGroup ? `${a.supersetGroup} · ` : ''}{a.targetSets} × {a.targetReps}
                         {a.incrementLbs ? ` · +${a.incrementLbs} lb` : ''}
                       </span>
                     </li>

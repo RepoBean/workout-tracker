@@ -69,7 +69,7 @@ export function useApplyProgramEdit() {
               targetSets: a.targetSets,
               targetReps: a.targetReps,
               orderIndex: base + i,
-              supersetGroup: a.supersetGroup,
+              supersetGroup: a.supersetGroup ?? null,
               exerciseType: 'strength',
               incrementLbs: a.incrementLbs ?? null,
             }));

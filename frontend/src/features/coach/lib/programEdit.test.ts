@@ -28,7 +28,7 @@ const program = (): Program => ({
 });
 
 const same = (name: string, targetReps = '10-15', more: object = {}) =>
-  ({ name, targetSets: 3, targetReps, supersetGroup: null, ...more });
+  ({ name, targetSets: 3, targetReps, ...more });
 
 function plan(input: Parameters<typeof planProgramEdit>[1], programs: Program[] = [program()]) {
   const r = planProgramEdit(programs, input);
@@ -54,6 +54,21 @@ describe('planProgramEdit', () => {
       ['Lateral Raise', ['3 × 10-15 → 3 × 8-12']],
     ]);
     expect(w.updates[1].next.incrementLbs).toBeNull();
+  });
+
+  it('an omitted superset keeps the group; null clears it; a letter sets it', () => {
+    const programs = [program()];
+    programs[0].workouts![0].exercises![1].supersetGroup = 'A';
+    const rest = [same('Pallof Press'), same('Treadmill')];
+    const keep = plan([{ name: 'Full Body A', exercises: [same('Squat', '5-8'), same('Lateral Raise', '8-12'), ...rest] }], programs);
+    expect(keep.workouts[0].updates[0].changes).toEqual(['3 × 10-15 → 3 × 8-12']);
+    expect(keep.workouts[0].updates[0].next.supersetGroup).toBe('A');
+
+    const clear = plan([{ name: 'Full Body A', exercises: [same('Squat', '5-8'), same('Lateral Raise', '10-15', { supersetGroup: null }), ...rest] }], programs);
+    expect(clear.workouts[0].updates[0].changes).toEqual(['no superset']);
+
+    const set = plan([{ name: 'Full Body A', exercises: [same('Squat', '5-8', { supersetGroup: 'B' }), same('Lateral Raise'), ...rest] }], programs);
+    expect(set.workouts[0].updates[0].changes).toEqual(['superset B']);
   });
 
   it('an omitted step keeps the current one; null clears it', () => {
@@ -120,6 +135,8 @@ describe('normalizeProgramEdit', () => {
         exercises: [
           { name: 'Squat', targetSets: 3.2, targetReps: '5-8', supersetGroup: 'a', incrementLbs: 10 },
           { name: 'Curl', targetSets: 3, targetReps: 12, incrementLbs: 500 },
+          { name: 'Row', targetSets: 3, targetReps: '8', supersetGroup: 'none' },
+          { name: 'Fly', targetSets: 3, targetReps: '8', supersetGroup: 'Z' },
           { name: '', targetSets: 3, targetReps: '8' },
           'junk',
         ],
@@ -128,7 +145,9 @@ describe('normalizeProgramEdit', () => {
       name: 'Full Body A',
       exercises: [
         { name: 'Squat', targetSets: 3, targetReps: '5-8', supersetGroup: 'A', incrementLbs: 10 },
-        { name: 'Curl', targetSets: 3, targetReps: '12', supersetGroup: null },
+        { name: 'Curl', targetSets: 3, targetReps: '12' },
+        { name: 'Row', targetSets: 3, targetReps: '8', supersetGroup: null },
+        { name: 'Fly', targetSets: 3, targetReps: '8' },
       ],
     }]);
   });

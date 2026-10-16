@@ -205,6 +205,18 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+/**
+ * Model superset → 'A'-'E', null to clear ("none", "", null), undefined when absent or junk
+ * (an edit then keeps the current group: a model leaving the field out must not ungroup).
+ */
+function normalizeSuperset(value: unknown): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== 'string') return undefined;
+  const v = value.trim().toUpperCase();
+  if (v === '' || v === 'NONE') return null;
+  return SUPERSET_GROUPS.has(v) ? v : undefined;
+}
+
 /** Model step → a valid one (0 < step ≤ 100), null to clear, undefined when absent/junk. */
 function normalizeStep(value: unknown): number | null | undefined {
   if (value === null) return null;
@@ -219,16 +231,15 @@ function normalizeStrengthFields(obj: Record<string, unknown>) {
     typeof obj.targetReps === 'string' && obj.targetReps.trim()
       ? obj.targetReps.trim().slice(0, 50)
       : String(obj.targetReps ?? '8-12').slice(0, 50);
-  const supersetRaw = typeof obj.supersetGroup === 'string' ? obj.supersetGroup.toUpperCase() : null;
-  const supersetGroup = supersetRaw && SUPERSET_GROUPS.has(supersetRaw) ? supersetRaw : null;
-  return { name, targetSets, targetReps, supersetGroup, incrementLbs: normalizeStep(obj.incrementLbs) };
+  return { name, targetSets, targetReps, supersetGroup: normalizeSuperset(obj.supersetGroup), incrementLbs: normalizeStep(obj.incrementLbs) };
 }
 
 function normalizeExercise(raw: unknown, index: number): ProgramExportExercise | null {
   const obj = asRecord(raw);
   if (!obj) return null;
-  const { name, targetSets, targetReps, supersetGroup, incrementLbs } = normalizeStrengthFields(obj);
+  const { name, targetSets, targetReps, supersetGroup: group, incrementLbs } = normalizeStrengthFields(obj);
   if (!name) return null;
+  const supersetGroup = group ?? null;
   const exerciseType = obj.exerciseType === 'cardio' ? 'cardio' : 'strength';
   return {
     name,
@@ -258,7 +269,11 @@ export function normalizeProgramEdit(input: Record<string, unknown>): EditWorkou
       .filter((e): e is Record<string, unknown> => e !== null)
       .map(normalizeStrengthFields)
       .filter((e) => e.name)
-      .map(({ incrementLbs, ...rest }) => (incrementLbs === undefined ? rest : { ...rest, incrementLbs }));
+      .map(({ name, targetSets, targetReps, supersetGroup, incrementLbs }) => ({
+        name, targetSets, targetReps,
+        ...(supersetGroup !== undefined && { supersetGroup }),
+        ...(incrementLbs !== undefined && { incrementLbs }),
+      }));
     workouts.push({ name, exercises });
   }
   return workouts;
@@ -400,7 +415,7 @@ export function createCoachToolset(opts: {
                       name: { type: 'string' },
                       targetSets: { type: 'number' },
                       targetReps: { type: 'string', description: 'e.g. "8-12" or "5".' },
-                      supersetGroup: { type: 'string', description: 'Optional A-E to group supersets.' },
+                      supersetGroup: { type: 'string', description: 'A-E to group supersets, "none" to ungroup. Omit to keep the current group.' },
                       incrementLbs: {
                         type: 'number',
                         description:

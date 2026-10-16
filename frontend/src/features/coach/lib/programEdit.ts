@@ -13,7 +13,8 @@ export interface EditExerciseInput {
   name: string;
   targetSets: number;
   targetReps: string;
-  supersetGroup: string | null;
+  /** undefined = keep the current group; null = no superset. */
+  supersetGroup?: string | null;
   /** undefined = keep the slot's current step; null = clear it (use the global setting). */
   incrementLbs?: number | null;
 }
@@ -60,7 +61,7 @@ function diffExercise(existing: Exercise, input: EditExerciseInput): ExerciseUpd
   const next = {
     targetSets: input.targetSets,
     targetReps: input.targetReps,
-    supersetGroup: input.supersetGroup,
+    supersetGroup: input.supersetGroup === undefined ? existing.supersetGroup ?? null : input.supersetGroup,
     incrementLbs: input.incrementLbs === undefined ? currentStep : input.incrementLbs,
   };
   const changes: string[] = [];
