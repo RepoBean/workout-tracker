@@ -70,7 +70,7 @@ Program (id, name, isActive, isArchived, currentWorkoutIndex, createdAt, updated
                   catalogId, incrementLbs, createdAt, updatedAt)
 
 Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHoc,
-         heartRateAvg, heartRateMin, heartRateMax, heartRateSeries, exerciseNotes,
+         heartRateAvg, heartRateMin, heartRateMax, heartRateSeries, exerciseNotes, notes,
          createdAt, updatedAt)
 └─> Set (id, sessionId, exerciseId, exerciseName, weight, reps, setNumber, perceivedEffort,
          dropIndex, heartRateAvg, heartRateMax, durationSec, distance, catalogId,
@@ -101,7 +101,7 @@ BodyWeights (id, date, weight, createdAt, updatedAt)   ← date = local YYYY-MM-
 | **Drop Sets** | `dropIndex` field on Sets — standard sets have `dropIndex = 0`, drops have `1, 2, 3...` |
 | **Cardio Exercises** | `exerciseType` is `'strength'` (default) or `'cardio'`. Cardio exercises may set `cardioModality` (running/cycling/treadmill/rowing/other) and targets (`targetDurationSec`, `targetDistance`). Cardio sets store `durationSec`/`distance`; weight/reps are 0. |
 | **Heart Rate** | From a BLE HR strap (Web Bluetooth). Sessions store `heartRateAvg/Min/Max` + `heartRateSeries` (JSON string of downsampled samples); Sets store per-set `heartRateAvg`/`heartRateMax`. All nullable — absent when no strap connected. |
-| **Exercise Notes** | `Session.exerciseNotes` JSON column keyed by exercise name (captured in the RPE prompt). Session-level to avoid replicating one string across every set. |
+| **Exercise Notes** | `Session.exerciseNotes` JSON column keyed by exercise name (captured in the RPE prompt). Session-level to avoid replicating one string across every set. `Session.notes` (text) is the whole-workout note ("didn't eat beforehand"): typed on the completion screen, edited in the history editor, shown on the History card, fed to the coach with the exercise notes. |
 | **Exercise Catalog** | One `ExerciseCatalog` row per lift (unique on `lower(name)`, index `catalog_name_lower`), `aliases` JSON `string[]`. `Exercises.catalogId` / `Sets.catalogId` are nullable FKs with **no ON DELETE action** (a referenced row can't be deleted). **Names stay on every row and are authoritative**: the server derives `catalogId` from the name on every write (`resolveCatalogId` in `db/catalog.ts` — name, else alias, else insert); request schemas never accept `catalogId`, so old clients stay correct. `backfillCatalog()` runs every boot (after migrations): fills NULL ids (first boot, or rows an older image wrote during a rollback) and GCs unreferenced alias-less rows — silent once converged. Merge (Settings → Exercise catalog) folds B into A: re-points ids, B's name + aliases become A's aliases; split reverses it exactly. Neither ever rewrites `exerciseName`/`name`/`exerciseNotes` or a row's `updatedAt`. Readers that should see a renamed lift as one lift use catalog identity: `/previous`, `history-by-name`, `all-sets-by-name` (server), Progress + coach all-time rollup (client, `shared/lib/catalog.ts`). Per-session views (history cards, active session, notes, CSV) stay name-based by design. A program-exercise rename resolves to the new name's entry ("this slot now does a different lift"); "same lift, new spelling" is a merge. |
 
 ---
@@ -389,7 +389,7 @@ backend/
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
 | PUT | /api/sessions/:id/exercise-note | Set/clear a per-exercise note |
 | POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
-| PUT | /api/sessions/:id | Move a completed session's date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) |
+| PUT | /api/sessions/:id | Edit a completed session: `notes` (≤1000, empty/null clears) and/or move its date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
 | GET | /api/catalog | Exercise catalog: `{id, name, aliases, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
 | POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
@@ -530,7 +530,7 @@ backend/
   conversation. The data is smaller than the machinery built to query it.
 - `lib/dossier.ts` builds it (pure, tested): today's date, an athlete line (age/sex/resting HR +
   auto-progression settings), stats, the active program, all-time per-exercise rollups with
-  stall/dropped flags, **every exercise note ever written**, and the last 20 sessions in full
+  stall/dropped flags, **every workout and exercise note ever written**, and the last 20 sessions in full
   per-set detail. Never emits `heartRateSeries`, ids or timestamps.
 - **Stability is load-bearing**: the text sits behind a prompt-cache breakpoint, so it must be
   byte-identical across turns. All builders are pure and take `today` explicitly, and the page

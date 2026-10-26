@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useSession, useSetExerciseNote } from '../../shared/api/queries';
+import { useSession, useSetExerciseNote, useSetSessionNote } from '../../shared/api/queries';
 import { CARDIO_MODALITY_INFO } from '../../shared/api/cardio';
 import { isCardioExercise } from '../../shared/api/predicates';
 import type { ActiveSession, CardioModality, Set } from '../../shared/api/types';
 import { Button } from '../../shared/ui/Button';
 import { AddExercise } from '../active-session/components/AddExercise';
+import { ExerciseNote } from '../active-session/components/ExerciseNote';
 import { EditExerciseCard } from './components/edit/EditExerciseCard';
 import { useSessionEdits } from './hooks/useSessionEdits';
 import { useDeleteSession } from './hooks/useHistory';
@@ -31,6 +32,8 @@ export default function SessionEditor() {
   const session = data as ActiveSession | undefined;
   const edits = useSessionEdits(sessionId);
   const setNote = useSetExerciseNote(sessionId);
+  const setSessionNote = useSetSessionNote(sessionId);
+  const [addingSessionNote, setAddingSessionNote] = useState(false);
   const deleteSession = useDeleteSession();
 
   // Cards with no sets yet: a picked program slot, an added exercise, or the
@@ -122,6 +125,19 @@ export default function SessionEditor() {
           saving={edits.setDate.isPending}
           onSave={(iso) => edits.setDate.mutate(iso)}
         />
+        {session.notes || addingSessionNote ? (
+          <ExerciseNote
+            note={session.notes ?? ''}
+            startEditing={addingSessionNote}
+            onCancel={() => setAddingSessionNote(false)}
+            onSetNote={(n) => { setSessionNote.mutate(n); setAddingSessionNote(false); }}
+          />
+        ) : (
+          <button type="button" onClick={() => setAddingSessionNote(true)}
+            className="text-sm min-h-[44px] text-amber-700 dark:text-amber-300">
+            + Workout note
+          </button>
+        )}
       </div>
 
       {cards.map(card => (

@@ -74,6 +74,11 @@ describe('renderSession', () => {
     expect(out).toContain('Low Incline DB Press: 40x12,40x10,40x8 @9');
   });
 
+  it('renders the whole-workout note', () => {
+    const out = renderSession(session({ notes: '  Ran out of gas  ', sets: [set({ weight: 100, reps: 10 })] }));
+    expect(out).toContain('  note (workout): Ran out of gas');
+  });
+
   it('tags RPE per set when they differ', () => {
     const out = renderSession(
       session({
@@ -416,8 +421,16 @@ describe('buildNotesBlock', () => {
     expect(out.indexOf('2026-07-01')).toBeLessThan(out.indexOf('2026-05-10'));
   });
 
+  it('includes the whole-workout note, before that session\'s exercise notes', () => {
+    const out = buildNotesBlock([
+      session({ notes: "Didn't eat beforehand, ran out of gas", exerciseNotes: { 'Leg Press': 'Felt heavy' } }),
+    ]);
+    expect(out).toContain("2026-09-07 whole workout: Didn't eat beforehand, ran out of gas");
+    expect(out.indexOf('whole workout')).toBeLessThan(out.indexOf('Leg Press'));
+  });
+
   it('skips blank notes and returns empty when there are none', () => {
-    expect(buildNotesBlock([session({ exerciseNotes: { 'Leg Press': '   ' } })])).toBe('');
+    expect(buildNotesBlock([session({ exerciseNotes: { 'Leg Press': '   ' }, notes: '  ' })])).toBe('');
     expect(buildNotesBlock([session()])).toBe('');
   });
 });

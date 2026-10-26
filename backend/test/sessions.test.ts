@@ -492,6 +492,27 @@ describe('history editing (v4 C1)', () => {
     expect((await request(app).put('/api/sessions/99999').send({ completedAt: hoursAgo(1) })).status).toBe(404);
   });
 
+  it('PUT /:id sets, trims and clears the workout note without moving the date', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+    const before = (await request(app).get(`/api/sessions/${session.id}`)).body;
+    expect(before.notes).toBeNull();
+
+    const res = await request(app).put(`/api/sessions/${session.id}`).send({ notes: "  Didn't eat beforehand, ran out of gas  " });
+    expect(res.status).toBe(200);
+    expect(res.body.notes).toBe("Didn't eat beforehand, ran out of gas");
+    expect(res.body.completedAt).toBe(before.completedAt);
+    expect(Date.parse(res.body.updatedAt)).toBeGreaterThanOrEqual(Date.parse(before.updatedAt));
+    const history = await request(app).get('/api/sessions/history');
+    expect(history.body[0].notes).toBe("Didn't eat beforehand, ran out of gas");
+
+    expect((await request(app).put(`/api/sessions/${session.id}`).send({ notes: '   ' })).body.notes).toBeNull();
+    await request(app).put(`/api/sessions/${session.id}`).send({ notes: 'x' });
+    expect((await request(app).put(`/api/sessions/${session.id}`).send({ notes: null })).body.notes).toBeNull();
+    expect((await request(app).put(`/api/sessions/${session.id}`).send({ notes: 'x'.repeat(1001) })).status).toBe(400);
+  });
+
   it('/stats.lastUpdatedAt moves when a set in an old session is edited', async () => {
     const { push } = await seedProgram();
     const old = await startSession(push.id);

@@ -110,6 +110,8 @@ export const sessions = sqliteTable('Sessions', {
   heartRateMax: integer('heartRateMax'),
   heartRateSeries: text('heartRateSeries'), // JSON string; the frontend parses it
   exerciseNotes: text('exerciseNotes', { mode: 'json' }).$type<Record<string, string>>(),
+  // Whole-workout note ("didn't eat beforehand"), written after completion
+  notes: text('notes'),
   ...timestamps,
 }, (t) => [
   index('sessions_program_id').on(t.programId),

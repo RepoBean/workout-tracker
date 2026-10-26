@@ -32,6 +32,8 @@ const startSessionSchema = z.object({
 
 const updateSessionSchema = z.object({
   completedAt: pastDateSchema.optional(),
+  // Whole-workout note; empty/whitespace or null clears it
+  notes: z.string().max(1000).nullable().optional(),
 });
 
 // Floor for set weight. Negative weights log assisted lifts (assisted pull-up
@@ -705,7 +707,7 @@ router.delete('/:id/sets/:setId', validateParams(sessionSetParamsSchema), (req: 
   }
 });
 
-// PUT /api/sessions/:id - Move a completed session's date. Shifts createdAt,
+// PUT /api/sessions/:id - Edit a completed session: its note, or move its date. Shifts createdAt,
 // completedAt and every set's createdAt by the same delta, so the duration,
 // HR series (offsets from createdAt) and set markers stay aligned.
 router.put('/:id', validateParams(idParamSchema), validate(updateSessionSchema), async (req: Request, res: Response) => {
@@ -719,6 +721,12 @@ router.put('/:id', validateParams(idParamSchema), validate(updateSessionSchema),
     if (!session.completedAt) {
       res.status(400).json({ error: 'Only a completed session can be edited' });
       return;
+    }
+
+    if (req.body.notes !== undefined) {
+      const trimmed = typeof req.body.notes === 'string' ? req.body.notes.trim() : '';
+      db.update(sessions).set({ notes: trimmed === '' ? null : trimmed, updatedAt: now() })
+        .where(eq(sessions.id, sessionId)).run();
     }
 
     if (req.body.completedAt !== undefined) {

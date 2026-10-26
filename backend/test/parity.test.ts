@@ -99,7 +99,7 @@ describe('response shapes', () => {
     const session = (await request(app).get(`/api/sessions/${started.id}`)).body;
     expect(Object.keys(session).sort()).toEqual([
       'completedAt', 'createdAt', 'exerciseNotes', 'exercises', 'heartRateAvg', 'heartRateMax', 'heartRateMin',
-      'heartRateSeries', 'id', 'isAdHoc', 'programId', 'programName', 'sets', 'updatedAt', 'workoutId', 'workoutName',
+      'heartRateSeries', 'id', 'isAdHoc', 'notes', 'programId', 'programName', 'sets', 'updatedAt', 'workoutId', 'workoutName',
     ]);
     expect(session.isAdHoc).toBe(false);
     expect(session.completedAt).toBeNull();

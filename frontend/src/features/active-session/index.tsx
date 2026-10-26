@@ -9,7 +9,7 @@ import { useRpeFlow } from './hooks/useRpeFlow';
 import { useHrPersistence } from './hooks/useHrPersistence';
 import { useDiscardSession } from './hooks/useDiscardSession';
 import { clearSessionLocalState } from './lib/sessionStorage';
-import { useExerciseHistoryByName } from '../../shared/api/queries';
+import { useExerciseHistoryByName, useSetSessionNote } from '../../shared/api/queries';
 import { stopWorkoutService } from '../../shared/lib/foregroundService';
 import { SessionHeader } from './components/SessionHeader';
 import { ExerciseCard } from './components/ExerciseCard';
@@ -294,6 +294,7 @@ export default function ActiveSession() {
   };
 
   const discardMutation = useDiscardSession();
+  const setSessionNote = useSetSessionNote(sessionId);
 
   const handleDiscard = () => {
     const count = sets.length;
@@ -561,7 +562,8 @@ export default function ActiveSession() {
         duration={celebrationData?.duration || 0}
         avgRpe={celebrationData?.avgRpe ?? null}
         hrSeries={celebrationData?.hrSeries || null}
-        onDismiss={() => {
+        onDismiss={(note) => {
+          if (note.trim()) setSessionNote.mutate(note);
           setShowCelebration(false);
           navigate('/', { replace: true });
         }}

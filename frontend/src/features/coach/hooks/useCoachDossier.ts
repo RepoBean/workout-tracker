@@ -28,7 +28,7 @@ const NO_WEIGH_INS: BodyWeight[] = [];
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 5;
+const ALLTIME_FORMAT_VERSION = 6;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 

@@ -125,6 +125,7 @@ export function renderSession(session: Session): string {
   for (const [name, sets] of byExercise) {
     lines.push(`  ${name}: ${renderSets(sets)}`);
   }
+  if (session.notes?.trim()) lines.push(`  note (workout): ${session.notes.trim()}`);
   for (const [exercise, note] of Object.entries(session.exerciseNotes ?? {})) {
     if (note?.trim()) lines.push(`  note (${exercise}): ${note.trim()}`);
   }
@@ -323,7 +324,7 @@ export function buildAllTimeBlock(
 // ---------------------------------------------------------------------------
 
 /**
- * Every exercise note ever written, newest first.
+ * Every workout and exercise note ever written, newest first.
  *
  * These must NOT ride along with the recent-sessions block: live, 3 of 4 noted sessions fall
  * outside the last-20 window, so a recent-only design would hide most of them. They are the
@@ -336,6 +337,9 @@ export function buildNotesBlock(sessions: Session[]): string {
     isoDate(b.completedAt).localeCompare(isoDate(a.completedAt))
   );
   for (const session of ordered) {
+    if (session.notes?.trim()) {
+      lines.push(`  ${isoDate(session.completedAt)} whole workout: ${session.notes.trim()}`);
+    }
     for (const [exercise, note] of Object.entries(session.exerciseNotes ?? {})) {
       if (note?.trim()) {
         lines.push(`  ${isoDate(session.completedAt)} ${exercise}: ${note.trim()}`);

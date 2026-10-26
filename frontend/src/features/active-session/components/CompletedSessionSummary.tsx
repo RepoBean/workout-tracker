@@ -42,6 +42,12 @@ export function CompletedSessionSummary({ session }: CompletedSessionSummaryProp
         Completed on {session.completedAt ? new Date(session.completedAt).toLocaleDateString() : ''}
       </p>
 
+      {session.notes && (
+        <p className="max-w-xs mx-auto mb-6 text-sm italic text-amber-700 dark:text-amber-300 whitespace-pre-wrap break-words">
+          {session.notes}
+        </p>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-4 mb-6 max-w-xs mx-auto">
         <div className="bg-gray-50 dark:bg-surface-800 rounded-lg p-3">

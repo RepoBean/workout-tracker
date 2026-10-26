@@ -275,6 +275,44 @@ export function useSetExerciseNote(sessionId: number) {
 }
 
 /**
+ * Set or clear the whole-workout note on a completed session.
+ * Empty/whitespace `note` (or null) clears it.
+ */
+export function useSetSessionNote(sessionId: number) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async (note: string | null) => {
+      const { data } = await api.put<ActiveSession>(`/sessions/${sessionId}`, { notes: note });
+      return data;
+    },
+    onMutate: async (note) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.session(sessionId) });
+      const previous = queryClient.getQueryData<ActiveSession>(queryKeys.session(sessionId));
+      if (previous) {
+        queryClient.setQueryData<ActiveSession>(queryKeys.session(sessionId), {
+          ...previous,
+          notes: note?.trim() || null,
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _note, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.session(sessionId), context.previous);
+      }
+      toast.error('Failed to save workout note. Please try again.');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.session(sessionId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.history() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.stats }); // lastUpdatedAt → coach memo
+    },
+  });
+}
+
+/**
  * Import a program from a version-1 export payload.
  * Shared because both the program builder and the AI coach's
  * "build a program" flow import through the same preview-then-confirm path.

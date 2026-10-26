@@ -7,7 +7,7 @@ import { LIVE_DDL, PRE_LEGACY_DDL } from './fixtures/liveDdl.js';
 
 
 const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings', 'BodyWeights'];
-const MIGRATIONS = 7; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights, 0006 exercise increment
+const MIGRATIONS = 8; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights, 0006 exercise increment, 0007 session notes
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
@@ -15,7 +15,7 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   Exercises: ['id', 'workoutId', 'name', 'targetSets', 'targetReps', 'orderIndex', 'supersetGroup',
     'exerciseType', 'cardioModality', 'targetDurationSec', 'targetDistance', 'createdAt', 'updatedAt', 'catalogId', 'incrementLbs'],
   Sessions: ['id', 'programId', 'programName', 'workoutId', 'workoutName', 'completedAt', 'isAdHoc',
-    'heartRateAvg', 'heartRateMin', 'heartRateMax', 'heartRateSeries', 'exerciseNotes', 'createdAt', 'updatedAt'],
+    'heartRateAvg', 'heartRateMin', 'heartRateMax', 'heartRateSeries', 'exerciseNotes', 'createdAt', 'updatedAt', 'notes'],
   Sets: ['id', 'sessionId', 'exerciseId', 'exerciseName', 'weight', 'reps', 'setNumber', 'perceivedEffort',
     'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt', 'catalogId'],
   ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt'],
@@ -23,10 +23,11 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
   BodyWeights: ['id', 'date', 'weight', 'createdAt', 'updatedAt'],
 };
 
-// What 0002's ALTER TABLE ... ADD appends to a table's stored DDL (and 0006 on Exercises).
+// What 0002's ALTER TABLE ... ADD appends to a table's stored DDL (and 0006 on Exercises, 0007 on Sessions).
 const withCatalogId = (ddl: string | null) =>
   ddl?.replace(/\)$/, ', `catalogId` integer REFERENCES ExerciseCatalog(id))');
 const withIncrement = (ddl: string | null | undefined) => ddl?.replace(/\)$/, ', `incrementLbs` real)');
+const withNotes = (ddl: string | null) => ddl?.replace(/\)$/, ', `notes` text)');
 
 function columns(db: Database.Database, table: string): string[] {
   return (db.pragma(`table_info(${table})`) as Array<{ name: string }>).map(c => c.name).sort();
@@ -70,7 +71,7 @@ describe('bootstrap on a fresh database', () => {
 });
 
 describe('bootstrap on the live (Sequelize-created) schema', () => {
-  it('adds only the migrations table, the indexes, the catalog, settings + bodyweights tables, the two catalogId columns and incrementLbs', () => {
+  it('adds only the migrations table, the indexes, the catalog, settings + bodyweights tables, the two catalogId columns, incrementLbs and Sessions.notes', () => {
     const db = fresh(LIVE_DDL);
     const before = schemaObjects(db);
 
@@ -93,11 +94,12 @@ describe('bootstrap on the live (Sequelize-created) schema', () => {
       'sets_catalog_id',
       'sets_exercise_name_lower',
     ]);
-    // Sets and Exercises gain exactly the appended columns; every other
+    // Sets, Exercises and Sessions gain exactly the appended columns; every other
     // pre-existing object is byte-identical.
     for (const b of before) {
       const expected = b.name === 'Sets' ? withCatalogId(b.sql)
-        : b.name === 'Exercises' ? withIncrement(withCatalogId(b.sql)) : b.sql;
+        : b.name === 'Exercises' ? withIncrement(withCatalogId(b.sql))
+        : b.name === 'Sessions' ? withNotes(b.sql) : b.sql;
       expect(after.find(a => a.name === b.name)?.sql).toBe(expected);
     }
     expect(appliedMigrations(db)).toBe(MIGRATIONS);

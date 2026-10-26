@@ -168,6 +168,12 @@ export function SessionCard({ session, highlightId, onDelete }: SessionCardProps
         )}
       </div>
 
+      {session.notes && (
+        <div className={`mt-2 text-sm italic text-amber-700 dark:text-amber-300 whitespace-pre-wrap break-words ${isExpanded ? '' : 'line-clamp-2'}`}>
+          {session.notes}
+        </div>
+      )}
+
       {/* Expanded Details */}
       {isExpanded && (
         <div className="mt-3 pt-3 border-t dark:border-surface-700 space-y-3">

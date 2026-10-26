@@ -58,6 +58,8 @@ export interface Session {
   heartRateMax: number | null;
   heartRateSeries: string | null;
   exerciseNotes: Record<string, string> | null;
+  /** Whole-workout note, written after completion. Absent from an older backend. */
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
   sets?: Set[];

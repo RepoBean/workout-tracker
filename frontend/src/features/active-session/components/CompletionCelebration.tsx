@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import confetti from 'canvas-confetti';
 import { Button } from '../../../shared/ui/Button';
 import { TimeInZoneBar } from '../../../shared/ui/TimeInZoneBar';
@@ -12,7 +12,8 @@ interface CompletionCelebrationProps {
   duration: number; // in minutes
   avgRpe?: number | null;
   hrSeries?: { t: number[]; b: number[] } | null;
-  onDismiss: () => void;
+  /** Called with the workout note typed here ('' when none). */
+  onDismiss: (note: string) => void;
 }
 
 export function CompletionCelebration({
@@ -26,6 +27,7 @@ export function CompletionCelebration({
   onDismiss,
 }: CompletionCelebrationProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [note, setNote] = useState('');
 
   useEffect(() => {
     if (!isOpen || !canvasRef.current) return;
@@ -92,7 +94,7 @@ export function CompletionCelebration({
     <div
       className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss();
+        if (e.target === e.currentTarget) onDismiss(note);
       }}
     >
       <canvas
@@ -143,7 +145,20 @@ export function CompletionCelebration({
           )}
         </div>
 
-        <Button variant="primary" size="lg" onClick={onDismiss} className="w-full">
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          maxLength={1000}
+          aria-label="Workout note"
+          placeholder="Add a note (optional) — e.g. didn't eat beforehand, ran out of gas"
+          className="w-full mb-4 p-3 text-sm rounded-lg text-left
+                     bg-white dark:bg-surface-850
+                     border border-gray-200 dark:border-surface-700
+                     focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+
+        <Button variant="primary" size="lg" onClick={() => onDismiss(note)} className="w-full">
           Done
         </Button>
       </div>
