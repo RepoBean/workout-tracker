@@ -268,4 +268,18 @@ describe('suggestReps', () => {
       })
     ).toBe(10);
   });
+
+  it('repCeiling lets the suggestion climb past the top of the range', () => {
+    const args = {
+      setNumber: 1,
+      targetReps: '10-15',
+      previousSets: [{ setNumber: 1, weight: 10, reps: 15 }],
+      currentSessionSets: [],
+      plannedWeight: 10,
+    };
+    expect(suggestReps(args)).toBe(15);
+    expect(suggestReps({ ...args, repCeiling: 18 })).toBe(16);
+    // A ceiling below the range's top never lowers it.
+    expect(suggestReps({ ...args, repCeiling: 12 })).toBe(15);
+  });
 });

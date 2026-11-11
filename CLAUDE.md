@@ -121,6 +121,7 @@ src/
 │   │   │   ├── ExerciseCard.tsx   # Single exercise with all its sets
 │   │   │   ├── ExerciseNote.tsx   # Per-exercise note view/edit/clear widget
 │   │   │   ├── SwapExercise.tsx   # Swap exercise modal (session-only substitute)
+│   │   │   ├── StepPicker.tsx     # Progression hint chip; tap sets the slot's weight step (C4b)
 │   │   │   ├── SupersetStep.tsx   # Superset step — fixed-position cards, expand in place
 │   │   │   ├── CompletionCelebration.tsx  # Session complete animation
 │   │   │   ├── CompletedSessionSummary.tsx # Read-only view for already-completed sessions
@@ -150,7 +151,7 @@ src/
 │   │   │   ├── whatIsNext.ts      # "What's Next?" calculation (CLIENT-SIDE)
 │   │   │   ├── plates.ts          # Plate calculator math
 │   │   │   ├── personalRecord.ts  # PR (1RM) rules for celebrations (mirrors Progress `personalRecords()`)
-│   │   │   ├── progression.ts     # Double progression on the heaviest-weight sets: up / hold / deload (+ tests)
+│   │   │   ├── progression.ts     # Double progression on the heaviest-weight sets: jump-aware goal, up / hold / deload (+ tests)
 │   │   │   ├── suggestReps.ts     # Per-set rep prefill rules + parseRepTarget (+ tests)
 │   │   │   └── averageRpe.ts      # Working-set RPE average (+ tests)
 │   │   └── index.tsx              # WorkoutSession page entry (~580 lines)
@@ -610,11 +611,16 @@ backend/
 ### 24. Progression (v4 C4)
 - Gated by Settings → **Enable auto-progression** (per instance). Pre-fill hint before the first set only
 - Double progression judged on last session's sets at its **heaviest** weight (ramp sets ignored): **up** when
-  set 1 hit the top of the range and every set stayed in it (+ the slot's step, else the global increment);
+  set 1 hit the top of the range and every set reached the **goal** = `low` + the reps the next weight costs
+  (`repAllowance`: `round(step / load × 15)`, min 1; assisted load = bodyweight − assistance; goal capped at 30
+  and may sit past the range's top, where the hold target and prefill keep climbing — C4b) (+ the slot's step,
+  else the global increment);
   **deload** −10% to the nearest 5 lb when stalled 3+ sessions (`stallRun`) **and** the best set fell below the
   range (skipped when rounding gives the same weight); else **hold**. The all-sets fetch for the deload runs
   only when last session was below the range
-- Per-exercise step: exercise form → Advanced. Bundle doc: `docs/v4-bundle-c4-progression.md` (replay of
+- Per-exercise step: tap the hint chip in a workout (`StepPicker.tsx`: 2.5 / 5 / 10 / other, the lift's learned
+  step offered; program exercises only) or exercise form → Advanced. Bundle docs:
+  `docs/v4-bundle-c4b-progression-v2.md` (the goal rule + its replay), `docs/v4-bundle-c4-progression.md` (replay of
   main's history: old rule 54 bumps vs 95 actual vs new rule 114; linear scheme and 5×5 presets dropped)
 
 ---

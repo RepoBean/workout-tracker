@@ -247,6 +247,8 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
 > Bundle doc: `docs/v4-bundle-c4-progression.md`. Became: a better double-progression rule, a per-exercise
 > step, a deload hint and coach propose-edit; the linear scheme and presets were dropped after replaying
 > main's history. Shipped to staging + main 2026-10-16 (`36e7fa2`); wife pending.
+> **C4b (2026-11-11)**, `docs/v4-bundle-c4b-progression-v2.md`: the go-up rule now needs every set at
+> `low` + a jump-sized rep allowance (past the range's top if need be); the step is set from the workout hint.
 - Per-exercise `progressionScheme` column on Exercises, **`NOT NULL DEFAULT 'double'`** (= today's
   behaviour) so an older image's inserts still succeed.
 - `computeProgression` is called only from `ExerciseCard.tsx` ~104, with the previous session's sets

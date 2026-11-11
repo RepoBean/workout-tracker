@@ -1,19 +1,24 @@
 // Deterministic double-progression. No AI required.
 //
-// Judged on last session's sets at its HEAVIEST weight (ramp-up sets don't count). When set 1
-// there hit the TOP of the rep range and every one of them stayed IN the range, suggest
-// `incrementLbs` more and reset the rep target to the bottom of the range. At RPE 9 the last
-// set fades 2-4 reps, so "every set at the top" (the pre-C4 rule) almost never fired: replayed
-// over main's history it suggested a bump 54 times while the lifter went up 95 times; this rule
-// fires 114 (docs/v4-bundle-c4-progression.md §2). Otherwise keep the weight, unless the lift
-// has stalled and fallen below the range: then suggest a 10% deload. Pure functions —
+// Judged on last session's sets at its HEAVIEST weight (ramp-up sets don't count). The bump is
+// earned when set 1 there hit the TOP of the rep range (still double progression: work up the
+// range first) and every one of those sets reached the GOAL: the bottom of the range plus the
+// reps a set is expected to lose at the next weight (`repAllowance`, which grows with the size
+// of the jump relative to the load). A 3% jump on a pin stack needs low + 1; a 14% dumbbell
+// jump needs low + 2; a 50% jump (10 → 15 lb lateral raise) needs low + 8, which is PAST the
+// top of the range — the target then keeps climbing instead of forcing a jump that fails.
+// The C4 rule ("set 1 at the top, the rest merely in range") ignored jump size: over main's
+// last six months 63% of the bumps it approved landed back in the range, this rule 71% while
+// firing half as often (docs/v4-bundle-c4b-progression-v2.md §2). Otherwise keep the weight, unless the
+// lift has stalled and fallen below the range: then suggest a 10% deload. Pure functions —
 // session-time hint only, never mutates the program definition.
 //
 // The rep half of the suggestion is delegated to `suggestReps` so the pre-fill obeys one
 // set of rules everywhere. This module keeps ownership of the WEIGHT decision.
 //
-// Assisted lifts (negative weight = assistance) need no special case: −40 + 5 = −35 is
-// "less help", which is exactly the progression, and −35 > −40 fires the rep reset.
+// Assisted lifts (negative weight = assistance): −40 + 5 = −35 is "less help", which is exactly
+// the progression, and −35 > −40 fires the rep reset. Only the jump SIZE needs the bodyweight
+// (5 lb less help at 180 lb is 5/140); without one the allowance is the minimum.
 
 import { parseRepTarget, suggestReps } from './suggestReps';
 import { formatWeight } from '../../../shared/utils/format';
@@ -40,6 +45,8 @@ export interface ProgressionInput {
    * (see `couldDeload`).
    */
   history?: ReadonlyMap<string, DayTop>;
+  /** Current bodyweight, to size the jump on an assisted (negative-weight) lift. */
+  bodyweight?: number | null;
 }
 
 export type ProgressionKind = 'up' | 'hold' | 'deload';
@@ -50,8 +57,59 @@ export interface ProgressionResult {
   suggestedReps: number;
   /** True when the bump is earned (`kind === 'up'`). */
   ready: boolean;
+  /** Reps every top-weight set needs before the weight goes up. May exceed the range's top. */
+  goalReps: number;
+  /** The weight the lift moves to once the goal is met (top + step). */
+  nextWeight: number;
   /** Human-readable explanation, e.g. "Last: 100×12 → Try: 105 ↑". */
   reason: string;
+}
+
+/**
+ * Reps a set is expected to lose per 100% of jump: allowance = round(jump × this), min 1.
+ * Fixed by replaying main's history (bundle doc §2); 10–20 scored the same, 25 fired too rarely.
+ */
+export const REP_LOSS_PER_JUMP = 15;
+/** The goal never climbs past this many reps; at the cap the bump is earned regardless. */
+export const GOAL_REP_CAP = 30;
+
+/**
+ * Reps each set is expected to lose when `step` is added to `load` (the weight actually moved:
+ * the bar weight, or bodyweight − assistance). No usable load → the minimum, 1.
+ */
+export function repAllowance(step: number, load: number): number {
+  if (!(load > 0) || !(step > 0)) return 1;
+  return Math.max(1, Math.round((step / load) * REP_LOSS_PER_JUMP));
+}
+
+/** Reps every top-weight set needs before `step` more is suggested. */
+export function goalReps(low: number, step: number, load: number): number {
+  return Math.max(low, Math.min(low + repAllowance(step, load), GOAL_REP_CAP));
+}
+
+/**
+ * The step this lift has actually been moving in: the most common top-weight increase among
+ * its last 5 bumps (ties → the most recent). Null without a bump. Offered in the step picker,
+ * never applied on its own.
+ */
+export function learnedStep(history: ReadonlyMap<string, DayTop>): number | null {
+  const days = [...history.keys()].sort().map((d) => history.get(d) as DayTop);
+  const bumps: number[] = [];
+  for (let i = 1; i < days.length; i++) {
+    const delta = Math.round((days[i].weight - days[i - 1].weight) * 100) / 100;
+    if (delta > 0) bumps.push(delta);
+  }
+  const recent = bumps.slice(-5);
+  let best: number | null = null;
+  let bestCount = 0;
+  for (let i = recent.length - 1; i >= 0; i--) {
+    const count = recent.filter((b) => b === recent[i]).length;
+    if (count > bestCount) {
+      best = recent[i];
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 /** Deload size: 10% of the stalled weight. */
@@ -121,6 +179,7 @@ export function computeProgression({
   targetReps,
   incrementLbs,
   history,
+  bodyweight,
 }: ProgressionInput): ProgressionResult | null {
   const t = topSetsOf(previousSets);
   if (!t) return null;
@@ -128,10 +187,17 @@ export function computeProgression({
   const { low, high } = parseRepTarget(targetReps);
   const bestReps = Math.max(...sets.map((s) => s.reps));
 
-  // Earned the bump: set 1 at the top weight reached the top of the range, none fell out of it.
-  if (sets[0].reps >= high && sets.every((s) => s.reps >= low)) {
-    const suggestedWeight = top + incrementLbs;
+  const load = top > 0 ? top : top < 0 && bodyweight != null ? bodyweight + top : 0;
+  const goal = goalReps(low, incrementLbs, load);
+  const nextWeight = top + incrementLbs;
+  const common = { goalReps: goal, nextWeight };
+
+  // Earned the bump: set 1 at the top weight reached the top of the range and every set there
+  // reached the goal (which may itself sit past the top).
+  if (sets[0].reps >= high && sets.every((s) => s.reps >= goal)) {
+    const suggestedWeight = nextWeight;
     return {
+      ...common,
       kind: 'up',
       suggestedWeight,
       suggestedReps: low,
@@ -149,6 +215,7 @@ export function computeProgression({
         .map((s, i) => ({ setNumber: s.setNumber ?? i + 1, weight: s.weight, reps: s.reps })),
       currentSessionSets: [],
       plannedWeight,
+      repCeiling: Math.max(high, goal),
     });
 
   // Stalled (the coach's / Progress's 3-session flag) AND can't stay in the range any more.
@@ -159,6 +226,7 @@ export function computeProgression({
     const lighter = deloadWeight(top);
     if (stall.sessions >= STALL_SESSIONS && stall.weight === top && lighter < top) {
       return {
+        ...common,
         kind: 'deload',
         suggestedWeight: lighter,
         suggestedReps: repsAt(lighter),
@@ -172,12 +240,13 @@ export function computeProgression({
   // `suggestReps`: aiming the input at `high` backtested worst of every rule tried (set-1
   // MAE 2.32, 28% exact) because it ignores what actually happened.
   return {
+    ...common,
     kind: 'hold',
     suggestedWeight: top,
     suggestedReps: repsAt(top),
     ready: false,
-    reason: low < high
-      ? `Aim for ${formatWeight(top)}×${high} on set 1, rest ${low}+ to go up`
-      : `Aim for ${formatWeight(top)}×${high} on every set to go up`,
+    reason: goal < high
+      ? `Aim ${formatWeight(top)}×${high} on set 1, rest ${goal}+ → then ${formatWeight(nextWeight)}`
+      : `Aim ${formatWeight(top)}×${goal} on every set → then ${formatWeight(nextWeight)}`,
   };
 }

@@ -54,6 +54,12 @@ export interface SuggestRepsInput {
   currentSessionSets: RepSetLike[];
   /** The weight the input is prefilled with — drives the double-progression reset. */
   plannedWeight: number;
+  /**
+   * Highest rep count a suggestion may reach; default the top of the range. The progression
+   * goal can sit past the range (a jump too big to earn inside it), and then the prefill
+   * must be allowed to climb with it.
+   */
+  repCeiling?: number;
 }
 
 /** Highest-numbered set in a list, or null. Order-independent: callers pass raw arrays. */
@@ -94,8 +100,11 @@ export function suggestReps({
   previousSets,
   currentSessionSets,
   plannedWeight,
+  repCeiling,
 }: SuggestRepsInput): number {
-  const { low, high } = parseRepTarget(targetReps);
+  const range = parseRepTarget(targetReps);
+  const low = range.low;
+  const high = Math.max(range.high, repCeiling ?? range.high);
   const isFirstSet = setNumber <= 1;
 
   // The most recent set logged this session — the decay ceiling.

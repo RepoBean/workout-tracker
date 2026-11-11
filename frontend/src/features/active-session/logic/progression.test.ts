@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { computeProgression, couldDeload, deloadWeight, historyFromSets, parseRepTarget } from './progression';
+import {
+  computeProgression, couldDeload, deloadWeight, goalReps, historyFromSets, learnedStep, parseRepTarget, repAllowance,
+} from './progression';
 import type { DayTop } from '../../../shared/lib/liftTrend';
 
 describe('parseRepTarget', () => {
@@ -50,7 +52,7 @@ describe('computeProgression', () => {
     expect(result).toMatchObject({ suggestedWeight: 110, ready: true });
   });
 
-  it('bumps when set 1 tops the range and the rest stay in it (12/10 on 8-12)', () => {
+  it('bumps when set 1 tops the range and the rest reach the goal (12/10 on 8-12, +5%)', () => {
     const result = computeProgression({
       previousSets: [
         { weight: 100, reps: 12 },
@@ -72,7 +74,8 @@ describe('computeProgression', () => {
       incrementLbs: 5,
     });
     expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 100, suggestedReps: 12, ready: false });
-    expect(result?.reason).toBe('Aim for 100×12 on set 1, rest 8+ to go up');
+    expect(result?.reason).toBe('Aim 100×12 on set 1, rest 9+ → then 105');
+    expect(result).toMatchObject({ goalReps: 9, nextWeight: 105 });
   });
 
   it('keeps the weight when a set fell out of the range (12/10/7 on 8-12)', () => {
@@ -88,7 +91,7 @@ describe('computeProgression', () => {
     expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 100, ready: false });
   });
 
-  it('replayed from main: 35 lb OHP 12/8/8 on 8-12 goes up', () => {
+  it('replayed from main: 35 lb OHP 12/8/8 on 8-12 holds (+14% needs every set at 10; it went 40×10/9/6)', () => {
     const result = computeProgression({
       previousSets: [
         { weight: 35, reps: 12, setNumber: 1 },
@@ -98,8 +101,50 @@ describe('computeProgression', () => {
       targetReps: '8-12',
       incrementLbs: 5,
     });
-    expect(result).toMatchObject({ kind: 'up', suggestedWeight: 40 });
+    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 35, goalReps: 10 });
+    expect(result?.reason).toBe('Aim 35×12 on set 1, rest 10+ → then 40');
+  });
+
+  it('35 lb OHP 12/11/10 on 8-12 goes up', () => {
+    const result = computeProgression({
+      previousSets: [{ weight: 35, reps: 12 }, { weight: 35, reps: 11 }, { weight: 35, reps: 10 }],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ kind: 'up', suggestedWeight: 40, suggestedReps: 8 });
     expect(result?.reason).toBe('Last: 35×12 → Try: 40 ↑');
+  });
+
+  it('a small step needs less: leg curl 80 on 10-12, +2.5', () => {
+    const at = (reps: number[]) => computeProgression({
+      previousSets: reps.map((r) => ({ weight: 80, reps: r })),
+      targetReps: '10-12',
+      incrementLbs: 2.5,
+    });
+    expect(at([12, 10, 11])).toMatchObject({ kind: 'hold', goalReps: 11 });
+    expect(at([12, 11, 11])).toMatchObject({ kind: 'up', suggestedWeight: 82.5 });
+  });
+
+  it('a jump too big for the range pushes the goal past its top (lateral raise 10 → 15)', () => {
+    const at = (reps: number[]) => computeProgression({
+      previousSets: reps.map((r) => ({ weight: 10, reps: r })),
+      targetReps: '10-15',
+      incrementLbs: 5,
+    });
+    const hold = at([15, 15, 14]);
+    expect(hold).toMatchObject({ kind: 'hold', goalReps: 18, suggestedReps: 16 });
+    expect(hold?.reason).toBe('Aim 10×18 on every set → then 15');
+    expect(at([18, 18, 17])).toMatchObject({ kind: 'hold' });
+    expect(at([18, 18, 18])).toMatchObject({ kind: 'up', suggestedWeight: 15, suggestedReps: 10 });
+  });
+
+  it('caps the goal at 30 reps', () => {
+    const result = computeProgression({
+      previousSets: [{ weight: 2, reps: 30 }, { weight: 2, reps: 30 }],
+      targetReps: '15-20',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ kind: 'up', goalReps: 30 });
   });
 
   it('uses the exercise step it is given', () => {
@@ -125,7 +170,7 @@ describe('computeProgression', () => {
     });
     expect(result).toMatchObject({ suggestedWeight: 100, suggestedReps: 9, ready: false });
     // The goal copy still names the top of the range — only the pre-filled number changed.
-    expect(result?.reason).toBe('Aim for 100×12 on set 1, rest 8+ to go up');
+    expect(result?.reason).toBe('Aim 100×12 on set 1, rest 9+ → then 105');
   });
 
   it('respects explicit setNumber when the caller supplies it', () => {
@@ -168,19 +213,19 @@ describe('computeProgression', () => {
     expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 135 });
   });
 
-  it('a fixed target needs it on every set', () => {
+  it('a fixed target needs one rep over it on every set (the rep the next weight costs)', () => {
     const result = computeProgression({
-      previousSets: [{ weight: 155, reps: 5 }, { weight: 155, reps: 4 }],
+      previousSets: [{ weight: 155, reps: 5 }, { weight: 155, reps: 5 }],
       targetReps: '5',
       incrementLbs: 5,
     });
-    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 155 });
-    expect(result?.reason).toBe('Aim for 155×5 on every set to go up');
+    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 155, suggestedReps: 6 });
+    expect(result?.reason).toBe('Aim 155×6 on every set → then 160');
   });
 
   it('handles single-rep targets', () => {
     const result = computeProgression({
-      previousSets: [{ weight: 225, reps: 5 }],
+      previousSets: [{ weight: 225, reps: 6 }],
       targetReps: '5',
       incrementLbs: 5,
     });
@@ -244,6 +289,53 @@ describe('computeProgression — assisted, new rule', () => {
       incrementLbs: 5,
     });
     expect(result).toMatchObject({ kind: 'hold', suggestedWeight: -30 });
+  });
+
+  it('sizes the jump on bodyweight minus assistance', () => {
+    const at = (bodyweight: number | null) => computeProgression({
+      previousSets: [{ weight: -40, reps: 10 }, { weight: -40, reps: 7 }],
+      targetReps: '6-10',
+      incrementLbs: 10,
+      bodyweight,
+    });
+    // 10 / (120 − 40) = 12.5% → 2 reps; 10 / (180 − 40) = 7% → 1; no bodyweight → the minimum.
+    expect(at(120)).toMatchObject({ kind: 'hold', goalReps: 8 });
+    expect(at(180)).toMatchObject({ kind: 'up', goalReps: 7, suggestedWeight: -30 });
+    expect(at(null)).toMatchObject({ kind: 'up', goalReps: 7 });
+  });
+});
+
+describe('repAllowance / goalReps', () => {
+  it.each([
+    [2.5, 80, 1], [10, 155, 1], [5, 45, 2], [5, 35, 2], [5, 25, 3], [5, 15, 5], [5, 10, 8],
+    [5, 0, 1], [5, -40, 1], [0, 100, 1],
+  ])('step %d on %d → %d', (step, load, expected) => {
+    expect(repAllowance(step, load)).toBe(expected);
+  });
+
+  it('goal = low + allowance, capped at 30, never below low', () => {
+    expect(goalReps(8, 5, 35)).toBe(10);
+    expect(goalReps(20, 5, 2)).toBe(30);
+    expect(goalReps(40, 5, 100)).toBe(40);
+  });
+});
+
+describe('learnedStep', () => {
+  const hist = (weights: number[]) =>
+    new Map<string, DayTop>(weights.map((w, i) => [`2026-01-${String(i + 1).padStart(2, '0')}`, { weight: w, bestReps: 10, totalReps: 30 }]));
+
+  it('null without a bump', () => {
+    expect(learnedStep(hist([]))).toBeNull();
+    expect(learnedStep(hist([50, 50, 45]))).toBeNull();
+  });
+
+  it('the most common recent increase', () => {
+    expect(learnedStep(hist([70, 75, 77.5, 77.5, 80, 82.5]))).toBe(2.5);
+  });
+
+  it('only the last 5 bumps count; a tie goes to the most recent', () => {
+    expect(learnedStep(hist([10, 20, 30, 40, 45, 50, 55, 60, 65]))).toBe(5);
+    expect(learnedStep(hist([100, 110, 105, 110]))).toBe(5);
   });
 });
 

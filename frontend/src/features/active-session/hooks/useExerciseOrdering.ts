@@ -60,10 +60,19 @@ export function useExerciseOrdering({
                 // Just append any new exercises not yet in the ordered list
                 const existingIds = new Set(prev.map(e => e.id));
                 const newExercises = visibleExercises.filter(e => !existingIds.has(e.id));
+                // The one server field that may change mid-session: the slot's weight step,
+                // set from the progression hint (StepPicker). Everything else stays local.
+                const steps = new Map(visibleExercises.map(e => [e.id, e.incrementLbs]));
+                let stepChanged = false;
+                const refreshed = prev.map(e => {
+                    if (e.id <= 0 || !steps.has(e.id) || steps.get(e.id) === e.incrementLbs) return e;
+                    stepChanged = true;
+                    return { ...e, incrementLbs: steps.get(e.id) };
+                });
                 if (newExercises.length > 0) {
-                    return [...prev, ...newExercises];
+                    return [...refreshed, ...newExercises];
                 }
-                return prev;
+                return stepChanged ? refreshed : prev;
             }
 
             // Check localStorage for saved order

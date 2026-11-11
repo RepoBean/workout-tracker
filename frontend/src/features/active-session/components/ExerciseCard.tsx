@@ -12,6 +12,8 @@ import { useProgression } from '../../../shared/context/ProgressionContext';
 import { computeProgression, couldDeload, historyFromSets } from '../logic/progression';
 import { useExerciseAllSets } from '../../../shared/api/queries';
 import { suggestReps } from '../logic/suggestReps';
+import { ProgressionChip } from './StepPicker';
+import { useBodyweightAt } from '../../../shared/api/bodyweights';
 import type { PreviousExerciseHint } from '../hooks/usePreviousData';
 
 interface ExerciseCardProps {
@@ -109,6 +111,9 @@ export function ExerciseCard({
   // range, the one case the deload can fire. Same cache entry as the PR check.
   const wantHistory = progressionOn && couldDeload(previousHint?.sets ?? [], exercise.targetReps);
   const { data: allSets } = useExerciseAllSets(exercise.name, wantHistory);
+  // Sizes the jump on an assisted lift (5 lb less help is 5 / (bodyweight − assistance)).
+  const { bodyweightAt } = useBodyweightAt();
+  const bodyweight = bodyweightAt(null);
   const progressionResult = useMemo(() => {
     if (!progressionOn || !previousHint?.sets) return null;
     return computeProgression({
@@ -116,8 +121,9 @@ export function ExerciseCard({
       targetReps: exercise.targetReps,
       incrementLbs,
       history: wantHistory && allSets ? historyFromSets(allSets.sets) : undefined,
+      bodyweight,
     });
-  }, [progressionOn, previousHint, exercise.targetReps, incrementLbs, wantHistory, allSets]);
+  }, [progressionOn, previousHint, exercise.targetReps, incrementLbs, wantHistory, allSets, bodyweight]);
 
   // Priority: 1) Last set from THIS session, 2) Progression suggestion (pre-first-set),
   // 3) Matching set from previous session, 4) Previous session's last weight, 5) 0
@@ -139,8 +145,10 @@ export function ExerciseCard({
         previousSets: previousHint?.sets ?? [],
         currentSessionSets: standardSets,
         plannedWeight: hintWeight,
+        // The goal can sit past the range's top (a jump too big to earn inside it).
+        repCeiling: progressionResult?.goalReps,
       }),
-    [nextSetNumber, exercise.targetReps, previousHint, standardSets, hintWeight]
+    [nextSetNumber, exercise.targetReps, previousHint, standardSets, hintWeight, progressionResult]
   );
 
   // Get drop sets for display (grouped by setNumber)
@@ -550,17 +558,12 @@ export function ExerciseCard({
         ) : (
           <>
             {progressionResult && noSetsLoggedYet && (
-              <div
-                className={`mb-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium
-                  ${progressionResult.kind === 'up'
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                    : progressionResult.kind === 'deload'
-                      ? 'bg-accent-100 dark:bg-accent-900/30 text-accent-800 dark:text-accent-300'
-                      : 'bg-gray-100 dark:bg-surface-800 text-gray-600 dark:text-gray-400'}`}
-              >
-                {progressionResult.kind === 'up' && <span aria-hidden>📈</span>}
-                <span>{progressionResult.reason}</span>
-              </div>
+              <ProgressionChip
+                exercise={exercise}
+                result={progressionResult}
+                step={incrementLbs}
+                globalStep={progressionSettings.incrementLbs}
+              />
             )}
             <SetInput
               exerciseId={exercise.id}
