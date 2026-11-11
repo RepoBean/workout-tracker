@@ -1,6 +1,6 @@
 # v4 Bundle C4b: Progression v2 (jump-aware goal, reps past the range, step from the hint)
 
-Status: **built 2026-11-11, on staging; main + wife pending.** Follows `docs/v4-bundle-c4-progression.md`.
+Status: **shipped to staging, main and wife 2026-11-11 (code `01947e5`).** Follows `docs/v4-bundle-c4-progression.md`.
 Frontend only: no schema change, no backend change, no new endpoint, no APK.
 
 ## 1. What it does
