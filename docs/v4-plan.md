@@ -242,11 +242,11 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
   date/updatedAt); a format-version bump alone won't refresh it on a new weigh-in. Bump
   `ALLTIME_FORMAT_VERSION` too.
 
-### [~] C4: Progression schemes
+### [x] C4: Progression schemes
 
 > Bundle doc: `docs/v4-bundle-c4-progression.md`. Became: a better double-progression rule, a per-exercise
 > step, a deload hint and coach propose-edit; the linear scheme and presets were dropped after replaying
-> main's history. Shipped to staging + main 2026-10-16 (`36e7fa2`); wife pending.
+> main's history. Shipped to staging + main 2026-10-16 (`36e7fa2`), wife after; C4b on all three stacks 2026-11-11.
 > **C4b (2026-11-11)**, `docs/v4-bundle-c4b-progression-v2.md`: the go-up rule now needs every set at
 > `low` + a jump-sized rep allowance (past the range's top if need be); the step is set from the workout hint.
 - Per-exercise `progressionScheme` column on Exercises, **`NOT NULL DEFAULT 'double'`** (= today's
@@ -325,8 +325,9 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
   schema change.
 - "Trained" = the day has a completed session, not volume > 0. Cardio days and assisted-only days
   without a bodyweight both have 0 volume. Any trained day gets at least the lightest shade.
-- Tap a day → `/history?sessionId=<id>` (the dashboard Calendar already does this). **Fix the deep
-  link first:** when highlighting, `useSessionHistory` loads only ~50 sessions (`useHistory.ts`
+- Tap a day → `/history?sessionId=<id>` (the dashboard Calendar already does this). **Deep link
+  fixed 2026-11-12:** a linked session outside the loaded list is fetched by id and pinned, expanded,
+  above it (`features/history/logic/deepLink.ts`). Was: when highlighting, `useSessionHistory` loads only ~50 sessions (`useHistory.ts`
   ~11-18), so a session from months ago is never found. Fetch it with `GET /sessions/:id`, or page
   until found. Two sessions on one day: open the most recent; the cell's label says "2 sessions"
   (the Calendar keeps only the first; leave the Calendar as is).

@@ -3,17 +3,28 @@ import { useSearchParams } from 'react-router-dom';
 import { Button } from '../../shared/ui/Button';
 import { openServerDownload } from '../../shared/api/download';
 import { SwipeableRow } from '../../shared/ui/SwipeableRow';
+import { useSession } from '../../shared/api/queries';
 import { useSessionHistory, useDeleteSession } from './hooks/useHistory';
+import { parseSessionIdParam, sessionToFetch } from './logic/deepLink';
 import { SessionCard } from './components/SessionCard';
 import { LogPastWorkout } from './components/LogPastWorkout';
 
 export default function History() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const highlightSessionId = searchParams.get('sessionId');
-  const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory(
-    highlightSessionId ? Number(highlightSessionId) : undefined
-  );
+  const linkedId = parseSessionIdParam(highlightSessionId);
+  const { sessions, isLoading, error, hasMore, loadMore, isLoadingMore } = useSessionHistory(linkedId);
+  // A linked session older than the loaded list is fetched on its own and pinned on top.
+  const pinnedId = sessionToFetch(linkedId, isLoading || error ? undefined : sessions);
+  const pinned = useSession(pinnedId ?? 0);
+  const pinnedSession = pinnedId !== null && pinned.data?.completedAt ? pinned.data : null;
+  const pinnedMissing = pinnedId !== null && (pinned.isError || (pinned.data && !pinned.data.completedAt));
   const deleteSession = useDeleteSession();
+  const deleteFromHistory = (id: number) =>
+    deleteSession.mutate(id, {
+      // Deleting the linked session drops the link, else the pinned fetch would 404.
+      onSuccess: () => { if (id === linkedId) setSearchParams({}, { replace: true }); },
+    });
   const [showLogPast, setShowLogPast] = useState(false);
 
   const handleExport = () => {
@@ -62,6 +73,31 @@ export default function History() {
       </div>
       <LogPastWorkout isOpen={showLogPast} onClose={() => setShowLogPast(false)} />
 
+      {pinnedSession && (
+        <div className="space-y-1">
+          <p className="text-xs text-gray-500 dark:text-gray-400">Linked session</p>
+          <SwipeableRow
+            onSwipeLeft={() => {
+              if (confirm('Delete this session?')) {
+                deleteFromHistory(pinnedSession.id);
+              }
+            }}
+            disabled={deleteSession.isPending}
+          >
+            <SessionCard
+              session={pinnedSession}
+              highlightId={highlightSessionId}
+              onDelete={() => deleteFromHistory(pinnedSession.id)}
+            />
+          </SwipeableRow>
+        </div>
+      )}
+      {pinnedMissing && (
+        <div className="card text-sm text-gray-500 dark:text-gray-400">
+          That session isn't in your history any more.
+        </div>
+      )}
+
       {sessions.length === 0 && (
         <div className="card text-center py-8">
           <p className="text-gray-500 dark:text-gray-400">No workout sessions yet</p>
@@ -76,7 +112,7 @@ export default function History() {
           key={session.id}
           onSwipeLeft={() => {
             if (confirm('Delete this session?')) {
-              deleteSession.mutate(session.id);
+              deleteFromHistory(session.id);
             }
           }}
           disabled={deleteSession.isPending}
@@ -84,7 +120,7 @@ export default function History() {
           <SessionCard
             session={session}
             highlightId={highlightSessionId}
-            onDelete={() => deleteSession.mutate(session.id)}
+            onDelete={() => deleteFromHistory(session.id)}
           />
         </SwipeableRow>
       ))}
