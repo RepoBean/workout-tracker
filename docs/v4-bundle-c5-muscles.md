@@ -1,6 +1,7 @@
 # v4 Bundle C5: Muscle analytics
 
-Status: **decided 2026-11-12, built on top of `1c4b266`.** Written at `277f3fa` from `docs/v4-plan.md`
+Status: **SHIPPED 2026-11-12 to staging, main and wife at `acaef7d`** (seeds applied: main 64 tagged / 10
+untagged, wife 36 / 0; results in §11). Decided 2026-11-12, built on top of `1c4b266`. Written at `277f3fa` from `docs/v4-plan.md`
 §2 C5 (2026-10-17), re-checked against the code on 2026-11-12 (it held). Decisions are in §10;
 the 2026-11-12 deltas are folded into the sections below: migration `0008` (0007 is session notes),
 `ALLTIME_FORMAT_VERSION` 6 → 7, the guideline band (§5a), the seed rebuilt for both instances
@@ -236,6 +237,23 @@ Frontend (`muscleSets.test.ts`, `dossier.test.ts`, `muscles.test.ts`):
 | D9 | Modal | Primary / Secondary chip groups, picking in one removes from the other |
 | D10 | Guideline band (new) | On the 4-week average, one fixed rule for every muscle (§5a) |
 | D11 | Wife's instance (new) | Ships with this bundle, with her own seed built the same way |
+
+## 11. Results (2026-11-12)
+
+- Tests: backend 140, frontend 359 (also under `TZ=America/New_York`); `tsc` clean.
+- Snapshot diff on staging (`1c4b266` → `acaef7d`, fresh copy of main): exactly 74 added
+  `"muscles": null` lines in `catalog.json`, nothing else.
+- Rollback check (copy of migrated staging, `1c4b266` backend): boots, 9 migrations recorded, none
+  re-run; `GET /catalog` lists 74 without the field; a merge (Leg Curl ← Leg Curl Machine) 200s; tags
+  on other rows survive. A planted tagged orphan was GC'd by the old image, as §7 says.
+- Staging, headless (Pixel 7): Muscles tab matched an independent SQL count from a backup (side delts
+  1 avg / 4.5 this week, quads 3.75 / 4.5, calves flagged at 38 d, 0 of 62 sets untagged); Muscles…
+  save (primary pick moved Triceps out of secondary), clear and restore all landed on the server;
+  summary shows "10 without muscles"; the intercepted coach request carried the muscle block and the
+  persona line.
+- Seeds: main 64/64 PUTs (catalog 64 tagged / 10 untagged), wife 36/36 (36 / 0). Backups taken just
+  before each: `main-20261112-031256.sqlite`, `wife-20261112-031331.sqlite`.
+- Main's 4-week averages are all in the `low` band today (7 sessions in the last 30 days).
 
 ## Appendix A: main's seed (applied 2026-11-12)
 
