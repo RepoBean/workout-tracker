@@ -150,6 +150,18 @@ describe('backfillCatalog on live-shaped data (run by bootstrap)', () => {
     expect(names).toContain('Kept');
   });
 
+  it('GC keeps an unreferenced entry that carries muscle tags (v4 C5)', () => {
+    const sqlite = liveDb();
+    sqlite.exec(`INSERT INTO ExerciseCatalog (name, aliases, muscles, createdAt, updatedAt) VALUES
+      ('Tagged Orphan', '[]', '{"primary":["quads"],"secondary":[]}', '${TS}', '${TS}'),
+      ('Untagged Orphan', '[]', NULL, '${TS}', '${TS}')`);
+
+    expect(backfillCatalog(sqlite)).toEqual({ ...NOTHING, removed: 1 });
+    const names = catalog(sqlite).map(r => r.name);
+    expect(names).toContain('Tagged Orphan');
+    expect(names).not.toContain('Untagged Orphan');
+  });
+
   it('resolves null rows through an alias', () => {
     const sqlite = liveDb();
     addKept(sqlite);

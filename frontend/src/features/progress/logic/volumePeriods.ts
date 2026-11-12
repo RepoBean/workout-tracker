@@ -4,7 +4,7 @@
 // the next UTC day.
 
 import type { Session, Set } from '../../../shared/api/types';
-import { localDateKey } from '../../../shared/lib/localDate';
+import { localDateKey, startOfWeek } from '../../../shared/lib/localDate';
 
 export interface WeeklyVolume {
     weekStart: string;      // local YYYY-MM-DD of the Sunday
@@ -23,12 +23,7 @@ export interface VolumeComparison {
 /** A set's volume; `completedAt` picks the bodyweight its assisted sets score at. */
 export type VolumeOf = (set: Set, completedAt: string | null) => number;
 
-export { localDateKey };
-
-/** Local midnight of the Sunday on or before `d`. */
-export function startOfWeek(d: Date): Date {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
-}
+export { localDateKey, startOfWeek };
 
 function addDays(d: Date, days: number): Date {
     return new Date(d.getFullYear(), d.getMonth(), d.getDate() + days);

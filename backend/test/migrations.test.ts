@@ -7,7 +7,7 @@ import { LIVE_DDL, PRE_LEGACY_DDL } from './fixtures/liveDdl.js';
 
 
 const TABLES = ['Programs', 'Workouts', 'Exercises', 'Sessions', 'Sets', 'ExerciseCatalog', 'Settings', 'BodyWeights'];
-const MIGRATIONS = 8; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights, 0006 exercise increment, 0007 session notes
+const MIGRATIONS = 9; // 0000 baseline, 0001 name index, 0002 catalog, 0003 catalog name index, 0004 settings, 0005 bodyweights, 0006 exercise increment, 0007 session notes, 0008 catalog muscles
 
 const EXPECTED_COLUMNS: Record<string, string[]> = {
   Programs: ['id', 'name', 'isActive', 'isArchived', 'currentWorkoutIndex', 'createdAt', 'updatedAt'],
@@ -18,7 +18,7 @@ const EXPECTED_COLUMNS: Record<string, string[]> = {
     'heartRateAvg', 'heartRateMin', 'heartRateMax', 'heartRateSeries', 'exerciseNotes', 'createdAt', 'updatedAt', 'notes'],
   Sets: ['id', 'sessionId', 'exerciseId', 'exerciseName', 'weight', 'reps', 'setNumber', 'perceivedEffort',
     'dropIndex', 'heartRateAvg', 'heartRateMax', 'durationSec', 'distance', 'createdAt', 'updatedAt', 'catalogId'],
-  ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt'],
+  ExerciseCatalog: ['id', 'name', 'aliases', 'createdAt', 'updatedAt', 'muscles'],
   Settings: ['key', 'value', 'createdAt', 'updatedAt'],
   BodyWeights: ['id', 'date', 'weight', 'createdAt', 'updatedAt'],
 };
@@ -151,6 +151,24 @@ describe('incrementLbs (0006) and older images', () => {
     sqlite.prepare(insertOld).run('Bench Press');
     const rows = sqlite.prepare('SELECT name, incrementLbs FROM Exercises ORDER BY id').all();
     expect(rows).toEqual([{ name: 'Squat', incrementLbs: null }, { name: 'Bench Press', incrementLbs: null }]);
+  });
+});
+
+describe('muscles (0008) and older images', () => {
+  it('leaves existing catalog rows NULL and accepts the inserts an older image makes', () => {
+    const sqlite = fresh(LIVE_DDL);
+    sqlite.exec(`INSERT INTO Programs (name, isActive, isArchived, currentWorkoutIndex, createdAt, updatedAt)
+      VALUES ('Live', 1, 0, 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    sqlite.exec(`INSERT INTO Workouts (programId, name, orderIndex, createdAt, updatedAt)
+      VALUES (1, 'A', 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    sqlite.exec(`INSERT INTO Exercises (workoutId, name, targetSets, targetReps, orderIndex, createdAt, updatedAt)
+      VALUES (1, 'Squat', 3, '5', 0, '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    bootstrap(sqlite); // backfill creates 'Squat'
+    // What a pre-C5 image's resolveCatalogId / split insert looks like: no muscles column named.
+    sqlite.exec(`INSERT INTO ExerciseCatalog (name, aliases, createdAt, updatedAt)
+      VALUES ('Bench Press', '[]', '2026-01-29 16:42:55.246 +00:00', '2026-01-29 16:42:55.246 +00:00')`);
+    const rows = sqlite.prepare('SELECT name, muscles FROM ExerciseCatalog ORDER BY id').all();
+    expect(rows).toEqual([{ name: 'Squat', muscles: null }, { name: 'Bench Press', muscles: null }]);
   });
 });
 

@@ -11,6 +11,19 @@ export type ExerciseType = 'strength' | 'cardio';
 export type CardioModality = 'running' | 'cycling' | 'treadmill' | 'rowing' | 'other';
 export type SupersetGroup = 'A' | 'B' | 'C' | 'D' | 'E';
 
+// Muscle vocabulary for ExerciseCatalog.muscles (v4 C5, docs/v4-bundle-c5-muscles.md §3).
+// Same ids, with labels and display order, in frontend/src/shared/lib/muscles.ts.
+// An id can only ever be ADDED: an older backend would 400 a PUT carrying a new one,
+// and a removed or renamed id would orphan stored tags.
+export const MUSCLES = [
+  'chest', 'front-delts', 'side-delts', 'triceps',
+  'lats', 'upper-back', 'rear-delts', 'biceps', 'forearms',
+  'abs', 'obliques', 'lower-back',
+  'quads', 'hamstrings', 'glutes', 'adductors', 'abductors', 'calves',
+] as const;
+export type Muscle = typeof MUSCLES[number];
+export interface MuscleTags { primary: Muscle[]; secondary: Muscle[] }
+
 const timestamps = {
   createdAt: sequelizeDate('createdAt').notNull(),
   updatedAt: sequelizeDate('updatedAt').notNull(),
@@ -25,6 +38,8 @@ export const exerciseCatalog = sqliteTable('ExerciseCatalog', {
   name: text('name').notNull(),
   aliases: text('aliases', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   ...timestamps,
+  // v4 C5: muscle tags, NULL = untagged. Set only through PUT /api/catalog/:id, never guessed.
+  muscles: text('muscles', { mode: 'json' }).$type<MuscleTags>(),
 });
 
 // Per-instance settings shared by every device (v4 C2, docs/v4-bundle-c2-settings.md):

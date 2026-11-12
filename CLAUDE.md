@@ -76,7 +76,7 @@ Session (id, programId, workoutId, programName, workoutName, completedAt, isAdHo
          dropIndex, heartRateAvg, heartRateMax, durationSec, distance, catalogId,
          createdAt, updatedAt)
 
-ExerciseCatalog (id, name, aliases, createdAt, updatedAt)   ← Exercise.catalogId, Set.catalogId
+ExerciseCatalog (id, name, aliases, muscles, createdAt, updatedAt)   ← Exercise.catalogId, Set.catalogId; muscles = JSON {primary, secondary} | NULL (v4 C5)
 
 Settings (key, value, createdAt, updatedAt)   ← key ∈ profile | progression | aiCoach | coachThread, value JSON
 
@@ -102,6 +102,7 @@ BodyWeights (id, date, weight, createdAt, updatedAt)   ← date = local YYYY-MM-
 | **Cardio Exercises** | `exerciseType` is `'strength'` (default) or `'cardio'`. Cardio exercises may set `cardioModality` (running/cycling/treadmill/rowing/other) and targets (`targetDurationSec`, `targetDistance`). Cardio sets store `durationSec`/`distance`; weight/reps are 0. |
 | **Heart Rate** | From a BLE HR strap (Web Bluetooth). Sessions store `heartRateAvg/Min/Max` + `heartRateSeries` (JSON string of downsampled samples); Sets store per-set `heartRateAvg`/`heartRateMax`. All nullable — absent when no strap connected. |
 | **Exercise Notes** | `Session.exerciseNotes` JSON column keyed by exercise name (captured in the RPE prompt). Session-level to avoid replicating one string across every set. `Session.notes` (text) is the whole-workout note ("didn't eat beforehand"): typed on the completion screen, edited in the history editor, shown on the History card, fed to the coach with the exercise notes. |
+| **Muscle tags** | `ExerciseCatalog.muscles` (v4 C5, nullable JSON `{primary, secondary}`, NULL = untagged) over the 18 ids in `MUSCLES` (`backend/src/db/schema.ts`, mirrored with labels/groups in `shared/lib/muscles.ts`; ids can only be **added**). Set only by `PUT /api/catalog/:id`, never guessed. Merge keeps A's tags else B's; split copies A's; boot GC skips tagged orphans. Weekly sets per muscle (`shared/lib/muscleSets.ts`): working strength sets with reps > 0, any weight; primary 1, secondary ½; Sunday weeks on the local day; band on the 4-week average low <6 / building / solid 10–20 / high >20 |
 | **Exercise Catalog** | One `ExerciseCatalog` row per lift (unique on `lower(name)`, index `catalog_name_lower`), `aliases` JSON `string[]`. `Exercises.catalogId` / `Sets.catalogId` are nullable FKs with **no ON DELETE action** (a referenced row can't be deleted). **Names stay on every row and are authoritative**: the server derives `catalogId` from the name on every write (`resolveCatalogId` in `db/catalog.ts` — name, else alias, else insert); request schemas never accept `catalogId`, so old clients stay correct. `backfillCatalog()` runs every boot (after migrations): fills NULL ids (first boot, or rows an older image wrote during a rollback) and GCs unreferenced alias-less rows — silent once converged. Merge (Settings → Exercise catalog) folds B into A: re-points ids, B's name + aliases become A's aliases; split reverses it exactly. Neither ever rewrites `exerciseName`/`name`/`exerciseNotes` or a row's `updatedAt`. Readers that should see a renamed lift as one lift use catalog identity: `/previous`, `history-by-name`, `all-sets-by-name` (server), Progress + coach all-time rollup (client, `shared/lib/catalog.ts`). Per-session views (history cards, active session, notes, CSV) stay name-based by design. A program-exercise rename resolves to the new name's entry ("this slot now does a different lift"); "same lift, new spelling" is a merge. |
 
 ---
@@ -188,6 +189,7 @@ src/
 │   │   │   ├── CardioDetail.tsx          # Cardio chart + range + session list
 │   │   │   ├── detailParts.tsx           # DetailHeader, SegmentedControl, RangeSelector, useChartRange
 │   │   │   ├── VolumeTrendsTab.tsx       # Total volume trends with metric toggle
+│   │   │   ├── MusclesTab.tsx            # Weekly working sets per muscle, band, 14-day flag (v4 C5)
 │   │   │   ├── PersonalRecordsTab.tsx    # All-time PRs
 │   │   │   ├── BodyTab.tsx               # Bodyweight log: log form, summary, chart, history list (v4 C3)
 │   │   │   ├── WeighInRow.tsx            # One weigh-in: tap to edit, swipe to delete
@@ -217,7 +219,8 @@ src/
 │   │
 │   ├── settings/                  # Settings page
 │   │   ├── components/
-│   │   │   ├── ExerciseCatalogCard.tsx # Catalog list: merge into… / split off alias
+│   │   │   ├── ExerciseCatalogCard.tsx # Catalog list: muscles… / merge into… / split off alias
+│   │   │   ├── MusclesModal.tsx   # Primary / secondary muscle chips for one lift (v4 C5)
 │   │   │   ├── ServerCard.tsx     # API base URL (Android app)
 │   │   │   └── AndroidCard.tsx    # Native permissions + diagnostics
 │   │   └── index.tsx              # Profile (DOB/sex/HR for zones), auto-progression, AI coach card
@@ -271,9 +274,11 @@ src/
 │   │   ├── effectiveWeight.ts     # Assisted (negative) weight → effective load via bodyweight (+ tests)
 │   │   ├── bodyweight.ts          # Weigh-ins → bodyweight on a session's day, fingerprint, change over N days (+ tests)
 │   │   ├── catalog.ts             # catalogNames / groupName / catalogFingerprint (catalog identity for readers)
+│   │   ├── muscles.ts             # Muscle vocabulary (ids, labels, groups), catalogMuscles (v4 C5)
+│   │   ├── muscleSets.ts          # Weekly sets per muscle, 4-week average, band, untrained flag (+ tests)
 │   │   ├── settingsSync.ts        # /api/settings GET/PUT, last-synced markers, reconcile() (+ tests)
 │   │   ├── liftTrend.ts           # Stall run + lift status (coach + Progress share it), localToday (+ tests)
-│   │   ├── localDate.ts           # localDateKey — local YYYY-MM-DD from a Date or ISO string (never slice UTC) (+ tests)
+│   │   ├── localDate.ts           # localDateKey — local YYYY-MM-DD from a Date or ISO string (never slice UTC), startOfWeek (Sunday) (+ tests)
 │   │   ├── oneRepMax.ts           # Epley 1RM estimate
 │   │   ├── platform.ts            # isNativeApp() — the one runtime gate for Android-only code
 │   │   ├── shell.ts               # window.WorkoutShell (Android shell): server the UI loads from, hand-off, openExternal (+ tests)
@@ -313,7 +318,7 @@ backend/
 │   │   ├── workouts.ts      # CRUD for workouts
 │   │   ├── exercises.ts     # CRUD for exercises
 │   │   ├── sessions.ts      # CRUD for sessions + sets
-│   │   ├── catalog.ts       # Exercise catalog: list (with counts), merge, split
+│   │   ├── catalog.ts       # Exercise catalog: list (with counts + muscles), merge, split, PUT muscle tags
 │   │   ├── settings.ts      # Per-instance settings: GET all, PUT one key (own 1 MB parser; coachThread 409 check)
 │   │   └── bodyweights.ts   # Weigh-ins: list, log (upsert by date), edit (409 on date clash), delete
 │   ├── db/
@@ -392,7 +397,8 @@ backend/
 | POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
 | PUT | /api/sessions/:id | Edit a completed session: `notes` (≤1000, empty/null clears) and/or move its date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
-| GET | /api/catalog | Exercise catalog: `{id, name, aliases, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
+| GET | /api/catalog | Exercise catalog: `{id, name, aliases, muscles, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
+| PUT | /api/catalog/:id | `{ muscles: {primary, secondary} \| null }` (v4 C5): enum ids, no duplicates, none in both lists, secondary needs a primary (400); empty lists store NULL; 404 missing. Bumps that entry's `updatedAt` only |
 | POST | /api/catalog/:id/merge | Fold `{ fromId }` into `:id` (400 self, 404 missing, 409 alias clash) |
 | POST | /api/catalog/:id/split | Split `{ alias }` off `:id` into its own entry again (exact inverse of merge) |
 | GET | /api/settings | `{ profile, progression, aiCoach, coachThread }`, each `{ value, updatedAt }` or **null** if never stored (no defaults). Only place the coach API key is served |
@@ -473,7 +479,7 @@ backend/
 - Starts session with `isAdHoc: true`
 
 ### 13. Progress Page
-- Tabbed interface: Exercise Progress, Volume Trends, Personal Records, Body (weigh-in log + chart, v4 C3)
+- Tabbed interface: Exercise Progress, Volume Trends, Muscles (v4 C5), Personal Records, Body (weigh-in log + chart, v4 C3)
 - Exercise Progress, Strength mode opens to **Your lifts** (`LiftOverview.tsx`, data from
   `logic/liftOverview.ts`): one row per active-program strength lift (else the 8 most trained),
   catalog-grouped — status chip, last top set (raw signed weight), inline-SVG best-1RM sparkline over
@@ -622,6 +628,16 @@ backend/
   step offered; program exercises only) or exercise form → Advanced. Bundle docs:
   `docs/v4-bundle-c4b-progression-v2.md` (the goal rule + its replay), `docs/v4-bundle-c4-progression.md` (replay of
   main's history: old rule 54 bumps vs 95 actual vs new rule 114; linear scheme and 5×5 presets dropped)
+
+### 25. Muscle analytics (v4 C5)
+- Tags per lift on the catalog (Key Patterns → Muscle tags), edited in Settings → Exercise catalog → Manage →
+  **Muscles…**; the collapsed summary counts lifts without muscles. Seeded once per instance from
+  free-exercise-db (Unlicense) — Appendix A (main) / B (wife) of the bundle doc
+- Progress → **Muscles**: per muscle, 4-week average + this week, a band label (`solid` in `primary-*`, others
+  grey), "last trained N d ago" in `accent-*` at 14+ days; never-trained listed once; footer counts sets on
+  untagged lifts. Empty state points at Settings
+- Coach: one muscle block after the all-time rollup (averages with bands / this week, untrained, never trained,
+  untagged count); persona says the bands are a rule of thumb. Bundle doc: `docs/v4-bundle-c5-muscles.md`
 
 ---
 

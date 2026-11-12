@@ -1,14 +1,16 @@
 import { useState } from 'react';
 import { ExerciseProgressTab } from './components/ExerciseProgressTab';
 import { VolumeTrendsTab } from './components/VolumeTrendsTab';
+import { MusclesTab } from './components/MusclesTab';
 import { PersonalRecordsTab } from './components/PersonalRecordsTab';
 import { BodyTab } from './components/BodyTab';
 
-type TabId = 'exercise' | 'volume' | 'records' | 'body';
+type TabId = 'exercise' | 'volume' | 'muscles' | 'records' | 'body';
 
 const tabs: { id: TabId; label: string }[] = [
     { id: 'exercise', label: 'Exercises' },
     { id: 'volume', label: 'Volume' },
+    { id: 'muscles', label: 'Muscles' },
     { id: 'records', label: 'Records' },
     { id: 'body', label: 'Body' },
 ];
@@ -41,6 +43,8 @@ export default function Progress() {
             {activeTab === 'exercise' && <ExerciseProgressTab />}
 
             {activeTab === 'volume' && <VolumeTrendsTab />}
+
+            {activeTab === 'muscles' && <MusclesTab />}
 
             {activeTab === 'records' && <PersonalRecordsTab />}
 

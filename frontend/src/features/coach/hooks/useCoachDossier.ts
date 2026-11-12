@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../shared/api/client';
 import { useCatalog, usePrograms, useHistory, useStats } from '../../../shared/api/queries';
 import { catalogFingerprint, catalogNames } from '../../../shared/lib/catalog';
+import { catalogMuscles } from '../../../shared/lib/muscles';
 import { localToday } from '../../../shared/lib/liftTrend';
 import { useUserProfile } from '../../../shared/context/UserProfileContext';
 import { useProgression } from '../../../shared/context/ProgressionContext';
@@ -28,7 +29,7 @@ const NO_WEIGH_INS: BodyWeight[] = [];
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 6;
+const ALLTIME_FORMAT_VERSION = 7;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -109,6 +110,9 @@ export function useCoachDossier() {
   // History answered and is empty: no completed sessions yet, nothing to fetch.
   const noHistory = Boolean(recentSessions) && newestId === 0;
   const catalog = useMemo(() => catalogNames(catalogEntries), [catalogEntries]);
+  // Muscle tags ride the same catalog query; a tag edit bumps the entry's updatedAt, so the
+  // catalog fingerprint in the memo key already covers them.
+  const muscles = useMemo(() => catalogMuscles(catalogEntries), [catalogEntries]);
 
   const cached = useMemo(() => {
     if (!cacheKey) return null;
@@ -127,15 +131,15 @@ export function useCoachDossier() {
         params: { limit: ALL_TIME_LIMIT },
         timeout: ALL_TIME_TIMEOUT_MS,
       });
-      const parts = buildAllTimeParts(data, today, bodyweightAt, catalog);
+      const parts = buildAllTimeParts(data, today, bodyweightAt, catalog, muscles);
       writeCache({ key: cacheKey, ...parts });
       return parts;
     },
   });
 
   const empty = useMemo(
-    () => (noHistory ? buildAllTimeParts([], today, bodyweightAt, catalog) : null),
-    [noHistory, today, bodyweightAt, catalog]
+    () => (noHistory ? buildAllTimeParts([], today, bodyweightAt, catalog, muscles) : null),
+    [noHistory, today, bodyweightAt, catalog, muscles]
   );
   const resolved = cached ?? allTimeQuery.data ?? empty;
 

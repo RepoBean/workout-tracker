@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './client';
-import type { Program, ProgramExportPayload, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest, CatalogEntry } from './types';
+import type { Program, ProgramExportPayload, Session, ActiveSession, HealthCheckResponse, PreviousSessionResponse, StatsResponse, PreviousSetData, SetExerciseNoteRequest, CatalogEntry, MuscleTags } from './types';
 import { useToast } from '../ui/Toast';
 
 // ============================================
@@ -444,6 +444,30 @@ export function useSplitCatalog() {
     },
     onError: () => {
       toast.error('Failed to split exercise');
+    },
+  });
+}
+
+/**
+ * Tag a lift with muscles (v4 C5), or clear them with null. Only the catalog changes (no
+ * history row does), so only the catalog query is invalidated; its new updatedAt also moves
+ * the coach dossier's memo key.
+ */
+export function useSetCatalogMuscles() {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, muscles }: { id: number; muscles: MuscleTags | null }) => {
+      const { data } = await api.put<CatalogEntry>(`/catalog/${id}`, { muscles });
+      return data;
+    },
+    onSuccess: (entry) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.catalog });
+      toast.success(entry.muscles ? `Muscles saved for ${entry.name}` : `Muscles cleared for ${entry.name}`);
+    },
+    onError: () => {
+      toast.error('Failed to save muscles');
     },
   });
 }

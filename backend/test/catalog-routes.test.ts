@@ -18,6 +18,7 @@ const NEW = 'Low Incline DB Press';
 
 interface Entry {
   id: number; name: string; aliases: string[]; setCount: number; exerciseCount: number;
+  muscles: { primary: string[]; secondary: string[] } | null;
   createdAt: string; updatedAt: string;
 }
 
@@ -125,6 +126,7 @@ describe('GET /api/catalog', () => {
       [OLD, 2, 1],
     ]);
     expect(entries[0].aliases).toEqual([]);
+    expect(entries.every((e) => e.muscles === null)).toBe(true);
     expect(entries[0].createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
   });
 });
@@ -232,5 +234,109 @@ describe('POST /api/catalog/:id/split', () => {
     expect((await request(app).post('/api/catalog/9999/split').send({ alias: OLD })).status).toBe(404);
     expect((await request(app).post(`/api/catalog/${a.id}/split`).send({ alias: OLD })).status).toBe(404);
     expect((await request(app).post(`/api/catalog/${a.id}/split`).send({ alias: '  ' })).status).toBe(400);
+  });
+});
+
+describe('PUT /api/catalog/:id (muscle tags, v4 C5)', () => {
+  const tag = (id: number, muscles: unknown) => request(app).put(`/api/catalog/${id}`).send({ muscles });
+  const rawCatalog = () =>
+    sqlite.prepare('SELECT id, muscles, updatedAt FROM ExerciseCatalog ORDER BY id').all() as
+      Array<{ id: number; muscles: string | null; updatedAt: string }>;
+  const rawExercises = () => sqlite.prepare('SELECT id, catalogId, updatedAt FROM Exercises ORDER BY id').all();
+  const LEGS = { primary: ['quads', 'glutes'], secondary: ['hamstrings'] };
+
+  it('sets, replaces and clears; empty lists are stored as NULL', async () => {
+    await renameSplit();
+    const lp = await entry('Leg Press');
+
+    const set = await tag(lp.id, LEGS);
+    expect(set.status).toBe(200);
+    expect(set.body).toMatchObject({ id: lp.id, name: 'Leg Press', muscles: LEGS, setCount: 0, exerciseCount: 2 });
+    expect((await entry('Leg Press')).muscles).toEqual(LEGS);
+
+    const replaced = await tag(lp.id, { primary: ['quads'], secondary: [] });
+    expect(replaced.body.muscles).toEqual({ primary: ['quads'], secondary: [] });
+
+    expect((await tag(lp.id, null)).body.muscles).toBeNull();
+    await tag(lp.id, LEGS);
+    expect((await tag(lp.id, { primary: [], secondary: [] })).body.muscles).toBeNull();
+    expect((sqlite.prepare('SELECT muscles FROM ExerciseCatalog WHERE id = ?').get(lp.id) as { muscles: unknown }).muscles)
+      .toBeNull();
+  });
+
+  it("bumps only that entry's updatedAt; no Sets or Exercises row changes", async () => {
+    await renameSplit();
+    const lp = await entry('Leg Press');
+    const [cat, setsBefore, exBefore] = [rawCatalog(), rawSets(), rawExercises()];
+    await new Promise((r) => setTimeout(r, 5));
+
+    await tag(lp.id, LEGS);
+    const after = rawCatalog();
+    for (const row of after) {
+      const was = cat.find((c) => c.id === row.id)!;
+      if (row.id === lp.id) expect(row.updatedAt).not.toBe(was.updatedAt);
+      else expect(row).toEqual(was);
+    }
+    expect(rawSets()).toEqual(setsBefore);
+    expect(rawExercises()).toEqual(exBefore);
+  });
+
+  it('rejects bad bodies (400) and missing entries (404)', async () => {
+    await renameSplit();
+    const id = (await entry('Leg Press')).id;
+    for (const bad of [
+      { primary: ['pecs'], secondary: [] },                     // unknown id
+      { primary: ['quads', 'quads'], secondary: [] },           // duplicate
+      { primary: ['quads'], secondary: ['quads'] },             // in both lists
+      { primary: [], secondary: ['glutes'] },                   // secondary without primary
+      { primary: 'quads', secondary: [] },                      // wrong shape
+      { primary: ['quads'] },                                   // missing list
+      { primary: ['quads'], secondary: [], extra: true },       // unknown key
+    ]) {
+      expect((await tag(id, bad)).status).toBe(400);
+    }
+    expect((await request(app).put(`/api/catalog/${id}`).send({})).status).toBe(400);
+    expect((await tag(9999, LEGS)).status).toBe(404);
+    expect((await tag('abc' as never, LEGS)).status).toBe(400);
+    expect((await entry('Leg Press')).muscles).toBeNull();
+  });
+
+  it('a new name resolves to an untagged entry', async () => {
+    const w = await importProgram('P', ['Hack Squat']);
+    expect((await entry('Hack Squat')).muscles).toBeNull();
+    expect(w.exercises[0].catalogId).toBe((await entry('Hack Squat')).id);
+  });
+
+  it("merge keeps A's tags, takes B's when A is untagged, and stays NULL when both are", async () => {
+    const CHEST = { primary: ['chest'], secondary: ['triceps', 'front-delts'] };
+    const OTHER = { primary: ['front-delts'], secondary: [] };
+
+    await renameSplit();
+    let [a, b] = [await entry(NEW), await entry(OLD)];
+    await tag(a.id, CHEST);
+    await tag(b.id, OTHER);
+    expect((await request(app).post(`/api/catalog/${a.id}/merge`).send({ fromId: b.id })).body.muscles).toEqual(CHEST);
+
+    await resetDb();
+    await renameSplit();
+    [a, b] = [await entry(NEW), await entry(OLD)];
+    await tag(b.id, CHEST);
+    expect((await request(app).post(`/api/catalog/${a.id}/merge`).send({ fromId: b.id })).body.muscles).toEqual(CHEST);
+
+    await resetDb();
+    await renameSplit();
+    [a, b] = [await entry(NEW), await entry(OLD)];
+    expect((await request(app).post(`/api/catalog/${a.id}/merge`).send({ fromId: b.id })).body.muscles).toBeNull();
+  });
+
+  it("split copies A's tags onto the split-off entry", async () => {
+    const CHEST = { primary: ['chest'], secondary: ['triceps'] };
+    await renameSplit();
+    const [a, b] = [await entry(NEW), await entry(OLD)];
+    await request(app).post(`/api/catalog/${a.id}/merge`).send({ fromId: b.id });
+    await tag(a.id, CHEST);
+    const res = await request(app).post(`/api/catalog/${a.id}/split`).send({ alias: OLD });
+    expect(res.body.entry.muscles).toEqual(CHEST);
+    expect(res.body.created.muscles).toEqual(CHEST);
   });
 });

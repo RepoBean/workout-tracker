@@ -52,6 +52,8 @@ snap suggestions-pr            "exercises/suggestions?q=pr"
 snap suggestions-row           "exercises/suggestions?q=row"
 # Weigh-ins (v4 C3); a pre-C3 image 404s, so it's skipped there rather than failing the run.
 if api_get "bodyweights" >/dev/null 2>&1; then snap bodyweights "bodyweights"; fi
+# Exercise catalog (v3 Bundle 2; muscles since v4 C5)
+snap catalog                   "catalog"
 
 # Newest 5 session ids, every non-archived program id, and the 8 most-logged
 # exercise names (URL-encoded), derived from the dumps above.

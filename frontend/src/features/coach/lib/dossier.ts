@@ -39,6 +39,14 @@ import {
 } from '../../../shared/lib/liftTrend';
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
 import { localDateKey } from '../../../shared/lib/localDate';
+import { NO_MUSCLES, type CatalogMuscles } from '../../../shared/lib/muscles';
+import {
+  AVERAGE_WEEKS,
+  BANDS,
+  formatSetCount,
+  muscleSummary,
+  UNTRAINED_AFTER_DAYS,
+} from '../../../shared/lib/muscleSets';
 
 // ---------------------------------------------------------------------------
 // Small formatters
@@ -320,6 +328,43 @@ export function buildAllTimeBlock(
 }
 
 // ---------------------------------------------------------------------------
+// Muscles (v4 C5)
+// ---------------------------------------------------------------------------
+
+/**
+ * Weekly working sets per muscle from the catalog's muscle tags, with the guideline band.
+ * Needs every session (for "last trained"), so it rides in the memoized all-time part.
+ * Per-lift tags are deliberately NOT listed: the model already knows what Leg Press trains.
+ */
+export function buildMuscleBlock(
+  sessions: Session[],
+  today: string,
+  muscles: CatalogMuscles = NO_MUSCLES
+): string {
+  const summary = muscleSummary(sessions, muscles, today);
+  if (!summary.anyTags) return 'Muscle tags: none yet.';
+  const trained = summary.rows.filter((r) => r.lastTrained !== null);
+  const untrained = trained.filter((r) => r.flagged);
+  const never = summary.rows.filter((r) => r.lastTrained === null);
+
+  const lines = [
+    `Weekly working sets per muscle (secondary counts ½; avg of last ${AVERAGE_WEEKS} whole weeks + band / this week so far;` +
+      ` bands: low <${BANDS.building}, building ${BANDS.building}–${BANDS.solid}, solid ${BANDS.solid}–${BANDS.highAbove}, high >${BANDS.highAbove}):`,
+  ];
+  if (trained.length) {
+    lines.push(
+      `  ${trained.map((r) => `${r.muscle} ${formatSetCount(r.average)} ${r.band} / ${formatSetCount(r.thisWeek)}`).join(', ')}`
+    );
+  }
+  if (untrained.length) {
+    lines.push(`  untrained ${UNTRAINED_AFTER_DAYS}+ days: ${untrained.map((r) => `${r.muscle} (${r.daysSince} d)`).join(', ')}`);
+  }
+  if (never.length) lines.push(`  never trained: ${never.map((r) => r.muscle).join(', ')}`);
+  lines.push(`  untagged lifts: ${summary.untaggedSets} of ${summary.totalSets} sets in the last ${AVERAGE_WEEKS} weeks`);
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
 // Notes — ALL of them, all time
 // ---------------------------------------------------------------------------
 
@@ -472,16 +517,18 @@ export function assembleDossier(parts: DossierParts): string {
 
 /**
  * The two blocks derived from the full history. Memoized together by the hook because they
- * come from the same expensive payload and change only when a session completes.
+ * come from the same expensive payload and change only when a session completes. The muscle
+ * block (v4 C5) is part of `allTime`, right after the per-exercise rollup.
  */
 export function buildAllTimeParts(
   sessions: Session[],
   today: string,
   bodyweightAt: BodyweightAt,
-  catalog: CatalogNames = NO_CATALOG
+  catalog: CatalogNames = NO_CATALOG,
+  muscles: CatalogMuscles = NO_MUSCLES
 ): { allTime: string; notes: string } {
   return {
-    allTime: buildAllTimeBlock(sessions, today, bodyweightAt, catalog),
+    allTime: [buildAllTimeBlock(sessions, today, bodyweightAt, catalog), buildMuscleBlock(sessions, today, muscles)].join('\n\n'),
     notes: buildNotesBlock(sessions),
   };
 }

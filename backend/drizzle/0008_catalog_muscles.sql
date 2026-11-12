@@ -1,0 +1,1 @@
+ALTER TABLE `ExerciseCatalog` ADD `muscles` text;

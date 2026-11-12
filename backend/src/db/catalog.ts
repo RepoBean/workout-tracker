@@ -63,7 +63,8 @@ const resolveColumn = (column: string) => `(
  *    rows that no catalog name or alias covers yet. Canonical spelling: most Sets
  *    rows; tie → on an Exercises row in a non-archived program; tie → lowest id.
  * 2. Fill catalogId where NULL (name, else alias).
- * 3. GC rows referenced by nothing and carrying no aliases.
+ * 3. GC rows referenced by nothing and carrying no aliases or muscle tags (a tagged
+ *    lift keeps its tags for the day its name comes back, v4 C5).
  * Never touches names or any row's updatedAt.
  */
 export function backfillCatalog(sqlite: Database): BackfillResult {
@@ -112,6 +113,7 @@ export function backfillCatalog(sqlite: Database): BackfillResult {
     const removed = sqlite.prepare(`
       DELETE FROM ExerciseCatalog
       WHERE json_array_length(aliases) = 0
+        AND muscles IS NULL
         AND NOT EXISTS (SELECT 1 FROM Sets s WHERE s.catalogId = ExerciseCatalog.id)
         AND NOT EXISTS (SELECT 1 FROM Exercises e WHERE e.catalogId = ExerciseCatalog.id)
     `).run().changes;

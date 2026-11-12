@@ -3,9 +3,12 @@ import { describe, expect, it } from 'vitest';
 import type { Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
 import { DEFAULT_PROFILE } from '../../../shared/lib/hrZones';
 import { DEFAULT_PROGRESSION } from '../../../shared/context/ProgressionContext';
+import { catalogMuscles } from '../../../shared/lib/muscles';
 import {
   assembleDossier,
   buildAllTimeBlock,
+  buildAllTimeParts,
+  buildMuscleBlock,
   buildAthleteLine,
   buildNotesBlock,
   buildProgramBlock,
@@ -575,5 +578,45 @@ describe('buildStatsBlock', () => {
       'Stats: 88 sessions total, 12 in last 30d, 3 week streak'
     );
     expect(buildStatsBlock(null)).toBe('');
+  });
+});
+
+describe('buildMuscleBlock (v4 C5)', () => {
+  // Thursday 2026-11-12; the 4 whole weeks are 2026-10-11 … 2026-11-07.
+  const today = '2026-11-12';
+  const local = (m: number, d: number) => new Date(2026, m - 1, d, 18).toISOString();
+  const muscles = catalogMuscles([
+    { id: 1, name: 'Leg Press', aliases: [], setCount: 0, exerciseCount: 0, createdAt: '', updatedAt: '',
+      muscles: { primary: ['quads'], secondary: ['glutes'] } },
+    { id: 2, name: 'Bench Press', aliases: [], setCount: 0, exerciseCount: 0, createdAt: '', updatedAt: '',
+      muscles: { primary: ['chest'], secondary: ['triceps'] } },
+  ]);
+  const legs = (n: number) => Array.from({ length: n }, () => set({ catalogId: 1 }));
+  const sessions = [
+    // 40 leg sets over the window → quads 10 solid, glutes 5 low
+    ...[10, 17, 24, 31].map((d, i) => session({ completedAt: i < 3 ? local(10, d + 1) : local(11, 1), sets: legs(10) })),
+    session({ completedAt: local(11, 10), sets: [...legs(3), set({ catalogId: null, exerciseName: 'Curl' })] }),
+    session({ completedAt: local(10, 20), sets: [set({ catalogId: 2 })] }), // bench 23 days ago
+    session({ completedAt: local(10, 21), sets: [set({ catalogId: null, exerciseName: 'Curl' })] }),
+  ];
+
+  it('renders averages with bands, this week, flags, never-trained and the untagged line', () => {
+    expect(buildMuscleBlock(sessions, today, muscles)).toBe([
+      'Weekly working sets per muscle (secondary counts ½; avg of last 4 whole weeks + band / this week so far; bands: low <6, building 6–10, solid 10–20, high >20):',
+      '  chest 0.3 low / 0, triceps 0.1 low / 0, quads 10 solid / 3, glutes 5 low / 1.5',
+      '  untrained 14+ days: chest (23 d), triceps (23 d)',
+      '  never trained: front-delts, side-delts, lats, upper-back, rear-delts, biceps, forearms, abs, obliques, lower-back, hamstrings, adductors, abductors, calves',
+      '  untagged lifts: 1 of 42 sets in the last 4 weeks',
+    ].join('\n'));
+  });
+
+  it('says so when nothing is tagged', () => {
+    expect(buildMuscleBlock(sessions, today)).toBe('Muscle tags: none yet.');
+  });
+
+  it('rides in the all-time part, after the per-exercise rollup', () => {
+    const { allTime } = buildAllTimeParts(sessions, today, bw(null), undefined, muscles);
+    expect(allTime.indexOf('All-time per exercise')).toBe(0);
+    expect(allTime).toContain('\n\nWeekly working sets per muscle');
   });
 });

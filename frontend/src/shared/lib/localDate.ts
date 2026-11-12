@@ -7,3 +7,8 @@ export function localDateKey(value: Date | string): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/** Local midnight of the Sunday on or before `d` (weeks start Sunday everywhere: dashboard, Volume, Muscles, server streak). */
+export function startOfWeek(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay());
+}

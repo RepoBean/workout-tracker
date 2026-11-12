@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { useCatalog, useMergeCatalog, useSplitCatalog } from '../../../shared/api/queries';
+import { useCatalog, useMergeCatalog, useSetCatalogMuscles, useSplitCatalog } from '../../../shared/api/queries';
 import type { CatalogEntry } from '../../../shared/api/types';
+import { tagSummary } from '../../../shared/lib/muscles';
+import { MusclesModal } from './MusclesModal';
 import { Input } from '../../../shared/ui/Input';
 import { Modal } from '../../../shared/ui/Modal';
 
@@ -8,6 +10,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 const usage = (e: CatalogEntry) =>
   `${plural(e.setCount, 'set')} · ${plural(e.exerciseCount, 'program exercise')}`;
+
+const tagged = (e: CatalogEntry) => Boolean(e.muscles && e.muscles.primary.length > 0);
 
 const matches = (e: CatalogEntry, filter: string) => {
   const q = filter.trim().toLowerCase();
@@ -24,12 +28,17 @@ export function ExerciseCatalogCard() {
   const { data: entries, isLoading, error } = useCatalog();
   const merge = useMergeCatalog();
   const split = useSplitCatalog();
+  const setMuscles = useSetCatalogMuscles();
+  const [musclesFor, setMusclesFor] = useState<CatalogEntry | null>(null);
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [mergeSource, setMergeSource] = useState<CatalogEntry | null>(null);
   const [targetFilter, setTargetFilter] = useState('');
 
   const merged = useMemo(() => (entries ?? []).filter((e) => e.aliases.length > 0), [entries]);
+  // An older backend omits `muscles` entirely: no untagged count, no Muscles… button.
+  const hasMuscles = useMemo(() => (entries ?? []).some((e) => e.muscles !== undefined), [entries]);
+  const untagged = useMemo(() => (entries ?? []).filter((e) => !tagged(e)).length, [entries]);
 
   const visible = useMemo(() => (entries ?? []).filter((e) => matches(e, filter)), [entries, filter]);
   const targets = useMemo(
@@ -61,7 +70,7 @@ export function ExerciseCatalogCard() {
     split.mutate({ id: entry.id, alias });
   };
 
-  const busy = merge.isPending || split.isPending;
+  const busy = merge.isPending || split.isPending || setMuscles.isPending;
 
   return (
     <div className="card space-y-4">
@@ -94,6 +103,7 @@ export function ExerciseCatalogCard() {
           <p>
             {plural(entries.length, 'exercise')}
             {merged.length > 0 && ` · ${plural(merged.length, 'merged name')}`}
+            {hasMuscles && ` · ${untagged} without muscles`}
           </p>
           {merged.length > 0 && (
             <ul className="mt-1 space-y-0.5">
@@ -145,16 +155,36 @@ export function ExerciseCatalogCard() {
                       ))}
                     </div>
                   )}
+                  {entry.muscles && entry.muscles.primary.length > 0 && (
+                    <p className="mt-0.5 text-xs text-gray-700 dark:text-gray-300">
+                      {tagSummary(entry.muscles).primary}
+                      {entry.muscles.secondary.length > 0 && (
+                        <span className="text-gray-500 dark:text-gray-400"> · {tagSummary(entry.muscles).secondary}</span>
+                      )}
+                    </p>
+                  )}
                   <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{usage(entry)}</p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => openMerge(entry)}
-                  disabled={busy}
-                  className="shrink-0 min-h-[44px] px-2 text-sm font-medium text-primary-600 dark:text-primary-400 disabled:opacity-50"
-                >
-                  Merge into…
-                </button>
+                <div className="shrink-0 flex flex-col items-end">
+                  {hasMuscles && (
+                    <button
+                      type="button"
+                      onClick={() => setMusclesFor(entry)}
+                      disabled={busy}
+                      className="min-h-[44px] px-2 text-sm font-medium text-primary-600 dark:text-primary-400 disabled:opacity-50"
+                    >
+                      Muscles…
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => openMerge(entry)}
+                    disabled={busy}
+                    className="min-h-[44px] px-2 text-sm font-medium text-primary-600 dark:text-primary-400 disabled:opacity-50"
+                  >
+                    Merge into…
+                  </button>
+                </div>
               </li>
             ))}
             {visible.length === 0 && (
@@ -163,6 +193,15 @@ export function ExerciseCatalogCard() {
           </ul>
         </>
       )}
+
+      <MusclesModal
+        entry={musclesFor}
+        saving={setMuscles.isPending}
+        onClose={() => setMusclesFor(null)}
+        onSave={(muscles) =>
+          musclesFor && setMuscles.mutate({ id: musclesFor.id, muscles }, { onSuccess: () => setMusclesFor(null) })
+        }
+      />
 
       <Modal
         isOpen={mergeSource !== null}

@@ -84,7 +84,6 @@ export interface Set {
   updatedAt: string;
 }
 
-/** GET /api/catalog row: one lift, the spellings folded into it, and what points at it. */
 /** One weigh-in (v4 C3). `date` is a local calendar day, YYYY-MM-DD. */
 export interface BodyWeight {
   id: number;
@@ -94,10 +93,19 @@ export interface BodyWeight {
   updatedAt: string;
 }
 
+/** Muscle tags on a catalog entry (v4 C5). Ids from shared/lib/muscles.ts. */
+export interface MuscleTags {
+  primary: string[];
+  secondary: string[];
+}
+
+/** GET /api/catalog row: one lift, the spellings folded into it, and what points at it. */
 export interface CatalogEntry {
   id: number;
   name: string;
   aliases: string[];
+  /** v4 C5. Absent on an older backend, null when untagged — both read as untagged. */
+  muscles?: MuscleTags | null;
   setCount: number;
   exerciseCount: number;
   createdAt: string;

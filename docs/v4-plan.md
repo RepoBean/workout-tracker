@@ -284,7 +284,11 @@ first-run prompt's dismissal flag lives in the server-side `profile`). Add BodyW
 - Deload size and trigger (recommend 10% after the 3-session stall flag), and whether `linear`
   adds weight every session or only when all target reps were hit (recommend the latter).
 
-### [ ] C5: Muscle analytics
+### [x] C5: Muscle analytics
+
+> Bundle doc: `docs/v4-bundle-c5-muscles.md`. Decided 2026-11-12 (secondary = ½, the 18 muscles, a
+> Muscles tab after Volume with a low / building / solid / high band on the 4-week average, one coach
+> block, seed applied without row review). Ships to all three stacks with per-instance seeds.
 - `muscles` JSON column (`{primary: Muscle[], secondary: Muscle[]}`), **nullable, NULL = untagged**,
   on **ExerciseCatalog**. Additive column: a CHANGELOG row plus a migration. Older images select
   columns explicitly and their inserts work with a nullable column. Merges inherit tags through the
