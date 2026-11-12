@@ -395,7 +395,7 @@ backend/
 | DELETE | /api/sessions/:id/sets/:setId | Delete a set |
 | PUT | /api/sessions/:id/exercise-note | Set/clear a per-exercise note |
 | POST | /api/sessions/:id/complete | Complete session (accepts session HR summary) |
-| PUT | /api/sessions/:id | Edit a completed session: `notes` (≤1000, empty/null clears) and/or move its date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) |
+| PUT | /api/sessions/:id | Edit a completed session: `notes` (≤1000, empty/null clears), move its date (`completedAt`; shifts `createdAt` and every set's `createdAt` by the same delta; no future dates) and/or set its length (`durationMin` 1–600: `createdAt = completedAt − N`, applied after a move; sets outside the window are clamped into it) |
 | DELETE | /api/sessions/:id | Delete session (cascades to sets) |
 | GET | /api/catalog | Exercise catalog: `{id, name, aliases, muscles, setCount, exerciseCount, createdAt, updatedAt}[]`, sorted by name |
 | PUT | /api/catalog/:id | `{ muscles: {primary, secondary} \| null }` (v4 C5): enum ids, no duplicates, none in both lists, secondary needs a primary (400); empty lists store NULL; 404 missing. Bumps that entry's `updatedAt` only |
@@ -584,7 +584,7 @@ backend/
 
 ### 21. History Editing (v4 C1)
 - `/history/:id/edit` (Edit on an expanded History card or the completed-session screen): edit weight/reps/RPE
-  (cardio: duration/distance), add/delete sets, add an exercise, notes, the date. No HR, timer, PR toast, RPE
+  (cardio: duration/distance), add/delete sets, add an exercise, notes, the date and length. No HR, timer, PR toast, RPE
   flow or previous-session hints. Set writes are allowed on completed sessions and bump `Sessions.updatedAt`;
   a set added to a completed session is stamped at its `completedAt`
 - **Log a past workout** (Dashboard, History): local date + time (default 18:00) + minutes, then the picker.

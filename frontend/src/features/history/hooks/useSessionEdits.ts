@@ -79,15 +79,15 @@ export function useSessionEdits(sessionId: number) {
   });
 
   const setDate = useMutation({
-    mutationFn: async (completedAt: string) => {
-      const { data } = await api.put<ActiveSession>(`/sessions/${sessionId}`, { completedAt });
+    mutationFn: async (patch: { completedAt?: string; durationMin?: number }) => {
+      const { data } = await api.put<ActiveSession>(`/sessions/${sessionId}`, patch);
       return data;
     },
     onSuccess: (session) => {
       queryClient.setQueryData(key, session);
-      toast.success('Date updated');
+      toast.success('Session updated');
     },
-    onError: () => toast.error('Failed to change the date'),
+    onError: () => toast.error('Failed to update the session'),
     onSettled: settle,
   });
 

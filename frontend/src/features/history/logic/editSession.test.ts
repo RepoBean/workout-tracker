@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Exercise, Set } from '../../../shared/api/types';
-import { groupSetsByExercise, localDateTime, nextSetNumber, toLocalInputs, unloggedSlots } from './editSession';
+import { durationInput, groupSetsByExercise, localDateTime, nextSetNumber, parseDurationMin, toLocalInputs, unloggedSlots } from './editSession';
 
 const set = (over: Partial<Set>): Set => ({
   id: 1, sessionId: 1, exerciseId: null, exerciseName: 'Bench', weight: 100, reps: 8, setNumber: 1,
@@ -47,5 +47,23 @@ describe('local date inputs', () => {
   });
   it('rejects malformed input', () => {
     expect(localDateTime('2026-10-10', '')).toBeNull();
+  });
+});
+
+describe('session length', () => {
+  it('fills the minutes field from start and end', () => {
+    expect(durationInput('2026-11-01T17:00:00.000Z', '2026-11-01T17:45:20.000Z')).toBe('45');
+  });
+
+  it('leaves it empty when the start is after the end (imported sessions) or the span is silly', () => {
+    expect(durationInput('2026-01-29T16:42:55.312Z', '2025-12-31T17:00:00.000Z')).toBe('');
+    expect(durationInput('2026-11-01T17:00:00.000Z', '2026-11-01T17:00:10.000Z')).toBe('');
+    expect(durationInput('2026-11-01T00:00:00.000Z', '2026-11-02T00:00:00.000Z')).toBe('');
+  });
+
+  it('parses whole minutes 1–600 only', () => {
+    expect(parseDurationMin('60')).toBe(60);
+    expect(parseDurationMin(' 45 ')).toBe(45);
+    for (const raw of ['', '0', '601', '1.5', '-5', 'abc']) expect(parseDurationMin(raw)).toBeNull();
   });
 });

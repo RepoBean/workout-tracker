@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { createTestApp, resetDb, seed, find } from './app.js';
+import { sqlite } from '../src/db/index.js';
 
 const app = createTestApp();
 
@@ -466,6 +467,42 @@ describe('history editing (v4 C1)', () => {
     const set = res.body.sets.find((s: { id: number }) => s.id === logged.body.id);
     expect(Date.parse(set.createdAt)).toBe(Date.parse(logged.body.createdAt) + delta);
     expect(set.updatedAt).toBe(before.sets[0].updatedAt);
+  });
+
+  it('PUT /:id durationMin sets the start and clamps sets into the window', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    const logged = await request(app).post(`/api/sessions/${session.id}/sets`).send(setBody);
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+    // Imported shape: completedAt backdated, start and sets left at the import time.
+    const target = hoursAgo(24 * 30);
+    await request(app).put(`/api/sessions/${session.id}`).send({ completedAt: target });
+    const stamp = new Date().toISOString().replace('T', ' ').replace('Z', ' +00:00');
+    sqlite.prepare('UPDATE Sessions SET createdAt = ? WHERE id = ?').run(stamp, session.id);
+    sqlite.prepare('UPDATE Sets SET createdAt = ? WHERE sessionId = ?').run(stamp, session.id);
+
+    const res = await request(app).put(`/api/sessions/${session.id}`).send({ durationMin: 45 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.completedAt).toBe(target);
+    expect(Date.parse(res.body.completedAt) - Date.parse(res.body.createdAt)).toBe(45 * 60_000);
+    const set = res.body.sets.find((s: { id: number }) => s.id === logged.body.id);
+    expect(set.createdAt).toBe(target);
+  });
+
+  it('PUT /:id with completedAt and durationMin moves first, then sets the length', async () => {
+    const { push } = await seedProgram();
+    const session = await startSession(push.id);
+    await request(app).post(`/api/sessions/${session.id}/complete`).send({});
+    const target = hoursAgo(48);
+
+    const res = await request(app).put(`/api/sessions/${session.id}`).send({ completedAt: target, durationMin: 75 });
+
+    expect(res.body.completedAt).toBe(target);
+    expect(Date.parse(target) - Date.parse(res.body.createdAt)).toBe(75 * 60_000);
+    for (const bad of [0, 601, 1.5, '60']) {
+      expect((await request(app).put(`/api/sessions/${session.id}`).send({ durationMin: bad })).status).toBe(400);
+    }
   });
 
   it('PUT /:id: history follows the new date', async () => {

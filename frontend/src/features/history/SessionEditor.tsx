@@ -10,7 +10,7 @@ import { ExerciseNote } from '../active-session/components/ExerciseNote';
 import { EditExerciseCard } from './components/edit/EditExerciseCard';
 import { useSessionEdits } from './hooks/useSessionEdits';
 import { useDeleteSession } from './hooks/useHistory';
-import { groupSetsByExercise, localDateTime, toLocalInputs, unloggedSlots } from './logic/editSession';
+import { durationInput, groupSetsByExercise, localDateTime, parseDurationMin, toLocalInputs, unloggedSlots } from './logic/editSession';
 
 interface ExtraCard {
   name: string;
@@ -119,11 +119,11 @@ export default function SessionEditor() {
           )}
         </div>
         <SessionDateField
-          key={session.completedAt}
+          key={`${session.completedAt}|${session.createdAt}`}
           completedAt={session.completedAt}
           createdAt={session.createdAt}
           saving={edits.setDate.isPending}
-          onSave={(iso) => edits.setDate.mutate(iso)}
+          onSave={(patch) => edits.setDate.mutate(patch)}
         />
         {session.notes || addingSessionNote ? (
           <ExerciseNote
@@ -203,17 +203,29 @@ function SessionDateField({ completedAt, createdAt, saving, onSave }: {
   completedAt: string;
   createdAt: string;
   saving: boolean;
-  onSave: (iso: string) => void;
+  onSave: (patch: { completedAt?: string; durationMin?: number }) => void;
 }) {
   const initial = toLocalInputs(completedAt);
+  const initialMinutes = durationInput(createdAt, completedAt);
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
+  const [minutes, setMinutes] = useState(initialMinutes);
   const picked = localDateTime(date, time);
-  const changed = date !== initial.date || time !== initial.time;
+  const duration = parseDurationMin(minutes);
+  const dateChanged = date !== initial.date || time !== initial.time;
+  const durationChanged = minutes !== initialMinutes;
+  const changed = dateChanged || durationChanged;
+  const badDuration = durationChanged && duration == null;
   const future = picked != null && picked.getTime() > Date.now();
-  const minutes = Math.round((Date.parse(completedAt) - Date.parse(createdAt)) / 60000);
   const inputClass = `min-h-[44px] px-2 rounded-lg border border-gray-200 dark:border-surface-700
                       bg-white dark:bg-surface-800`;
+
+  const save = () => {
+    const patch: { completedAt?: string; durationMin?: number } = {};
+    if (dateChanged && picked) patch.completedAt = picked.toISOString();
+    if (durationChanged && duration != null) patch.durationMin = duration;
+    onSave(patch);
+  };
 
   return (
     <div className="space-y-2">
@@ -222,17 +234,23 @@ function SessionDateField({ completedAt, createdAt, saving, onSave }: {
           onChange={(e) => setDate(e.target.value)} className={inputClass} />
         <input type="time" aria-label="Finished at" value={time}
           onChange={(e) => setTime(e.target.value)} className={inputClass} />
-        <span className="text-sm text-gray-500 dark:text-gray-400">{minutes} min</span>
+        <label className="flex items-center gap-1 text-sm text-gray-500 dark:text-gray-400">
+          <input type="number" inputMode="numeric" aria-label="Minutes" min={1} max={600} value={minutes}
+            placeholder="?" onChange={(e) => setMinutes(e.target.value)} className={`${inputClass} w-20`} />
+          min
+        </label>
       </div>
       {changed && (
         <div className="flex items-center gap-2">
-          <Button size="sm" disabled={!picked || future || saving} onClick={() => picked && onSave(picked.toISOString())}>
-            {saving ? 'Saving…' : 'Save date'}
+          <Button size="sm" disabled={!picked || future || badDuration || saving} onClick={save}>
+            {saving ? 'Saving…' : 'Save'}
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => { setDate(initial.date); setTime(initial.time); }}>
+          <Button size="sm" variant="ghost"
+            onClick={() => { setDate(initial.date); setTime(initial.time); setMinutes(initialMinutes); }}>
             Cancel
           </Button>
           {future && <span className="text-sm text-red-600 dark:text-red-400">Can't be in the future</span>}
+          {badDuration && <span className="text-sm text-red-600 dark:text-red-400">1–600 minutes</span>}
         </div>
       )}
     </div>

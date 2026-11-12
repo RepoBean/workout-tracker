@@ -58,3 +58,20 @@ export function toLocalInputs(iso: string): { date: string; time: string } {
     time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
   };
 }
+
+/**
+ * The editor's minutes field from a session's start and end: whole minutes, or '' when the
+ * stored length makes no sense (start after the end, as some imported sessions have) or is
+ * out of range — the field then asks for one.
+ */
+export function durationInput(createdAt: string, completedAt: string): string {
+  const minutes = Math.round((Date.parse(completedAt) - Date.parse(createdAt)) / 60000);
+  return minutes >= 1 && minutes <= 600 ? String(minutes) : '';
+}
+
+/** The minutes field as a whole number 1–600 (the server's range), else null. */
+export function parseDurationMin(raw: string): number | null {
+  if (!/^\d+$/.test(raw.trim())) return null;
+  const n = Number(raw.trim());
+  return n >= 1 && n <= 600 ? n : null;
+}

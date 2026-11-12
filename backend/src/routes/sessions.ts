@@ -34,6 +34,8 @@ const updateSessionSchema = z.object({
   completedAt: pastDateSchema.optional(),
   // Whole-workout note; empty/whitespace or null clears it
   notes: z.string().max(1000).nullable().optional(),
+  // Length in minutes: createdAt = completedAt − durationMin (after any date move)
+  durationMin: z.number().int().min(1).max(600).optional(),
 });
 
 // Floor for set weight. Negative weights log assisted lifts (assisted pull-up
@@ -707,7 +709,7 @@ router.delete('/:id/sets/:setId', validateParams(sessionSetParamsSchema), (req: 
   }
 });
 
-// PUT /api/sessions/:id - Edit a completed session: its note, or move its date. Shifts createdAt,
+// PUT /api/sessions/:id - Edit a completed session: its note, its length (durationMin), or move its date. Shifts createdAt,
 // completedAt and every set's createdAt by the same delta, so the duration,
 // HR series (offsets from createdAt) and set markers stay aligned.
 router.put('/:id', validateParams(idParamSchema), validate(updateSessionSchema), async (req: Request, res: Response) => {
@@ -743,6 +745,25 @@ router.put('/:id', validateParams(idParamSchema), validate(updateSessionSchema),
           .from(sets).where(eq(sets.sessionId, sessionId)).all();
         for (const row of rows) {
           tx.update(sets).set({ createdAt: shift(row.createdAt) }).where(eq(sets.id, row.id)).run();
+        }
+      });
+    }
+
+    // Set the length: start = end − durationMin. Sets outside the new window are clamped into it
+    // (an imported session's sets stamped after its end land at the end, like a logged past workout).
+    if (req.body.durationMin !== undefined) {
+      const current = findSession(sessionId)!;
+      const end = (current.completedAt as Date).getTime();
+      const start = end - req.body.durationMin * 60_000;
+      db.transaction((tx) => {
+        tx.update(sessions).set({ createdAt: new Date(start), updatedAt: now() })
+          .where(eq(sessions.id, sessionId)).run();
+        const rows = tx.select({ id: sets.id, createdAt: sets.createdAt })
+          .from(sets).where(eq(sets.sessionId, sessionId)).all();
+        for (const row of rows) {
+          const t = row.createdAt.getTime();
+          const clamped = Math.min(Math.max(t, start), end);
+          if (clamped !== t) tx.update(sets).set({ createdAt: new Date(clamped) }).where(eq(sets.id, row.id)).run();
         }
       });
     }
