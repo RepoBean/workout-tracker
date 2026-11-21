@@ -618,14 +618,16 @@ backend/
 - Gated by Settings → **Enable auto-progression** (per instance). Pre-fill hint before the first set only
 - Double progression judged on last session's sets at its **heaviest** weight (ramp sets ignored): **up** when
   set 1 hit the top of the range and every set reached the **goal** = `low` + the reps the next weight costs
-  (`repAllowance`: `round(step / load × 15)`, min 1; assisted load = bodyweight − assistance; goal capped at 30
-  and may sit past the range's top, where the hold target and prefill keep climbing — C4b) (+ the slot's step,
-  else the global increment);
-  **deload** −10% to the nearest 5 lb when stalled 3+ sessions (`stallRun`) **and** the best set fell below the
+  (`repAllowance`: `round(step / load × 15)`, min 1; assisted load = bodyweight − assistance, unweighted
+  (0) load = bodyweight; goal capped at 30 and may sit past the range's top, where the hold target and prefill
+  keep climbing — C4b) (+ the slot's step, else the global increment). No bump if a set after the first top set
+  went lighter, or fewer working sets than `targetSets` were logged (C4c; the hint says which);
+  **deload** ("Reset:") −10% rounded to the lift's step (ties lighter) when stalled 3+ sessions (`stallRun`) **and** the best set fell below the
   range (skipped when rounding gives the same weight); else **hold**. The all-sets fetch for the deload runs
   only when last session was below the range
 - Per-exercise step: tap the hint chip in a workout (`StepPicker.tsx`: 2.5 / 5 / 10 / other, the lift's learned
   step offered; program exercises only) or exercise form → Advanced. Bundle docs:
+  `docs/v4-bundle-c4c-progression-tighten.md` (back-off / cut-short guards, step-aware reset),
   `docs/v4-bundle-c4b-progression-v2.md` (the goal rule + its replay), `docs/v4-bundle-c4-progression.md` (replay of
   main's history: old rule 54 bumps vs 95 actual vs new rule 114; linear scheme and 5×5 presets dropped)
 

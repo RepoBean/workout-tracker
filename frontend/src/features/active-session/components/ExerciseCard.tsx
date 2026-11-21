@@ -122,8 +122,9 @@ export function ExerciseCard({
       incrementLbs,
       history: wantHistory && allSets ? historyFromSets(allSets.sets) : undefined,
       bodyweight,
+      targetSets: exercise.targetSets,
     });
-  }, [progressionOn, previousHint, exercise.targetReps, incrementLbs, wantHistory, allSets, bodyweight]);
+  }, [progressionOn, previousHint, exercise.targetReps, exercise.targetSets, incrementLbs, wantHistory, allSets, bodyweight]);
 
   // Priority: 1) Last set from THIS session, 2) Progression suggestion (pre-first-set),
   // 3) Matching set from previous session, 4) Previous session's last weight, 5) 0

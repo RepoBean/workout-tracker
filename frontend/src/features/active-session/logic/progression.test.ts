@@ -355,6 +355,23 @@ describe('deloadWeight', () => {
   });
 });
 
+describe('deloadWeight — step-aware (C4c)', () => {
+  it.each([
+    [225, 5, 200],
+    [225, 10, 200],
+    [145, 5, 130],
+    [80, 2.5, 72.5],
+    [20, 2.5, 17.5], // resets instead of sticking at 20
+    [20, 5, 20], // 15 would be a 25% drop
+    [10, 5, 10],
+    [-30, 5, -35],
+    [-30, 2.5, -32.5],
+    [100, 0, 90], // no usable step → 5 lb
+  ])('%s on a %s lb step → %s', (w, step, expected) => {
+    expect(deloadWeight(w, step)).toBe(expected);
+  });
+});
+
 describe('computeProgression — deload', () => {
   const day = (weight: number, bestReps: number, totalReps: number): DayTop => ({ weight, bestReps, totalReps });
   const stalled = new Map<string, DayTop>([
@@ -367,7 +384,7 @@ describe('computeProgression — deload', () => {
   it('stalled 3 sessions and below the range → −10%', () => {
     const result = computeProgression({ previousSets: below, targetReps: '5-8', incrementLbs: 5, history: stalled });
     expect(result).toMatchObject({ kind: 'deload', suggestedWeight: 200, ready: false });
-    expect(result?.reason).toBe('Stuck at 225 for 3 sessions → Try: 200 ↓');
+    expect(result?.reason).toBe('Stuck at 225 for 3 sessions → Reset: 200 ↓');
     expect(result?.suggestedReps).toBeGreaterThanOrEqual(5);
   });
 
@@ -425,5 +442,133 @@ describe('couldDeload / historyFromSets', () => {
       { weight: -40, reps: 8, dropIndex: 0, completedAt: null },
     ]);
     expect([...map.values()]).toEqual([{ weight: -40, bestReps: 10, totalReps: 18 }]);
+  });
+});
+
+describe('computeProgression — back-off and cut-short guards (C4c)', () => {
+  it('a lighter set after the top weight holds (100×12, 100×10, 90×10)', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: 100, reps: 12, setNumber: 1 },
+        { weight: 100, reps: 10, setNumber: 2 },
+        { weight: 90, reps: 10, setNumber: 3 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 100, ready: false });
+    expect(result?.reason).toBe('Keep 100 on all sets → then 105');
+  });
+
+  it('a dip in the middle holds too (100×12, 90×10, 100×10)', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: 100, reps: 12, setNumber: 1 },
+        { weight: 90, reps: 10, setNumber: 2 },
+        { weight: 100, reps: 10, setNumber: 3 },
+      ],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: 100 });
+  });
+
+  it('assisted: needing more help on a later set holds at the least help (−40, −30, −35)', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: -40, reps: 10, setNumber: 1 },
+        { weight: -30, reps: 10, setNumber: 2 },
+        { weight: -35, reps: 8, setNumber: 3 },
+      ],
+      targetReps: '6-10',
+      incrementLbs: 5,
+      bodyweight: 180,
+    });
+    expect(result).toMatchObject({ kind: 'hold', suggestedWeight: -30 });
+  });
+
+  it('ramp-up sets before the top weight still bump', () => {
+    const result = computeProgression({
+      previousSets: [
+        { weight: 95, reps: 8, setNumber: 1 },
+        { weight: 115, reps: 8, setNumber: 2 },
+        { weight: 135, reps: 8, setNumber: 3 },
+      ],
+      targetReps: '5-8',
+      incrementLbs: 10,
+      targetSets: 3,
+    });
+    expect(result).toMatchObject({ kind: 'up', suggestedWeight: 145 });
+  });
+
+  it('a cut-short session holds when targetSets is known', () => {
+    const one = computeProgression({
+      previousSets: [{ weight: 100, reps: 12 }],
+      targetReps: '8-12',
+      incrementLbs: 5,
+      targetSets: 3,
+    });
+    expect(one).toMatchObject({ kind: 'hold', suggestedWeight: 100 });
+    expect(one?.reason).toBe('Complete all 3 sets at 100 → then 105');
+
+    const two = computeProgression({
+      previousSets: [{ weight: 100, reps: 12 }, { weight: 100, reps: 10 }],
+      targetReps: '8-12',
+      incrementLbs: 5,
+      targetSets: 3,
+    });
+    expect(two?.kind).toBe('hold');
+  });
+
+  it('without targetSets a single set still bumps (backwards compatible)', () => {
+    const result = computeProgression({
+      previousSets: [{ weight: 100, reps: 12 }],
+      targetReps: '8-12',
+      incrementLbs: 5,
+    });
+    expect(result?.kind).toBe('up');
+  });
+
+  it('blocked and short of the goal keeps the ordinary hold copy', () => {
+    const result = computeProgression({
+      previousSets: [{ weight: 100, reps: 10 }, { weight: 90, reps: 10 }],
+      targetReps: '8-12',
+      incrementLbs: 5,
+      targetSets: 3,
+    });
+    expect(result?.reason).toBe('Aim 100×12 on set 1, rest 9+ → then 105');
+  });
+
+  it("the reset rounds to the lift's own step (20 lb on 2.5 → 17.5)", () => {
+    const day = (weight: number, bestReps: number, totalReps: number): DayTop => ({ weight, bestReps, totalReps });
+    const history = new Map<string, DayTop>([
+      ['2026-09-01', day(20, 9, 26)], ['2026-09-04', day(20, 8, 24)], ['2026-09-08', day(20, 8, 23)],
+    ]);
+    const result = computeProgression({
+      previousSets: [{ weight: 20, reps: 8 }, { weight: 20, reps: 7 }],
+      targetReps: '10-15',
+      incrementLbs: 2.5,
+      history,
+    });
+    expect(result).toMatchObject({ kind: 'deload', suggestedWeight: 17.5 });
+    expect(result?.reason).toBe('Stuck at 20 for 3 sessions → Reset: 17.5 ↓');
+  });
+});
+
+describe('computeProgression — unweighted bodyweight lifts (C4c)', () => {
+  const at = (reps: number[], bodyweight: number | null, incrementLbs: number) => computeProgression({
+    previousSets: reps.map((r) => ({ weight: 0, reps: r })),
+    targetReps: '8-12',
+    incrementLbs,
+    bodyweight,
+  });
+
+  it('sizes a belt jump on bodyweight (25 / 160 → 2 reps, goal 10)', () => {
+    expect(at([12, 9, 9], 160, 25)).toMatchObject({ kind: 'hold', goalReps: 10 });
+    expect(at([12, 10, 10], 160, 25)).toMatchObject({ kind: 'up', suggestedWeight: 25 });
+  });
+
+  it('no bodyweight → the minimum allowance', () => {
+    expect(at([12, 9, 9], null, 5)).toMatchObject({ kind: 'up', goalReps: 9 });
   });
 });

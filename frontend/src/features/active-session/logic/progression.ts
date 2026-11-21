@@ -9,16 +9,19 @@
 // top of the range — the target then keeps climbing instead of forcing a jump that fails.
 // The C4 rule ("set 1 at the top, the rest merely in range") ignored jump size: over main's
 // last six months 63% of the bumps it approved landed back in the range, this rule 71% while
-// firing half as often (docs/v4-bundle-c4b-progression-v2.md §2). Otherwise keep the weight, unless the
-// lift has stalled and fallen below the range: then suggest a 10% deload. Pure functions —
-// session-time hint only, never mutates the program definition.
+// firing half as often (docs/v4-bundle-c4b-progression-v2.md §2). C4c: no bump if a later set
+// dropped below the top weight (a fatigue back-off) or fewer working sets than prescribed were
+// logged (a cut-short session). Otherwise keep the weight, unless the lift has stalled and
+// fallen below the range: then suggest a 10% weight reset, rounded to the lift's step. Pure
+// functions — session-time hint only, never mutates the program definition.
 //
 // The rep half of the suggestion is delegated to `suggestReps` so the pre-fill obeys one
 // set of rules everywhere. This module keeps ownership of the WEIGHT decision.
 //
 // Assisted lifts (negative weight = assistance): −40 + 5 = −35 is "less help", which is exactly
 // the progression, and −35 > −40 fires the rep reset. Only the jump SIZE needs the bodyweight
-// (5 lb less help at 180 lb is 5/140); without one the allowance is the minimum.
+// (5 lb less help at 180 lb is 5/140); without one the allowance is the minimum. An unweighted
+// bodyweight lift (weight 0) is sized on the bodyweight too (+25 lb belt at 160 lb is 25/160).
 
 import { parseRepTarget, suggestReps } from './suggestReps';
 import { formatWeight } from '../../../shared/utils/format';
@@ -45,8 +48,10 @@ export interface ProgressionInput {
    * (see `couldDeload`).
    */
   history?: ReadonlyMap<string, DayTop>;
-  /** Current bodyweight, to size the jump on an assisted (negative-weight) lift. */
+  /** Current bodyweight, to size the jump on an assisted (negative-weight) or unweighted lift. */
   bodyweight?: number | null;
+  /** Prescribed working sets (optional). Fewer logged last time → no bump (cut-short session). */
+  targetSets?: number;
 }
 
 export type ProgressionKind = 'up' | 'hold' | 'deload';
@@ -117,20 +122,26 @@ export const DELOAD_FRACTION = 0.1;
 const DELOAD_ROUND_LBS = 5;
 
 /**
- * `w` minus 10% of |w|, to the nearest 5 lb, ties going lighter (225 → 200, 145 → 130,
- * assisted −30 → −35). A light lift rounds back to `w` (10 → 9 → 10): no deload.
+ * `w` minus 10% of |w|, to the nearest `step` (the lift's own weight step; default 5 lb), ties
+ * going lighter (225 → 200, 145 → 130, assisted −30 → −35; 80 on 2.5 → 72.5). A light lift
+ * that rounds back to `w` (10 → 9 → 10 on a 5 lb step) gets no reset.
  */
-export function deloadWeight(w: number): number {
-  const target = (w - DELOAD_FRACTION * Math.abs(w)) / DELOAD_ROUND_LBS;
+export function deloadWeight(w: number, step: number = DELOAD_ROUND_LBS): number {
+  const roundStep = step > 0 ? step : DELOAD_ROUND_LBS;
+  const target = (w - DELOAD_FRACTION * Math.abs(w)) / roundStep;
   // Nearest step, ties down: ceil(x − 0.5). Round the quotient first so float noise
-  // (40.50000000001) can't flip a tie.
-  const rounded = Math.ceil(Math.round(target * 1e6) / 1e6 - 0.5) * DELOAD_ROUND_LBS;
+  // (40.50000000001) can't flip a tie; round the product so 2.5-lb steps stay clean.
+  const rounded = Math.round(Math.ceil(Math.round(target * 1e6) / 1e6 - 0.5) * roundStep * 100) / 100;
   return rounded >= w ? w : rounded;
 }
 
 interface TopSets {
   top: number;
   sets: Array<{ weight: number; reps: number; setNumber: number }>;
+  /** Every working set, ramp-ups included (the cut-short check counts these). */
+  workingCount: number;
+  /** A set after the first top-weight set went lighter (a back-off, not a ramp-up). */
+  droppedWeightAfterTop: boolean;
 }
 
 function topSetsOf(previousSets: ProgressionInput['previousSets']): TopSets | null {
@@ -140,7 +151,15 @@ function topSetsOf(previousSets: ProgressionInput['previousSets']): TopSets | nu
     .sort((a, b) => a.setNumber - b.setNumber);
   if (working.length === 0) return null;
   const top = Math.max(...working.map((s) => s.weight));
-  return { top, sets: working.filter((s) => s.weight === top) };
+  // Lighter sets BEFORE the first top set are ramp-ups (ignored); lighter sets after it mean
+  // the top weight couldn't be held for the whole exercise.
+  const firstTopIdx = working.findIndex((s) => s.weight === top);
+  return {
+    top,
+    sets: working.filter((s) => s.weight === top),
+    workingCount: working.length,
+    droppedWeightAfterTop: working.slice(firstTopIdx + 1).some((s) => s.weight < top),
+  };
 }
 
 /**
@@ -180,21 +199,25 @@ export function computeProgression({
   incrementLbs,
   history,
   bodyweight,
+  targetSets,
 }: ProgressionInput): ProgressionResult | null {
   const t = topSetsOf(previousSets);
   if (!t) return null;
-  const { top, sets } = t;
+  const { top, sets, workingCount, droppedWeightAfterTop } = t;
   const { low, high } = parseRepTarget(targetReps);
   const bestReps = Math.max(...sets.map((s) => s.reps));
 
-  const load = top > 0 ? top : top < 0 && bodyweight != null ? bodyweight + top : 0;
+  const load = top > 0 ? top : bodyweight != null ? bodyweight + top : 0;
   const goal = goalReps(low, incrementLbs, load);
   const nextWeight = top + incrementLbs;
   const common = { goalReps: goal, nextWeight };
 
   // Earned the bump: set 1 at the top weight reached the top of the range and every set there
-  // reached the goal (which may itself sit past the top).
-  if (sets[0].reps >= high && sets.every((s) => s.reps >= goal)) {
+  // reached the goal (which may itself sit past the top), the weight held to the last set, and
+  // every prescribed set was done (ramp-ups count toward that).
+  const topSetsMet = sets[0].reps >= high && sets.every((s) => s.reps >= goal);
+  const shortSession = targetSets != null && workingCount < targetSets;
+  if (topSetsMet && !droppedWeightAfterTop && !shortSession) {
     const suggestedWeight = nextWeight;
     return {
       ...common,
@@ -223,7 +246,7 @@ export function computeProgression({
   // range, where the answer is more weight, not less.
   if (history && bestReps < low) {
     const stall = stallRun(history);
-    const lighter = deloadWeight(top);
+    const lighter = deloadWeight(top, incrementLbs);
     if (stall.sessions >= STALL_SESSIONS && stall.weight === top && lighter < top) {
       return {
         ...common,
@@ -231,7 +254,7 @@ export function computeProgression({
         suggestedWeight: lighter,
         suggestedReps: repsAt(lighter),
         ready: false,
-        reason: `Stuck at ${formatWeight(top)} for ${stall.sessions} sessions → Try: ${formatWeight(lighter)} ↓`,
+        reason: `Stuck at ${formatWeight(top)} for ${stall.sessions} sessions → Reset: ${formatWeight(lighter)} ↓`,
       };
     }
   }
@@ -245,7 +268,11 @@ export function computeProgression({
     suggestedWeight: top,
     suggestedReps: repsAt(top),
     ready: false,
-    reason: goal < high
+    reason: topSetsMet && droppedWeightAfterTop
+      ? `Keep ${formatWeight(top)} on all sets → then ${formatWeight(nextWeight)}`
+      : topSetsMet && shortSession
+      ? `Complete all ${targetSets} sets at ${formatWeight(top)} → then ${formatWeight(nextWeight)}`
+      : goal < high
       ? `Aim ${formatWeight(top)}×${high} on set 1, rest ${goal}+ → then ${formatWeight(nextWeight)}`
       : `Aim ${formatWeight(top)}×${goal} on every set → then ${formatWeight(nextWeight)}`,
   };

@@ -307,11 +307,13 @@ export default function Settings() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Auto-Progression</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            The suggested weight goes up once every set reaches a rep goal: the bottom of the
-            exercise's range plus the reps you'd lose at the next weight. A small step needs a
-            rep or two; a big one needs more, past the top of the range if it has to. Stuck for
-            3 sessions and below the range, it suggests a 10% deload. Tap the hint during a
-            workout to set a lift's own step (2.5, 5, 10…).
+            The suggested weight goes up once set 1 hits the top of the exercise's range and
+            every set at that weight reaches a rep goal: the bottom of the range plus the reps
+            you'd lose at the next weight (a small step needs a rep or two; a big one needs more,
+            past the top of the range if it has to). Every prescribed set has to stay at that
+            weight. Stuck for 3 sessions and below the range, it suggests a 10% weight reset,
+            rounded to the lift's step. Tap the hint during a workout to set a lift's own step
+            (2.5, 5, 10…).
           </p>
         </div>
 
