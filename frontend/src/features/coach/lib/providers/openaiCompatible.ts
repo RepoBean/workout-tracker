@@ -15,9 +15,15 @@ interface OpenAiToolCallPayload {
   extra_content?: Record<string, unknown>;
 }
 
+interface OpenAiTextPart {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+}
+
 interface OpenAiMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string | null;
+  content: string | null | OpenAiTextPart[];
   tool_calls?: OpenAiToolCallPayload[];
   tool_call_id?: string;
 }
@@ -43,7 +49,7 @@ interface ModelsResponse {
   data?: Array<{ id: string }>;
 }
 
-function toOpenAiMessages(system: string, messages: CoachMessage[]): OpenAiMessage[] {
+function toOpenAiMessages(system: string | OpenAiTextPart[], messages: CoachMessage[]): OpenAiMessage[] {
   const out: OpenAiMessage[] = [{ role: 'system', content: system }];
 
   for (const msg of messages) {
@@ -85,6 +91,12 @@ export function createOpenAiCompatibleProvider(opts: {
   model: string;
   baseUrl: string;
   stripModelPrefix?: boolean;
+  /**
+   * Send the system prompt as content blocks with a cache_control breakpoint after the
+   * cacheable part (the dossier). OpenRouter only caches Anthropic models when asked this
+   * way; other endpoints keep the plain string.
+   */
+  enableAnthropicCacheControl?: boolean;
 }): ChatProvider {
   const baseUrl = opts.baseUrl.replace(/\/+$/, '');
   const authHeaders: Record<string, string> = {
@@ -116,12 +128,18 @@ export function createOpenAiCompatibleProvider(opts: {
       const body = {
         model: opts.model,
         stream: true,
-        // No explicit cache directive: OpenAI caches 1024+ token prefixes automatically and
-        // Google's caching is implicit, so persona + dossier (~2,900 tokens) qualifies as-is.
-        // Note Anthropic-via-OpenRouter gets no caching this way — it needs cache_control,
-        // which only the native adapter above sends.
+        // OpenAI caches 1024+ token prefixes automatically and Google's caching is implicit,
+        // so persona + dossier (~2,900 tokens) qualifies as a plain string. Anthropic via
+        // OpenRouter caches only behind an explicit cache_control breakpoint.
         messages: toOpenAiMessages(
-          systemCacheable ? `${system}\n\n${systemCacheable}` : system,
+          opts.enableAnthropicCacheControl && systemCacheable
+            ? [
+                { type: 'text', text: system },
+                { type: 'text', text: systemCacheable, cache_control: { type: 'ephemeral' } },
+              ]
+            : systemCacheable
+            ? `${system}\n\n${systemCacheable}`
+            : system,
           messages
         ),
         tools: tools.map((t) => ({

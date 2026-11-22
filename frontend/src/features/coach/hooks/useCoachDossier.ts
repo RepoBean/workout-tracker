@@ -29,7 +29,7 @@ const NO_WEIGH_INS: BodyWeight[] = [];
  * Bump whenever the all-time/notes TEXT changes shape or meaning (e.g. the stall rule), so a
  * memo written by an older build under today's key is not served after a deploy.
  */
-const ALLTIME_FORMAT_VERSION = 7;
+const ALLTIME_FORMAT_VERSION = 8;
 /** The all-time payload is ~618 KB — well past the axios client's global 10 s timeout. */
 const ALL_TIME_TIMEOUT_MS = 60000;
 
@@ -149,14 +149,20 @@ export function useCoachDossier() {
     return assembleDossier({
       today,
       athlete: buildAthleteLine(profile, progression, today, weighIns),
-      programs: buildProgramBlock(programs),
+      // The app's own next-session hints, from the same recent sessions; outside the all-time
+      // memo, so a program / step / setting change shows up at once.
+      programs: buildProgramBlock(programs, {
+        recentSessions,
+        progression,
+        latestBodyweight: bodyweightAt(null),
+      }),
       allTime: resolved.allTime,
       notes: resolved.notes,
       recent: renderSessions(recentSessions),
       recentCount: recentSessions.length,
       stats: buildStatsBlock(stats),
     });
-  }, [resolved, recentSessions, today, profile, progression, programs, stats, bodyweightReady, weighIns]);
+  }, [resolved, recentSessions, today, profile, progression, programs, stats, bodyweightReady, weighIns, bodyweightAt]);
 
   // Any query the dossier waits on can strand it; surface that instead of a dead input.
   const failed = [allTimeQuery, recentQuery, statsQuery, catalogQuery, programsQuery].filter(

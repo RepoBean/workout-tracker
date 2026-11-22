@@ -22,13 +22,35 @@ export interface DayTop {
   bestReps: number;
   /** Total reps across all sets at `weight`. */
   totalReps: number;
+  /** Sum and count of perceivedEffort on the sets at `weight` that had one (for the average RPE). */
+  rpeSum?: number;
+  rpeCount?: number;
 }
 
-export function addToDayTop(day: DayTop | undefined, weight: number, reps: number): DayTop {
-  if (!day || weight > day.weight) return { weight, bestReps: reps, totalReps: reps };
+export function addToDayTop(
+  day: DayTop | undefined,
+  weight: number,
+  reps: number,
+  perceivedEffort?: number | null,
+): DayTop {
+  const rpe = perceivedEffort != null ? { rpeSum: perceivedEffort, rpeCount: 1 } : {};
+  if (!day || weight > day.weight) return { weight, bestReps: reps, totalReps: reps, ...rpe };
   if (weight < day.weight) return day;
-  return { weight, bestReps: Math.max(day.bestReps, reps), totalReps: day.totalReps + reps };
+  const next: DayTop = { weight, bestReps: Math.max(day.bestReps, reps), totalReps: day.totalReps + reps };
+  if (day.rpeCount || perceivedEffort != null) {
+    next.rpeSum = (day.rpeSum ?? 0) + (perceivedEffort ?? 0);
+    next.rpeCount = (day.rpeCount ?? 0) + (perceivedEffort != null ? 1 : 0);
+  }
+  return next;
 }
+
+/** Average RPE of the sets at the day's top weight, or null when none carried one. */
+export function dayAvgRpe(d: DayTop): number | null {
+  return d.rpeCount ? (d.rpeSum ?? 0) / d.rpeCount : null;
+}
+
+/** Matching the run's best reps at this much lower average RPE counts as progress. */
+export const RPE_DROP_IMPROVEMENT = 1;
 
 /** Whole days from one YYYY-MM-DD to another; 0 when either is unparseable. */
 export function daysBetween(fromIso: string, toIso: string): number {
@@ -54,8 +76,11 @@ function orderedDays(topByDate: ReadonlyMap<string, DayTop>): { dates: string[];
  * Double progression holds the weight while reps climb, so weight alone is not a stall.
  * Take the trailing run of dates at the latest top weight; the first is the baseline, and a
  * later date "improves" if its best single-set reps or its total reps at that weight beat
- * every earlier date in the run. The count runs from the last improvement (or the
- * baseline) through the latest date, inclusive.
+ * every earlier date in the run. It also improves if it MATCHES the run's best on both
+ * counts at an average RPE at least RPE_DROP_IMPROVEMENT lower than at the last improvement
+ * (155×8,8,8 @10 → 155×8,8,8 @8 is the same work made easier — the progression hint bumps it
+ * too). Fewer reps at a lower RPE is not progress, and missing RPE never counts. The count
+ * runs from the last improvement (or the baseline) through the latest date, inclusive.
  */
 export function stallRun(topByDate: ReadonlyMap<string, DayTop>): { sessions: number; weight: number } {
   const { days } = orderedDays(topByDate);
@@ -69,8 +94,23 @@ export function stallRun(topByDate: ReadonlyMap<string, DayTop>): { sessions: nu
   let lastImproved = start;
   let bestReps = days[start].bestReps;
   let totalReps = days[start].totalReps;
+  // Average RPE at the last improvement (the baseline first); null = unknown.
+  let rpeAtPeak = dayAvgRpe(days[start]);
   for (let i = start + 1; i < days.length; i++) {
-    if (days[i].bestReps > bestReps || days[i].totalReps > totalReps) lastImproved = i;
+    const rpe = dayAvgRpe(days[i]);
+    if (days[i].bestReps > bestReps || days[i].totalReps > totalReps) {
+      lastImproved = i;
+      rpeAtPeak = rpe;
+    } else if (
+      days[i].bestReps >= bestReps &&
+      days[i].totalReps >= totalReps &&
+      rpe != null &&
+      rpeAtPeak != null &&
+      rpe <= rpeAtPeak - RPE_DROP_IMPROVEMENT
+    ) {
+      lastImproved = i;
+      rpeAtPeak = rpe;
+    }
     bestReps = Math.max(bestReps, days[i].bestReps);
     totalReps = Math.max(totalReps, days[i].totalReps);
   }

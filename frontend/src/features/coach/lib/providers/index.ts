@@ -23,6 +23,8 @@ export function createProvider(settings: AiCoachSettings): ChatProvider {
     model: settings.model,
     baseUrl,
     stripModelPrefix: preset.stripModelPrefix,
+    // anthropic/claude-… and OpenRouter's ~anthropic/… aliases.
+    enableAnthropicCacheControl: settings.provider === 'openrouter' && /anthropic\//i.test(settings.model),
   });
 }
 

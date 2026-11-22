@@ -14,7 +14,7 @@
 // NEVER emit: heartRateSeries, database ids, or timestamps. ~12% of the raw payload bytes,
 // zero value to the model.
 
-import type { Program, Session, Set as WorkoutSet, StatsResponse } from '../../../shared/api/types';
+import type { Exercise, Program, Session, Set as WorkoutSet, StatsResponse } from '../../../shared/api/types';
 import { isCardioSet } from '../../../shared/api/predicates';
 import { exerciseTargetSummary } from '../../../shared/api/cardio';
 import { epleyOneRepMax } from '../../../shared/lib/oneRepMax';
@@ -40,6 +40,7 @@ import {
 import type { ProgressionSettings } from '../../../shared/context/ProgressionContext';
 import { localDateKey } from '../../../shared/lib/localDate';
 import { NO_MUSCLES, type CatalogMuscles } from '../../../shared/lib/muscles';
+import { computeProgression, historyFromSets } from '../../active-session/logic/progression';
 import {
   AVERAGE_WEEKS,
   BANDS,
@@ -249,7 +250,7 @@ function rollupExercises(
           r.bestReps = set.reps;
         }
       }
-      r.topByDate.set(date, addToDayTop(r.topByDate.get(date), weight, set.reps));
+      r.topByDate.set(date, addToDayTop(r.topByDate.get(date), weight, set.reps, set.perceivedEffort));
     }
   }
   return out;
@@ -399,7 +400,60 @@ export function buildNotesBlock(sessions: Session[]): string {
 // Programs, athlete, stats
 // ---------------------------------------------------------------------------
 
-export function buildProgramBlock(programs: Program[]): string {
+/** What the program block needs to show the app's own next-session progression hint per lift. */
+export interface ProgramHintContext {
+  /** The dossier's recent completed sessions (any order). */
+  recentSessions: Session[];
+  progression: ProgressionSettings;
+  /** Current bodyweight (sizes the jump on assisted / unweighted lifts), as the workout screen uses. */
+  latestBodyweight: number | null;
+}
+
+/** Same lift: catalog identity when both sides have one, else the trimmed name, case-insensitively. */
+function sameLift(e: Exercise, s: WorkoutSet): boolean {
+  if (e.catalogId != null && s.catalogId != null) return s.catalogId === e.catalogId;
+  return s.exerciseName.trim().toLowerCase() === e.name.trim().toLowerCase();
+}
+
+/**
+ * The exact hint the workout screen pre-fills from (`computeProgression`), so the coach never
+ * does the jump-aware rep arithmetic in its head. Null for cardio, with auto-progression off,
+ * or when the lift isn't in the recent sessions. The deload history covers only those
+ * sessions (enough for the 3-session stall check). Pure: no clock, no fetch.
+ */
+function progressionHint(e: Exercise, hints: ProgramHintContext): string | null {
+  if (!hints.progression.enabled || e.exerciseType === 'cardio') return null;
+  const matches: Array<{ session: Session; sets: WorkoutSet[] }> = [];
+  for (const session of hints.recentSessions) {
+    if (!session.completedAt) continue;
+    const sets = (session.sets ?? []).filter(
+      (s) => sameLift(e, s) && isWorkingSet(s) && !isCardioSet(s)
+    );
+    if (sets.length) matches.push({ session, sets });
+  }
+  if (matches.length === 0) return null;
+  matches.sort((a, b) => (b.session.completedAt as string).localeCompare(a.session.completedAt as string));
+
+  const history = historyFromSets(
+    matches.flatMap(({ session, sets }) => sets.map((s) => ({ ...s, completedAt: session.completedAt })))
+  );
+  const result = computeProgression({
+    previousSets: matches[0].sets.map((s) => ({
+      weight: s.weight,
+      reps: s.reps,
+      dropIndex: s.dropIndex,
+      setNumber: s.setNumber,
+    })),
+    targetReps: e.targetReps,
+    incrementLbs: e.incrementLbs ?? hints.progression.incrementLbs,
+    history,
+    bodyweight: hints.latestBodyweight,
+    targetSets: e.targetSets,
+  });
+  return result ? result.reason : null;
+}
+
+export function buildProgramBlock(programs: Program[], hints?: ProgramHintContext): string {
   const active = programs.find((p) => p.isActive && !p.isArchived);
   const others = programs
     .filter((p) => !p.isActive && !p.isArchived)
@@ -421,7 +475,8 @@ export function buildProgramBlock(programs: Program[]): string {
         .map((e) => {
           const superset = e.supersetGroup ? ` (superset ${e.supersetGroup})` : '';
           const step = e.exerciseType !== 'cardio' && e.incrementLbs ? `, +${e.incrementLbs} lb steps` : '';
-          return `${e.name} ${exerciseTargetSummary(e)}${step}${superset}`;
+          const hint = hints ? progressionHint(e, hints) : null;
+          return `${e.name} ${exerciseTargetSummary(e)}${step}${superset}${hint ? ` [next: ${hint}]` : ''}`;
         });
       lines.push(`  ${w.name}: ${exercises.join('; ') || 'no exercises'}`);
     }

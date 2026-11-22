@@ -5,9 +5,9 @@ import { Link } from 'react-router-dom';
 import { useAiCoach, isCoachReady } from '../../shared/context/AiCoachContext';
 import { Button } from '../../shared/ui/Button';
 import { Modal } from '../../shared/ui/Modal';
-import type { ProgramExportPayload } from '../../shared/api/types';
+import type { CatalogEntry, ProgramExportPayload } from '../../shared/api/types';
 import { exerciseTargetSummary, stepSuffix } from '../../shared/api/cardio';
-import { useImportProgram } from '../../shared/api/queries';
+import { useCatalog, useImportProgram } from '../../shared/api/queries';
 import { CoachMarkdown } from './components/CoachMarkdown';
 import { createCoachToolset } from './lib/tools';
 import { runCoach } from './lib/coachLoop';
@@ -65,8 +65,20 @@ export default function Coach() {
   // prompt-cache hit. Stability has to be structural, not a matter of discipline.
   const pinnedDossierRef = useRef<string | null>(null);
 
+  // The dossier already loads the catalog; a ref keeps the toolset stable while it refreshes.
+  const { data: catalogEntries } = useCatalog();
+  const catalogRef = useRef<CatalogEntry[] | undefined>(catalogEntries);
+  useEffect(() => {
+    catalogRef.current = catalogEntries;
+  }, [catalogEntries]);
+
   const toolset = useMemo(
-    () => createCoachToolset({ onProposeProgram: setImportPreview, onProposeEdit: setEditPreview }),
+    () =>
+      createCoachToolset({
+        onProposeProgram: setImportPreview,
+        onProposeEdit: setEditPreview,
+        getCatalog: () => catalogRef.current,
+      }),
     []
   );
 

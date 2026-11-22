@@ -81,10 +81,10 @@ export function buildLiftOverview(
             const e1rm = epleyOneRepMax(effective, set.reps);
             const candidate = { effective, weight: set.weight, reps: set.reps, completedAt: session.completedAt };
             if (!day) {
-                days.set(date, { top: addToDayTop(undefined, effective, set.reps), best1RM: e1rm, topSet: candidate });
+                days.set(date, { top: addToDayTop(undefined, effective, set.reps, set.perceivedEffort), best1RM: e1rm, topSet: candidate });
                 continue;
             }
-            day.top = addToDayTop(day.top, effective, set.reps);
+            day.top = addToDayTop(day.top, effective, set.reps, set.perceivedEffort);
             day.best1RM = Math.max(day.best1RM, e1rm);
             const t = day.topSet;
             if (effective > t.effective || (effective === t.effective && set.reps > t.reps)) day.topSet = candidate;

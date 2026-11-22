@@ -1,5 +1,6 @@
 import { api } from '../../../shared/api/client';
 import type {
+  CatalogEntry,
   Session,
   Set as WorkoutSet,
   ProgramExportPayload,
@@ -127,7 +128,58 @@ async function suggestNames(query: string): Promise<string> {
   }
 }
 
-async function getWorkoutHistory(input: Record<string, unknown>): Promise<string> {
+/**
+ * Sessions trimmed to the sets of one lift. A set matches when its own name contains the
+ * query, or when it belongs to a catalog entry whose name or any alias contains it — so a
+ * merged lift answers under either spelling ("Low Incline Dumbbell Press" also returns the
+ * sets logged as "Low Incline DB Press"). Without a catalog it is the plain substring match.
+ * `matchedNames` lists every spelling found, for the result header.
+ */
+export function filterSessionsByExercise(
+  sessions: Session[],
+  exerciseName: string,
+  catalog?: readonly Pick<CatalogEntry, 'id' | 'name' | 'aliases'>[]
+): { sessions: Session[]; matchedNames: string[] } {
+  const catalogIds = new Set<number>(
+    (catalog ?? [])
+      .filter(
+        (entry) =>
+          matchesExercise(entry.name, exerciseName) ||
+          (entry.aliases ?? []).some((a) => matchesExercise(a, exerciseName))
+      )
+      .map((entry) => entry.id)
+  );
+  const matchedNames = new Set<string>();
+  const out = sessions
+    .map((session) => {
+      const sets = (session.sets ?? []).filter((s: WorkoutSet) => {
+        const hit =
+          (s.catalogId != null && catalogIds.has(s.catalogId)) || matchesExercise(s.exerciseName, exerciseName);
+        if (hit) matchedNames.add(s.exerciseName);
+        return hit;
+      });
+      return { ...session, sets };
+    })
+    .filter((session) => session.sets.length > 0);
+  return { sessions: out, matchedNames: [...matchedNames].sort() };
+}
+
+/** The page's already-loaded catalog, else one fetch; undefined (name matching only) on failure. */
+async function resolveCatalog(getCatalog?: () => CatalogEntry[] | undefined): Promise<CatalogEntry[] | undefined> {
+  const loaded = getCatalog?.();
+  if (loaded) return loaded;
+  try {
+    const { data } = await api.get<CatalogEntry[]>('/catalog');
+    return Array.isArray(data) ? data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getWorkoutHistory(
+  input: Record<string, unknown>,
+  getCatalog?: () => CatalogEntry[] | undefined
+): Promise<string> {
   const range = resolveRange(input);
   if (!range.ok) return `Error: ${range.error}`;
 
@@ -148,23 +200,14 @@ async function getWorkoutHistory(input: Record<string, unknown>): Promise<string
   let matchedNote = '';
 
   if (exerciseName) {
-    const matchedNames = new Set<string>();
-    sessions = data
-      .map((session) => {
-        const sets = (session.sets ?? []).filter((s: WorkoutSet) => {
-          const hit = matchesExercise(s.exerciseName, exerciseName);
-          if (hit) matchedNames.add(s.exerciseName);
-          return hit;
-        });
-        return { ...session, sets };
-      })
-      .filter((session) => (session.sets ?? []).length > 0);
+    const filtered = filterSessionsByExercise(data, exerciseName, await resolveCatalog(getCatalog));
+    sessions = filtered.sessions;
 
     if (sessions.length === 0) {
       const suggestions = await suggestNames(exerciseName);
       return `No sets found for "${exerciseName}" in ${range.label}.${suggestions}`;
     }
-    const names = [...matchedNames].sort();
+    const names = filtered.matchedNames;
     matchedNote =
       names.length > 1
         ? `Matched ${names.length} exercise names (likely the same lift renamed): ${names.join(', ')}.\n`
@@ -316,6 +359,8 @@ function normalizeProgram(input: Record<string, unknown>): ProgramExportPayload 
 export function createCoachToolset(opts: {
   onProposeProgram: (payload: ProgramExportPayload) => void;
   onProposeEdit: (plan: ProgramEditPlan) => void;
+  /** The page's loaded exercise catalog, so get_workout_history matches merged spellings. */
+  getCatalog?: () => CatalogEntry[] | undefined;
 }): CoachToolset {
   // Three tools, down from six. The active program, stats, PRs, per-exercise all-time numbers
   // and the last 20 sessions are all preloaded in the system prompt — keeping tools for them
@@ -343,7 +388,7 @@ export function createCoachToolset(opts: {
           exerciseName: {
             type: 'string',
             description:
-              'Optional. Filter to one lift. Matched as a case-insensitive substring, so "incline press" catches renamed variants; the result names every variant it matched.',
+              'Optional. Filter to one lift. Matched as a case-insensitive substring against logged names and the exercise catalog (merged spellings included), so "incline press" catches renamed variants; the result names every variant it matched.',
           },
         },
         required: [],
@@ -439,7 +484,7 @@ export function createCoachToolset(opts: {
     try {
       switch (call.name) {
         case 'get_workout_history':
-          return await getWorkoutHistory(call.input);
+          return await getWorkoutHistory(call.input, opts.getCatalog);
         case 'propose_program': {
           const payload = normalizeProgram(call.input);
           if (!payload) {

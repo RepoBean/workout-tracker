@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addToDayTop, daysBetween, liftStatus, localToday, stallRun, type DayTop } from './liftTrend';
+import { addToDayTop, dayAvgRpe, daysBetween, liftStatus, localToday, stallRun, type DayTop } from './liftTrend';
 
 /** Build a topByDate map from [date, weight, ...reps per set] rows. */
 function history(rows: Array<[string, number, ...number[]]>): Map<string, DayTop> {
@@ -49,6 +49,91 @@ describe('stallRun', () => {
       ['2026-09-03', 100, 10, 10, 10],
     ]);
     expect(stallRun(h).sessions).toBe(1);
+  });
+});
+
+/** Like `history`, with one RPE for every set that day: [date, weight, rpe, ...reps]. */
+function rpeHistory(rows: Array<[string, number, number | null, ...number[]]>): Map<string, DayTop> {
+  const out = new Map<string, DayTop>();
+  for (const [date, weight, rpe, ...reps] of rows) {
+    for (const r of reps) out.set(date, addToDayTop(out.get(date), weight, r, rpe));
+  }
+  return out;
+}
+
+describe('addToDayTop RPE', () => {
+  it('averages RPE over the sets at the top weight only', () => {
+    let day = addToDayTop(undefined, 80, 12, 6);
+    day = addToDayTop(day, 100, 8, 9);
+    day = addToDayTop(day, 100, 8, 8);
+    day = addToDayTop(day, 100, 7, null);
+    day = addToDayTop(day, 90, 10, 5);
+    expect(dayAvgRpe(day)).toBe(8.5);
+    expect(day.totalReps).toBe(23);
+  });
+
+  it('has no RPE without any', () => {
+    expect(dayAvgRpe(addToDayTop(addToDayTop(undefined, 100, 8), 100, 8))).toBeNull();
+  });
+});
+
+describe('stallRun RPE drop', () => {
+  it('the same reps at 2 RPE lower is progress (live Squat)', () => {
+    const h = rpeHistory([
+      ['2026-10-26', 155, 10, 8, 8, 8],
+      ['2026-11-09', 155, 8, 8, 8, 7],
+      ['2026-11-16', 155, 8, 8, 8, 8],
+    ]);
+    expect(stallRun(h)).toEqual({ sessions: 1, weight: 155 });
+    expect(liftStatus(h, '2026-11-22')).toEqual({ kind: 'progressing' });
+  });
+
+  it('fewer reps at a lower RPE is not progress', () => {
+    const h = rpeHistory([
+      ['2026-10-26', 155, 10, 8, 8, 8],
+      ['2026-11-09', 155, 8, 8, 8, 7],
+      ['2026-11-16', 155, 8, 8, 8, 6],
+    ]);
+    expect(stallRun(h).sessions).toBe(3);
+    expect(liftStatus(h, '2026-11-22').kind).toBe('stalled');
+  });
+
+  it('needs at least a full RPE point', () => {
+    const h = rpeHistory([
+      ['2026-11-01', 155, 9, 8, 8, 8],
+      ['2026-11-08', 155, 8.5, 8, 8, 8],
+    ]);
+    expect(stallRun(h).sessions).toBe(2);
+    const three = rpeHistory([
+      ['2026-11-01', 155, 9, 8, 8, 8],
+      ['2026-11-08', 155, 8.5, 8, 8, 8],
+      ['2026-11-15', 155, 8.5, 8, 8, 8],
+    ]);
+    expect(liftStatus(three, '2026-11-22').kind).toBe('stalled');
+  });
+
+  it('measures the drop from the last improvement, not the previous day', () => {
+    const h = rpeHistory([
+      ['2026-11-01', 155, 10, 8, 8, 8],
+      ['2026-11-08', 155, 8, 8, 8, 8], // −2: improves, new reference 8
+      ['2026-11-15', 155, 7.5, 8, 8, 8], // −0.5 from 8: no
+    ]);
+    expect(stallRun(h).sessions).toBe(2);
+  });
+
+  it('missing RPE keeps the rep-only rule', () => {
+    const rows: Array<[string, number, null, ...number[]]> = [
+      ['2026-10-26', 155, null, 8, 8, 8],
+      ['2026-11-09', 155, null, 8, 8, 7],
+      ['2026-11-16', 155, null, 8, 8, 8],
+    ];
+    expect(stallRun(rpeHistory(rows)).sessions).toBe(3);
+    // RPE on only one side of the comparison never counts either.
+    const half = rpeHistory([
+      ['2026-10-26', 155, null, 8, 8, 8],
+      ['2026-11-16', 155, 6, 8, 8, 8],
+    ]);
+    expect(stallRun(half).sessions).toBe(2);
   });
 });
 

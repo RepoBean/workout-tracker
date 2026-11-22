@@ -1,6 +1,6 @@
 import { constantBodyweight as bw } from '../../../shared/lib/bodyweight';
 import { describe, expect, it } from 'vitest';
-import type { Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
+import type { Exercise, Program, Session, Set as WorkoutSet } from '../../../shared/api/types';
 import { DEFAULT_PROFILE } from '../../../shared/lib/hrZones';
 import { DEFAULT_PROGRESSION } from '../../../shared/context/ProgressionContext';
 import { catalogMuscles } from '../../../shared/lib/muscles';
@@ -14,6 +14,7 @@ import {
   buildProgramBlock,
   buildStatsBlock,
   renderSession,
+  type ProgramHintContext,
 } from './dossier';
 
 let nextId = 1;
@@ -244,6 +245,27 @@ describe('buildAllTimeBlock', () => {
       ),
       TODAY
     );
+    expect(out).not.toContain('stalled');
+  });
+
+  it('clears the stall when the same reps come at a clearly lower RPE', () => {
+    const rows: Array<[string, number, number[]]> = [
+      ['2026-08-26', 10, [8, 8, 8]],
+      ['2026-09-02', 8, [8, 8, 7]],
+      ['2026-09-08', 8, [8, 8, 8]],
+    ];
+    const out = buildAllTimeBlock(
+      rows.map(([d, rpe, reps]) =>
+        session({
+          completedAt: `${d}T11:00:00.000Z`,
+          sets: reps.map((r, i) =>
+            set({ exerciseName: 'Squat', weight: 155, reps: r, setNumber: i + 1, perceivedEffort: rpe })
+          ),
+        })
+      ),
+      TODAY
+    );
+    expect(out).toMatch(/^  Squat: /m);
     expect(out).not.toContain('stalled');
   });
 
@@ -530,6 +552,99 @@ describe('buildProgramBlock', () => {
     };
     expect(buildProgramBlock([stepped])).toContain('Goblet Squat 3 × 10-12, +10 lb steps (superset A)');
     expect(buildProgramBlock([program])).not.toContain('lb steps');
+  });
+
+  describe('progression hints', () => {
+    const ON = { enabled: true, incrementLbs: 5 };
+
+    function slot(over: Partial<Exercise>): Exercise {
+      return {
+        id: nextId++, workoutId: 1, name: 'Squat', targetSets: 3, targetReps: '5-8',
+        orderIndex: 0, supersetGroup: null, exerciseType: 'strength', cardioModality: null,
+        targetDurationSec: null, targetDistance: null, catalogId: null, createdAt: '', updatedAt: '',
+        ...over,
+      };
+    }
+
+    function programWith(exercises: Exercise[]): Program {
+      return { ...program, workouts: [{ ...program.workouts![0], exercises }] };
+    }
+
+    /** One completed session on `date` with these [name, weight, reps] sets (setNumbers in order). */
+    function done(date: string, rows: Array<[string, number, number, number?]>): Session {
+      return session({
+        completedAt: `${date}T22:00:00.000Z`,
+        sets: rows.map(([exerciseName, weight, reps, catalogId], i) =>
+          set({ exerciseName, weight, reps, setNumber: i + 1, catalogId: catalogId ?? null })
+        ),
+      });
+    }
+
+    function hints(recentSessions: Session[], over: Partial<ProgramHintContext> = {}): ProgramHintContext {
+      return { recentSessions, progression: ON, latestBodyweight: 180, ...over };
+    }
+
+    it('adds weight on a ready lift', () => {
+      const recent = [done('2026-09-08', [['Squat', 155, 8], ['Squat', 155, 8], ['Squat', 155, 8]])];
+      expect(buildProgramBlock([programWith([slot({})])], hints(recent))).toContain(
+        'Squat 3 × 5-8 [next: Last: 155×8 → Try: 160 ↑]'
+      );
+    });
+
+    it('holds a lift short of its jump-aware goal, after the superset tag', () => {
+      const raise = slot({ name: 'Lateral Raise', targetReps: '10-15', supersetGroup: 'A' });
+      const recent = [done('2026-09-08', [['Lateral Raise', 10, 15], ['Lateral Raise', 10, 12], ['Lateral Raise', 10, 11]])];
+      expect(buildProgramBlock([programWith([raise])], hints(recent))).toContain(
+        'Lateral Raise 3 × 10-15 (superset A) [next: Aim 10×18 on every set → then 15]'
+      );
+    });
+
+    it('suggests a reset after a stall below the range, from the recent sessions alone', () => {
+      const curl = slot({ name: 'Leg Curl', targetReps: '8-12' });
+      const recent = ['2026-09-08', '2026-09-01', '2026-08-25'].map((d) =>
+        done(d, [['Leg Curl', 100, 6], ['Leg Curl', 100, 6], ['Leg Curl', 100, 5]])
+      );
+      expect(buildProgramBlock([programWith([curl])], hints(recent))).toContain(
+        'Leg Curl 3 × 8-12 [next: Stuck at 100 for 3 sessions → Reset: 90 ↓]'
+      );
+    });
+
+    it('sizes an assisted jump on the bodyweight (10/7/7 earns it at 180 lb)', () => {
+      const pullUp = slot({ name: 'Pull-Up', targetReps: '6-10' });
+      const recent = [done('2026-09-08', [['Pull-Up', -40, 10], ['Pull-Up', -40, 7], ['Pull-Up', -40, 7]])];
+      expect(buildProgramBlock([programWith([pullUp])], hints(recent))).toContain(
+        '[next: Last: −40×10 → Try: −35 ↑]'
+      );
+    });
+
+    it("uses the slot's own step over the global one", () => {
+      const recent = [done('2026-09-08', [['Squat', 155, 8], ['Squat', 155, 8], ['Squat', 155, 8]])];
+      expect(buildProgramBlock([programWith([slot({ incrementLbs: 10 })])], hints(recent))).toContain(
+        'Try: 165 ↑'
+      );
+    });
+
+    it('judges the newest session across merged catalog spellings', () => {
+      const press = slot({ name: 'Low Incline Dumbbell Press', targetReps: '8-12', catalogId: 10 });
+      const recent = [
+        done('2026-08-25', [['Low Incline Dumbbell Press', 50, 12, 10], ['Low Incline Dumbbell Press', 50, 12, 10], ['Low Incline Dumbbell Press', 50, 12, 10]]),
+        done('2026-09-08', [['Low Incline DB Press', 55, 9, 10], ['Low Incline DB Press', 55, 8, 10], ['Low Incline DB Press', 55, 8, 10]]),
+      ];
+      const out = buildProgramBlock([programWith([press])], hints(recent));
+      expect(out).toContain('Low Incline Dumbbell Press 3 × 8-12 [next: Aim 55×12');
+      expect(out).not.toContain('Last: 50');
+    });
+
+    it('omits the hint with progression off, no recent sets, or cardio', () => {
+      const recent = [done('2026-09-08', [['Squat', 155, 8], ['Squat', 155, 8], ['Squat', 155, 8]])];
+      const block = programWith([slot({}), slot({ name: 'Bench Press' }), program.workouts![0].exercises![1]]);
+      expect(buildProgramBlock([block], hints(recent, { progression: { ...ON, enabled: false } }))).not.toContain('[next:');
+      const out = buildProgramBlock([block], hints(recent));
+      expect(out.match(/\[next:/g)).toHaveLength(1);
+      expect(out).toContain('Bench Press 3 × 5-8;');
+      expect(out).toContain('Treadmill Treadmill · 30 min · 3 mi');
+      expect(buildProgramBlock([block])).not.toContain('[next:');
+    });
   });
 
   it('lists other programs and handles none active', () => {
